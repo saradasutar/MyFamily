@@ -2,7 +2,7 @@
 
 const CONFIG = window.FAMILY_DASHBOARD_CONFIG || {};
 const PLACEHOLDER_URL = "PASTE_YOUR_APPS_SCRIPT_WEB_APP_URL_HERE";
-const FRONTEND_VERSION = "1.0.3";
+const FRONTEND_VERSION = "1.0.4";
 const SAVED_USERNAME_KEY = "familyDashboardUsername";
 const state = {
   token: localStorage.getItem("familyDashboardToken") || "",
@@ -271,44 +271,69 @@ async function importOldExpenses(event) {
 }
 
 function parseOldExpenseRows(text) {
-  const lines = String(text || "").replace(/\r/g, "").split("\n").filter(function (line) { return line.trim(); });
-  if (!lines.length) throw new Error("Paste at least one expenditure row.");
-  let rows = lines.map(function (line) { return line.indexOf("\t") >= 0 ? line.split("\t") : parseCsvLine(line); });
-  if (/amt|amount/.test(normalize(rows[0][0])) && /date/.test(normalize(rows[0][1]))) rows.shift();
+  const source = String(text || "").replace(/\r/g, "").trim();
+  if (!source) throw new Error("Paste at least one expenditure row.");
+  const firstLine = source.split("\n").filter(function (line) { return line.trim(); })[0] || "";
+  const parsedRows = /^\s*\|/.test(firstLine) ? source.split("\n").filter(function (line) { return line.trim(); }).map(parseMarkdownRow) : parseDelimitedRows(source, source.indexOf("\t") >= 0 ? "\t" : ",");
+  let rows = parsedRows.map(function (columns, index) { return { rowNumber: index + 1, columns: columns }; }).filter(function (row) { return row.columns.some(function (value) { return String(value).trim(); }) && !isImportedHeading(row.columns) && !isMarkdownDivider(row.columns); });
   if (!rows.length) throw new Error("No expenditure rows were found below the heading.");
   if (rows.length > 500) throw new Error("Import no more than 500 records at a time.");
-  return rows.map(function (columns, index) {
-    const rowNumber = index + 1;
-    if (columns.length !== 5) throw new Error("Row " + rowNumber + " must contain exactly 5 columns.");
+  return rows.map(function (row) {
+    const rowNumber = row.rowNumber, columns = normalizeImportedColumns(row.columns);
     const amount = Number(String(columns[0]).replace(/₹|rs\.?/ig, "").replace(/,/g, "").trim());
-    if (!isFinite(amount) || amount <= 0) throw new Error("Row " + rowNumber + " has an invalid amount.");
+    if (!isFinite(amount) || amount <= 0) throw new Error("Row " + rowNumber + " has an invalid amount: " + String(columns[0] || "blank") + ".");
     const date = parseImportedDate(columns[1]);
-    if (!date) throw new Error("Row " + rowNumber + " has an invalid date. Use DD/MM/YYYY or YYYY-MM-DD.");
-    const sentTo = String(columns[2] || "").trim(), fromAccount = String(columns[3] || "").trim(), reason = String(columns[4] || "").trim();
-    if (!sentTo || !fromAccount || !reason) throw new Error("Row " + rowNumber + " needs Send to, From Acct and Reason.");
-    if (sentTo.length > 100 || fromAccount.length > 100 || reason.length > 500) throw new Error("Row " + rowNumber + " contains text that is too long.");
+    if (!date) throw new Error("Row " + rowNumber + " has an invalid date: " + String(columns[1] || "blank") + ". Use DD/MM/YYYY, DD-MMM-YYYY or YYYY-MM-DD.");
+    const sentTo = String(columns[2] || "Not specified").trim().slice(0,100) || "Not specified";
+    const fromAccount = String(columns[3] || "Not specified").trim().slice(0,100) || "Not specified";
+    const reason = String(columns[4] || "Old expenditure").trim().slice(0,500) || "Old expenditure";
     return { amount: amount, date: date, sentTo: sentTo, fromAccount: fromAccount, reason: reason, entryType: "OLD" };
   });
 }
 
-function parseCsvLine(line) {
-  const values = []; let value = "", quoted = false;
-  for (let i = 0; i < line.length; i++) {
-    const char = line[i];
-    if (char === '"' && quoted && line[i + 1] === '"') { value += '"'; i++; }
-    else if (char === '"') quoted = !quoted;
-    else if (char === "," && !quoted) { values.push(value.trim()); value = ""; }
-    else value += char;
+function parseMarkdownRow(line) { const text=String(line||"").trim(); return (text.charAt(0)==="|"?text.slice(1):text).replace(/\|\s*$/,"").split("|").map(function(value){return value.trim();}); }
+
+function parseDelimitedRows(text, delimiter) {
+  const rows=[]; let row=[],value="",quoted=false;
+  for(let i=0;i<text.length;i++){
+    const char=text[i];
+    if(char==='"'&&quoted&&text[i+1]==='"'){value+='"';i++;}
+    else if(char==='"')quoted=!quoted;
+    else if(char===delimiter&&!quoted){row.push(value);value="";}
+    else if(char==='\n'&&!quoted){row.push(value);rows.push(row);row=[];value="";}
+    else value+=char;
   }
-  values.push(value.trim()); return values;
+  row.push(value);rows.push(row);return rows;
+}
+
+function normalizeImportedColumns(columns) {
+  const values = columns.map(function (value) { return String(value == null ? "" : value).replace(/\u00a0/g," ").trim(); });
+  if (values.length > 5 && /^\d+$/.test(values[0]) && /^\d{3}(?:\.\d+)?$/.test(values[1]) && parseImportedDate(values[2])) values.splice(0,2,values[0]+","+values[1]);
+  while (values.length > 5 && !values[values.length - 1]) values.pop();
+  if (values.length > 5) return values.slice(0,4).concat([values.slice(4).filter(Boolean).join(" · ")]);
+  while (values.length < 5) values.push("");
+  return values;
+}
+
+function isImportedHeading(columns) { const first=normalize(columns[0]),second=normalize(columns[1]); return (/amt|amount/.test(first)&&/date/.test(second)) || (first==="sl no"&&/amt|amount/.test(second)); }
+function isMarkdownDivider(columns) { return columns.length > 1 && columns.every(function (value) { return /^\s*:?-{3,}:?\s*$/.test(String(value)); }); }
+
+function parseCsvLine(line) {
+  return parseDelimitedRows(String(line || ""), ",")[0].map(function(value){return value.trim();});
 }
 
 function parseImportedDate(value) {
-  const text = String(value || "").trim(); let match;
+  const text = String(value || "").trim().replace(/,/g, ""); let match;
   if ((match = text.match(/^(\d{4})-(\d{1,2})-(\d{1,2})$/))) return validIsoDate(match[1], match[2], match[3]);
-  if ((match = text.match(/^(\d{1,2})[\/.\-](\d{1,2})[\/.\-](\d{4})$/))) return validIsoDate(match[3], match[2], match[1]);
+  if ((match = text.match(/^(\d{4})[\/.](\d{1,2})[\/.](\d{1,2})$/))) return validIsoDate(match[1], match[2], match[3]);
+  if ((match = text.match(/^(\d{1,2})[\/.\-](\d{1,2})[\/.\-](\d{2}|\d{4})$/))) return validIsoDate(normalizeImportedYear(match[3]), match[2], match[1]);
+  if ((match = text.match(/^(\d{1,2})[\s\-\/]+([A-Za-z]{3,9})[\s\-\/]+(\d{2}|\d{4})$/))) { const month=importedMonthNumber(match[2]); return month ? validIsoDate(normalizeImportedYear(match[3]),month,match[1]) : ""; }
+  if (/^\d{5}(?:\.\d+)?$/.test(text)) { const serial=Number(text); if (serial>=20000&&serial<=80000) { const date=new Date(Date.UTC(1899,11,30)+Math.floor(serial)*86400000); return date.toISOString().slice(0,10); } }
   return "";
 }
+
+function normalizeImportedYear(year) { const number=Number(year); return number<100 ? 2000+number : number; }
+function importedMonthNumber(value) { const months={jan:1,january:1,feb:2,february:2,mar:3,march:3,apr:4,april:4,may:5,jun:6,june:6,jul:7,july:7,aug:8,august:8,sep:9,september:9,oct:10,october:10,nov:11,november:11,dec:12,december:12}; return months[normalize(value)]||0; }
 
 function validIsoDate(year, month, day) {
   const iso = String(year).padStart(4, "0") + "-" + String(month).padStart(2, "0") + "-" + String(day).padStart(2, "0");

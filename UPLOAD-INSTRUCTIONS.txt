@@ -1,0 +1,21 @@
+FAMILY DASHBOARD IMPORT HOTFIX v1.0.4
+
+This fixes: Row ... must contain exactly 5 columns.
+
+1. Open the GitHub repository saradasutar/MyFamily.
+2. Upload and replace both files together:
+   - index.html
+   - app.js
+3. Do not replace config.js.
+4. No Google Apps Script update is required for this hotfix.
+5. After GitHub Pages finishes, open:
+   https://saradasutar.github.io/MyFamily/?v=104
+
+The importer now supports:
+- extra blank columns;
+- extra text cells merged into Reason;
+- missing Send to, From Acct, or Reason cells;
+- multiline Excel/Google Sheets cells;
+- repeated headings and Markdown tables;
+- DD/MM/YYYY, DD-MMM-YYYY, YYYY-MM-DD, and Excel date numbers;
+- amounts containing commas.

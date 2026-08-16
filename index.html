@@ -6,7 +6,7 @@
   <meta name="theme-color" content="#5743a8">
   <meta name="description" content="Private family dashboard for expenses, goals, important dates and photos.">
   <title>Our Family Hub</title>
-  <link rel="stylesheet" href="styles.css">
+  <link rel="stylesheet" href="styles.css?v=1.0.3">
 </head>
 <body>
   <div class="ambient ambient-one"></div>
@@ -37,6 +37,7 @@
             <button id="togglePin" type="button" class="icon-button" aria-label="Show or hide PIN">👁</button>
           </div>
         </label>
+        <div class="login-options"><label class="remember-row"><input id="rememberUsername" type="checkbox" checked> Save username on this device</label><span id="loginVersion">Version 1.0.3</span></div>
         <button class="primary-button wide" type="submit">Sign in securely</button>
       </form>
       <p id="setupHint" class="setup-hint hidden">Open <strong>config.js</strong> and paste your Apps Script Web App URL first.</p>
@@ -50,7 +51,7 @@
         <div class="brand-mark small">FH</div>
         <div>
           <strong id="sidebarFamilyName">Our Family Hub</strong>
-          <span>Family Dashboard</span>
+          <span>Family Dashboard · <b id="sidebarVersion">v1.0.3</b></span>
         </div>
       </div>
       <nav class="main-nav" aria-label="Main navigation">
@@ -100,11 +101,16 @@
             <button class="light-button" data-open="expenseDialog" data-module="EXPENSES">＋ Add expenditure</button>
           </div>
 
+          <div class="family-strip">
+            <div><p class="eyebrow">FAMILY MEMBERS</p><strong id="homeMemberCount">0 members</strong></div>
+            <div id="homeMemberList" class="family-chip-list"></div>
+          </div>
+
           <div class="summary-grid">
             <article class="summary-card violet" data-module="EXPENSES"><span class="summary-icon">₹</span><div><small>This month's spend</small><strong id="monthSpend">₹0</strong><em id="monthExpenseCount">0 entries</em></div></article>
             <article class="summary-card green" data-module="INCOME"><span class="summary-icon">↗</span><div><small>This month's income</small><strong id="monthIncome">₹0</strong><em id="monthIncomeCount">0 entries</em></div></article>
             <article class="summary-card teal" data-module="TARGETS"><span class="summary-icon">◎</span><div><small>Target progress</small><strong id="targetProgress">0%</strong><em id="targetCaption">No active targets</em></div></article>
-            <article class="summary-card coral" data-module="DATES"><span class="summary-icon">◫</span><div><small>Coming up</small><strong id="upcomingCount">0 dates</strong><em>Next 30 days</em></div></article>
+            <article class="summary-card coral" data-module="DATES"><span class="summary-icon">◫</span><div><small>Saved reminders</small><strong id="reminderCount">0 reminders</strong><em id="upcomingCount">0 in next 30 days</em></div></article>
             <article class="summary-card gold" data-module="PHOTOS"><span class="summary-icon">▧</span><div><small>Shared memories</small><strong id="photoCount">0 photos</strong><em>In the family gallery</em></div></article>
             <article class="summary-card rose" data-module="EXPERIENCES"><span class="summary-icon">✦</span><div><small>Family experiences</small><strong id="experienceCount">0 stories</strong><em>Moments worth remembering</em></div></article>
           </div>
@@ -404,7 +410,7 @@
   <div id="loadingOverlay" class="loading-overlay hidden"><div class="spinner"></div><p id="loadingText">Working…</p></div>
   <div id="toastRegion" class="toast-region" aria-live="polite"></div>
 
-  <script src="config.js"></script>
-  <script src="app.js"></script>
+  <script src="config.js?v=1.0.3"></script>
+  <script src="app.js?v=1.0.3"></script>
 </body>
 </html>

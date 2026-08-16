@@ -2,6 +2,8 @@
 
 const CONFIG = window.FAMILY_DASHBOARD_CONFIG || {};
 const PLACEHOLDER_URL = "PASTE_YOUR_APPS_SCRIPT_WEB_APP_URL_HERE";
+const FRONTEND_VERSION = "1.0.3";
+const SAVED_USERNAME_KEY = "familyDashboardUsername";
 const state = {
   token: localStorage.getItem("familyDashboardToken") || "",
   data: null,
@@ -62,6 +64,9 @@ function normalize(value) { return String(value || "").toLowerCase().trim(); }
 
 function init() {
   const now = new Date();
+  $("loginVersion").textContent = "Version " + FRONTEND_VERSION;
+  $("sidebarVersion").textContent = "v" + FRONTEND_VERSION;
+  loadSavedUsername();
   $("todayLabel").textContent = now.toLocaleDateString("en-IN", { weekday: "long", day: "numeric", month: "long" }).toUpperCase();
   $("expenseMonth").value = currentMonth();
   $("incomeMonth").value = currentMonth();
@@ -84,7 +89,7 @@ function init() {
 async function restoreSession() {
   showLoading("Opening your family dashboard…");
   try {
-    state.data = await api("bootstrap", {});
+    state.data = normalizeBootstrapData(await api("bootstrap", {}));
     showApp();
   } catch (error) {
     state.token = "";
@@ -102,7 +107,10 @@ function showApp() {
 function showLogin() {
   $("appShell").classList.add("hidden");
   $("loginScreen").classList.remove("hidden");
+  loadSavedUsername();
 }
+function loadSavedUsername() { const saved = localStorage.getItem(SAVED_USERNAME_KEY) || ""; $("loginUsername").value = saved; $("rememberUsername").checked = !!saved || $("rememberUsername").checked; }
+function normalizeBootstrapData(data) { const result = data || {}; ["members","expenses","income","targets","importantDates","photos","experiences","diary"].forEach(function (key) { if (!Array.isArray(result[key])) result[key] = []; }); if (!result.settings) result.settings = {}; return result; }
 
 function bindNavigation() {
   all(".nav-button").forEach(function (button) {
@@ -228,9 +236,11 @@ async function login(event) {
   if (!CONFIG.API_URL || CONFIG.API_URL === PLACEHOLDER_URL) return toast("Paste the Apps Script Web App URL in config.js first.", "error");
   showLoading("Signing you in…");
   try {
-    const result = await api("login", { username: $("loginUsername").value.trim(), pin: $("loginPin").value });
+    const username = $("loginUsername").value.trim();
+    const result = await api("login", { username: username, pin: $("loginPin").value });
+    if ($("rememberUsername").checked) localStorage.setItem(SAVED_USERNAME_KEY, username); else localStorage.removeItem(SAVED_USERNAME_KEY);
     state.token = result.token;
-    state.data = result.bootstrap;
+    state.data = normalizeBootstrapData(result.bootstrap);
     localStorage.setItem("familyDashboardToken", state.token);
     $("loginForm").reset();
     showApp();
@@ -369,7 +379,7 @@ async function mutate(action, payload, successMessage, closeId, loadingMessage) 
   } catch (error) { toast(error.message || "The change could not be saved.", "error"); return null; }
   finally { hideLoading(); }
 }
-async function refreshData() { state.data = await api("bootstrap", {}); renderAll(); }
+async function refreshData() { state.data = normalizeBootstrapData(await api("bootstrap", {})); renderAll(); }
 async function confirmDelete(action, id, message) { if (window.confirm(message)) await mutate(action, { id: id }, "Deleted."); }
 
 function editExpense(id) {
@@ -451,9 +461,10 @@ function renderHome() {
   $("monthSpend").textContent = money(expenseTotal); $("monthExpenseCount").textContent = plural(monthExpenses.length, "entry", "entries");
   $("monthIncome").textContent = money(incomeTotal); $("monthIncomeCount").textContent = plural(monthIncome.length, "entry", "entries");
   $("targetProgress").textContent = targetPct + "%"; $("targetCaption").textContent = state.data.targets.length ? plural(state.data.targets.length, "active target") : "No active targets";
-  $("upcomingCount").textContent = plural(upcoming.length, "date"); $("photoCount").textContent = plural(state.data.photos.length, "photo"); $("experienceCount").textContent = plural(state.data.experiences.length, "story", "stories");
-  renderCategoryBars(monthExpenses); renderUpcoming(upcoming); renderActivity();
+  $("reminderCount").textContent = plural(state.data.importantDates.length, "reminder"); $("upcomingCount").textContent = upcoming.length + " in next 30 days"; $("photoCount").textContent = plural(state.data.photos.length, "photo"); $("experienceCount").textContent = plural(state.data.experiences.length, "story", "stories");
+  renderFamilyMembers(); renderCategoryBars(monthExpenses); renderUpcoming(upcoming); renderActivity();
 }
+function renderFamilyMembers() { const members=state.data.members||[]; $("homeMemberCount").textContent=plural(members.length,"member"); $("homeMemberList").innerHTML=members.map(function(member){return '<span class="family-chip"><i>'+h(String(member.name||"?").charAt(0).toUpperCase())+'</i>'+h(member.name||"Family member")+'</span>';}).join(""); }
 function renderCategoryBars(items) {
   const totals = {}; items.forEach(function (x) { const label = normalizeExpense(x).sentTo || x.category || "Other"; totals[label] = (totals[label] || 0) + Number(x.amount || 0); });
   const rows = Object.keys(totals).map(function (key) { return [key, totals[key]]; }).sort(function (a,b) { return b[1] - a[1]; }).slice(0,6); const max = rows.length ? rows[0][1] : 1;
@@ -461,7 +472,7 @@ function renderCategoryBars(items) {
 }
 function upcomingDates(days) { return state.data.importantDates.filter(function (x) { return Number(x.daysUntil) >= 0 && Number(x.daysUntil) <= days; }).sort(function (a,b) { return Number(a.daysUntil)-Number(b.daysUntil); }); }
 function renderUpcoming(items) {
-  $("upcomingList").classList.toggle("empty-block", !items.length); $("upcomingList").innerHTML = items.length ? items.slice(0,5).map(function (x) { const p=dayParts(x.nextOccurrence); return '<div class="mini-item"><div class="mini-date"><strong>'+p.day+'</strong><span>'+p.month+'</span></div><p><strong>'+h(x.title)+'</strong><br><small>'+h(x.eventType)+' · '+(Number(x.daysUntil)===0?'Today':plural(Number(x.daysUntil),"day")+" away")+'</small></p></div>'; }).join("") : "No important dates coming up.";
+  $("upcomingList").classList.toggle("empty-block", !items.length); $("upcomingList").innerHTML = items.length ? items.slice(0,5).map(function (x) { const p=dayParts(x.nextOccurrence); return '<div class="mini-item"><div class="mini-date"><strong>'+p.day+'</strong><span>'+p.month+'</span></div><p><strong>'+h(x.title)+'</strong><br><small>'+h(x.eventType)+' · '+(Number(x.daysUntil)===0?'Today':plural(Number(x.daysUntil),"day")+" away")+'</small></p></div>'; }).join("") : (state.data.importantDates.length ? plural(state.data.importantDates.length,"saved reminder")+" · none falls within the next 30 days. Use View all to see every reminder." : "No important dates have been added yet.");
 }
 function renderActivity() {
   let items = [];

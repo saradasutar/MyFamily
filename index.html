@@ -6,7 +6,7 @@
   <meta name="theme-color" content="#5743a8">
   <meta name="description" content="Private family dashboard for expenses, goals, important dates and photos.">
   <title>Our Family Hub</title>
-  <link rel="stylesheet" href="styles.css?v=1.0.4">
+  <link rel="stylesheet" href="styles.css?v=1.0.5">
 </head>
 <body>
   <div class="ambient ambient-one"></div>
@@ -37,7 +37,7 @@
             <button id="togglePin" type="button" class="icon-button" aria-label="Show or hide PIN">👁</button>
           </div>
         </label>
-        <div class="login-options"><label class="remember-row"><input id="rememberUsername" type="checkbox" checked> Save username on this device</label><span id="loginVersion">Version 1.0.4</span></div>
+        <div class="login-options"><label class="remember-row"><input id="rememberUsername" type="checkbox" checked> Save username on this device</label><span id="loginVersion">Version 1.0.5</span></div>
         <button class="primary-button wide" type="submit">Sign in securely</button>
       </form>
       <p id="setupHint" class="setup-hint hidden">Open <strong>config.js</strong> and paste your Apps Script Web App URL first.</p>
@@ -51,7 +51,7 @@
         <div class="brand-mark small">FH</div>
         <div>
           <strong id="sidebarFamilyName">Our Family Hub</strong>
-          <span>Family Dashboard · <b id="sidebarVersion">v1.0.4</b></span>
+          <span>Family Dashboard · <b id="sidebarVersion">v1.0.5</b></span>
         </div>
       </div>
       <nav class="main-nav" aria-label="Main navigation">
@@ -156,8 +156,13 @@
         <section id="view-expenses" class="view">
           <div class="section-toolbar">
             <div><p class="section-intro">Record old and new payments using your family's expenditure format.</p></div>
-            <div class="toolbar-actions"><button id="exportExpenses" class="secondary-button">⇩ Export CSV</button><button id="printExpenses" class="secondary-button">⌑ Print</button><button class="secondary-button" data-open="bulkExpenseDialog">⇧ Import old records</button><button class="primary-button" data-open="expenseDialog">＋ Add expenditure</button></div>
+            <div class="toolbar-actions"><button id="exportExpenses" class="secondary-button">⇩ Export CSV</button><button id="printExpenses" class="secondary-button">⌑ Print</button><button class="secondary-button" data-open="bulkExpenseDialog">⇧ Import old records</button><button class="secondary-button" data-open="recurringExpenseDialog">↻ Add regular payment</button><button class="primary-button" data-open="expenseDialog">＋ Add expenditure</button></div>
           </div>
+          <article class="panel recurring-panel">
+            <div class="panel-heading"><div><p class="eyebrow">MONTHLY &amp; YEARLY</p><h3>Regular payments</h3><p class="recurring-intro">Electricity, maintenance, insurance, land/holding tax and any other repeating expenditure.</p></div><span id="recurringExpenseCount" class="count-badge">0 payments</span></div>
+            <div id="recurringExpenseList" class="recurring-grid"></div>
+            <div id="recurringExpenseEmpty" class="recurring-empty">No regular payment added. Choose <strong>Add regular payment</strong> to add one now or later.</div>
+          </article>
           <div class="filter-bar">
             <label>Month<input id="expenseMonth" type="month"></label>
             <label>Send to<select id="expenseSendToFilter"><option value="">All recipients</option></select></label>
@@ -202,7 +207,7 @@
             <div><p class="section-intro">See reminders and family experiences together month by month.</p></div>
             <div class="calendar-controls"><button id="calendarPrev" class="secondary-button" aria-label="Previous month">‹</button><strong id="calendarMonthLabel"></strong><button id="calendarNext" class="secondary-button" aria-label="Next month">›</button><button id="calendarToday" class="secondary-button">Today</button></div>
           </div>
-          <div class="calendar-legend"><span><i class="legend-dot reminder-dot"></i>Reminder</span><span><i class="legend-dot experience-dot"></i>Experience</span><span><i class="legend-dot diary-dot"></i>Diary</span></div>
+          <div class="calendar-legend"><span><i class="legend-dot reminder-dot"></i>Reminder</span><span><i class="legend-dot recurring-dot"></i>Payment due</span><span><i class="legend-dot experience-dot"></i>Experience</span><span><i class="legend-dot diary-dot"></i>Diary</span></div>
           <div class="calendar-shell">
             <div class="calendar-weekdays"><span>Sun</span><span>Mon</span><span>Tue</span><span>Wed</span><span>Thu</span><span>Fri</span><span>Sat</span></div>
             <div id="calendarGrid" class="calendar-grid"></div>
@@ -258,6 +263,13 @@
               <p>Reminder emails are sent at approximately 8 AM from the Google account that owns the Apps Script project. Each date can notify everyone or selected members.</p>
               <span class="status-badge success">● Daily trigger enabled during setup</span>
             </article>
+            <article class="panel backup-panel">
+              <div class="panel-heading"><div><p class="eyebrow">DATA SAFETY</p><h3>Monthly dashboard backup</h3></div></div>
+              <p>The complete dashboard Google Sheet is copied to a private Drive backup folder on the first day of every month. The latest 24 copies are retained.</p>
+              <span id="automaticBackupStatus" class="status-badge success">● Monthly backup enabled</span>
+              <p id="lastBackupText" class="backup-last">No backup created yet.</p>
+              <div class="backup-actions"><button id="createBackupNow" class="secondary-button" type="button">Create backup now</button><a id="backupFolderLink" class="text-button hidden" target="_blank" rel="noopener">Open backup folder</a></div>
+            </article>
           </div>
           <article class="panel members-panel">
             <div class="panel-heading"><div><p class="eyebrow">ACCESS</p><h3>Family members</h3></div><span id="memberCount" class="count-badge">0 people</span></div>
@@ -272,10 +284,26 @@
     <form id="expenseForm" method="dialog">
       <div class="modal-head"><div><p class="eyebrow">EXPENDITURE</p><h3 id="expenseDialogTitle">Add expenditure</h3></div><button class="modal-close" type="button" data-close>×</button></div>
       <input id="expenseId" type="hidden">
+      <input id="expenseRecurringId" type="hidden">
+      <p id="expenseRecurringNote" class="recurring-pay-note hidden"></p>
       <div class="two-fields"><label>Amt (Rs.)<input id="expenseAmount" type="number" min="0.01" step="0.01" required placeholder="12000"></label><label>Date Paid<input id="expenseDate" type="date" required></label></div>
       <div class="two-fields"><label>Send to<input id="expenseSendTo" required maxlength="100" placeholder="e.g. Mani SBI"></label><label>From Acct<input id="expenseFromAccount" required maxlength="100" placeholder="e.g. Family SBI"></label></div>
       <label>Reason<textarea id="expenseReason" rows="3" required maxlength="500" placeholder="e.g. Monthly 12k sent to Mani SBI on 05th &amp; 20th of each month"></textarea></label>
       <div class="modal-actions"><button type="button" class="secondary-button" data-close>Cancel</button><button type="submit" class="primary-button">Save expenditure</button></div>
+    </form>
+  </dialog>
+
+  <dialog id="recurringExpenseDialog" class="modal">
+    <form id="recurringExpenseForm" method="dialog">
+      <div class="modal-head"><div><p class="eyebrow">REGULAR EXPENDITURE</p><h3 id="recurringExpenseDialogTitle">Add regular payment</h3></div><button class="modal-close" type="button" data-close>×</button></div>
+      <input id="recurringExpenseId" type="hidden">
+      <div class="two-fields"><label>Payment name<input id="recurringExpenseTitle" required maxlength="100" placeholder="e.g. Electricity bill"></label><label>Estimated amount (optional)<input id="recurringExpenseAmount" type="number" min="0" step="0.01" placeholder="Amount can be changed when paid"></label></div>
+      <div class="two-fields"><label>Repeat<select id="recurringExpenseFrequency" required><option value="MONTHLY">Every month</option><option value="YEARLY">Every year</option></select></label><label>Next due date<input id="recurringExpenseDueDate" type="date" required></label></div>
+      <div class="two-fields"><label>Send to<input id="recurringExpenseSendTo" required maxlength="100" placeholder="e.g. BESCOM"></label><label>From Acct<input id="recurringExpenseFromAccount" required maxlength="100" placeholder="e.g. Family SBI"></label></div>
+      <label>Reason<textarea id="recurringExpenseReason" rows="3" required maxlength="500" placeholder="e.g. Monthly home electricity bill"></textarea></label>
+      <label>Send email reminder<select id="recurringExpenseRemind"><option value="7,1,0">7 days, 1 day and same day</option><option value="3,1,0">3 days, 1 day and same day</option><option value="1,0">1 day and same day</option><option value="0">Same day only</option><option value="14,7,1,0">14 days, 7 days, 1 day and same day</option></select></label>
+      <fieldset><legend>Email recipients</legend><div class="check-row"><label><input id="recurringNotifyEveryone" type="checkbox" checked> All active family members with email</label></div><div id="recurringRecipientChecks" class="recipient-checks hidden"></div></fieldset>
+      <div class="modal-actions"><button type="button" class="secondary-button" data-close>Cancel</button><button type="submit" class="primary-button">Save regular payment</button></div>
     </form>
   </dialog>
 
@@ -410,7 +438,7 @@
   <div id="loadingOverlay" class="loading-overlay hidden"><div class="spinner"></div><p id="loadingText">Working…</p></div>
   <div id="toastRegion" class="toast-region" aria-live="polite"></div>
 
-  <script src="config.js?v=1.0.4"></script>
-  <script src="app.js?v=1.0.4"></script>
+  <script src="config.js?v=1.0.5"></script>
+  <script src="app.js?v=1.0.5"></script>
 </body>
 </html>

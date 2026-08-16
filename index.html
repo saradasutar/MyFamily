@@ -6,7 +6,7 @@
   <meta name="theme-color" content="#5743a8">
   <meta name="description" content="Private family dashboard for expenses, goals, important dates and photos.">
   <title>Our Family Hub</title>
-  <link rel="stylesheet" href="styles.css?v=1.0.5">
+  <link rel="stylesheet" href="styles.css?v=1.0.7">
 </head>
 <body>
   <div class="ambient ambient-one"></div>
@@ -37,7 +37,7 @@
             <button id="togglePin" type="button" class="icon-button" aria-label="Show or hide PIN">👁</button>
           </div>
         </label>
-        <div class="login-options"><label class="remember-row"><input id="rememberUsername" type="checkbox" checked> Save username on this device</label><span id="loginVersion">Version 1.0.5</span></div>
+        <div class="login-options"><label class="remember-row"><input id="rememberUsername" type="checkbox" checked> Save username on this device</label><span id="loginVersion">Version 1.0.7</span></div>
         <button class="primary-button wide" type="submit">Sign in securely</button>
       </form>
       <p id="setupHint" class="setup-hint hidden">Open <strong>config.js</strong> and paste your Apps Script Web App URL first.</p>
@@ -51,7 +51,7 @@
         <div class="brand-mark small">FH</div>
         <div>
           <strong id="sidebarFamilyName">Our Family Hub</strong>
-          <span>Family Dashboard · <b id="sidebarVersion">v1.0.5</b></span>
+          <span>Family Dashboard · <b id="sidebarVersion">v1.0.7</b></span>
         </div>
       </div>
       <nav class="main-nav" aria-label="Main navigation">
@@ -318,6 +318,15 @@
     </form>
   </dialog>
 
+  <dialog id="expensePrintDialog" class="modal small-modal">
+    <form id="expensePrintForm" method="dialog">
+      <div class="modal-head"><div><p class="eyebrow">PRINT EXPENDITURE</p><h3>Select payment period</h3></div><button class="modal-close" type="button" data-close>×</button></div>
+      <p class="bulk-note">Only expenditure paid between these two dates will be included. A total is printed below the heading.</p>
+      <div class="two-fields"><label>From date<input id="expensePrintFrom" type="date" required></label><label>To date<input id="expensePrintTo" type="date" required></label></div>
+      <div class="modal-actions"><button type="button" class="secondary-button" data-close>Cancel</button><button id="viewExpenseReport" type="button" class="secondary-button">◉ View selected period</button><button type="submit" class="primary-button">⌑ Print selected period</button></div>
+    </form>
+  </dialog>
+
   <dialog id="incomeDialog" class="modal">
     <form id="incomeForm" method="dialog">
       <div class="modal-head"><div><p class="eyebrow">INCOME</p><h3 id="incomeDialogTitle">Add income</h3></div><button class="modal-close" type="button" data-close>×</button></div>
@@ -438,7 +447,7 @@
   <div id="loadingOverlay" class="loading-overlay hidden"><div class="spinner"></div><p id="loadingText">Working…</p></div>
   <div id="toastRegion" class="toast-region" aria-live="polite"></div>
 
-  <script src="config.js?v=1.0.5"></script>
-  <script src="app.js?v=1.0.5"></script>
+  <script src="config.js?v=1.0.7"></script>
+  <script src="app.js?v=1.0.7"></script>
 </body>
 </html>

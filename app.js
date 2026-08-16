@@ -2,7 +2,7 @@
 
 const CONFIG = window.FAMILY_DASHBOARD_CONFIG || {};
 const PLACEHOLDER_URL = "PASTE_YOUR_APPS_SCRIPT_WEB_APP_URL_HERE";
-const FRONTEND_VERSION = "1.0.5";
+const FRONTEND_VERSION = "1.0.7";
 const SAVED_USERNAME_KEY = "familyDashboardUsername";
 const state = {
   token: localStorage.getItem("familyDashboardToken") || "",
@@ -69,6 +69,8 @@ function init() {
   loadSavedUsername();
   $("todayLabel").textContent = now.toLocaleDateString("en-IN", { weekday: "long", day: "numeric", month: "long" }).toUpperCase();
   $("expenseMonth").value = currentMonth();
+  $("expensePrintFrom").value = currentMonth() + "-01";
+  $("expensePrintTo").value = todayIso();
   $("incomeMonth").value = currentMonth();
   $("diaryMonth").value = currentMonth();
   bindNavigation();
@@ -183,6 +185,8 @@ function bindForms() {
   $("expenseForm").addEventListener("submit", saveExpense);
   $("recurringExpenseForm").addEventListener("submit", saveRecurringExpense);
   $("bulkExpenseForm").addEventListener("submit", importOldExpenses);
+  $("expensePrintForm").addEventListener("submit", printExpenseRange);
+  $("viewExpenseReport").addEventListener("click", viewExpenseRange);
   $("incomeForm").addEventListener("submit", saveIncome);
   $("targetForm").addEventListener("submit", saveTarget);
   $("contributionForm").addEventListener("submit", saveContribution);
@@ -206,7 +210,7 @@ function bindFilters() {
   $("globalSearch").addEventListener("input", renderGlobalSearch);
   $("exportExpenses").addEventListener("click", function () { exportCsv("family-expenditure.csv", filteredExpenses(), ["amount", "date", "sentTo", "fromAccount", "reason"], ["Amt (Rs.)", "Date Paid", "Send to", "From Acct", "Reason"]); });
   $("exportIncome").addEventListener("click", function () { exportCsv("family-income.csv", filteredIncome(), ["date", "source", "category", "receivedByName", "receivingMode", "amount"]); });
-  $("printExpenses").addEventListener("click", function () { window.print(); });
+  $("printExpenses").addEventListener("click", function () { prepareExpensePrintDialog(); openDialog("expensePrintDialog"); });
   $("printIncome").addEventListener("click", function () { window.print(); });
 }
 
@@ -292,6 +296,48 @@ async function importOldExpenses(event) {
   catch (error) { return toast(error.message, "error"); }
   const result = await mutate("bulkCreateExpenses", { entries: entries }, plural(entries.length, "old expenditure") + " imported.", "bulkExpenseDialog", "Importing old expenditure…");
   if (result) { $("expenseMonth").value = ""; renderExpenses(); }
+}
+
+function prepareExpensePrintDialog() {
+  const month = $("expenseMonth").value;
+  if (month) {
+    const parts = month.split("-").map(Number);
+    const lastDay = new Date(parts[0], parts[1], 0).getDate();
+    $("expensePrintFrom").value = month + "-01";
+    $("expensePrintTo").value = month === currentMonth() ? todayIso() : month + "-" + String(lastDay).padStart(2, "0");
+  } else if (state.data.expenses.length) {
+    const dates = state.data.expenses.map(function (item) { return String(item.date).slice(0,10); }).filter(Boolean).sort();
+    $("expensePrintFrom").value = dates[0] || currentMonth() + "-01";
+    $("expensePrintTo").value = dates[dates.length - 1] || todayIso();
+  }
+}
+
+function viewExpenseRange() { openExpenseRangeOutput(false); }
+function printExpenseRange(event) { event.preventDefault(); openExpenseRangeOutput(true); }
+
+function openExpenseRangeOutput(autoPrint) {
+  const from = $("expensePrintFrom").value, to = $("expensePrintTo").value;
+  if (!from || !to) return toast("Choose both From date and To date.", "error");
+  if (from > to) return toast("From date cannot be later than To date.", "error");
+  const items = state.data.expenses.map(normalizeExpense).filter(function (item) {
+    const date = String(item.date || "").slice(0,10); return date >= from && date <= to;
+  }).sort(function (a,b) { return String(a.date).localeCompare(String(b.date)); });
+  if (!items.length) return toast("No expenditure was found in the selected period.", "error");
+
+  const total = items.reduce(function (sum,item) { return sum + Number(item.amount || 0); }, 0);
+  const familyName = (state.data.settings && state.data.settings.familyName) || "Our Family Hub";
+  const rows = items.map(function (item,index) {
+    return "<tr><td class='serial'>"+(index+1)+"</td><td class='number'>"+h(money(item.amount))+"</td><td>"+h(formatDate(item.date))+"</td><td><strong>"+h(item.sentTo)+"</strong></td><td>"+h(item.fromAccount)+"</td><td class='reason'>"+h(item.reason)+"</td></tr>";
+  }).join("");
+  const reportWindow = window.open("", "familyExpenseReport", "width=1150,height=820");
+  if (!reportWindow) return toast("Allow pop-ups for this page to view or print the selected expenditure.", "error");
+  const autoPrintScript = autoPrint ? "<script>window.onload=function(){window.focus();setTimeout(function(){window.print();},200)};<\/script>" : "";
+  reportWindow.document.open();
+  reportWindow.document.write("<!doctype html><html><head><meta charset='utf-8'><title>Expenditure "+h(from)+" to "+h(to)+"</title><style>"+
+    "@page{size:A4 landscape;margin:12mm}*{box-sizing:border-box}body{margin:0;color:#25243b;background:#f5f3fb;font:13px Arial,sans-serif}.report{max-width:1200px;margin:0 auto;padding:28px;background:white;min-height:100vh}.screen-actions{position:sticky;top:0;z-index:5;display:flex;justify-content:flex-end;gap:8px;margin:-12px -12px 18px;padding:10px;background:rgba(255,255,255,.94);border-bottom:1px solid #e5e2ee}.screen-actions button{border:0;border-radius:9px;padding:9px 14px;font-weight:700;cursor:pointer}.screen-actions .print{color:white;background:#6752c7}.screen-actions .close{color:#4d4e67;background:#efedf5}h1{margin:0 0 5px;font-size:24px}.family{color:#6752c7;font-size:12px;font-weight:700;letter-spacing:1px;text-transform:uppercase}.period{margin:0;color:#66687d}.summary{display:flex;gap:14px;margin:16px 0;padding:11px 14px;border:1px solid #dedbe9;border-radius:10px;background:#f7f5ff;font-weight:700}.summary strong{color:#4b389e}table{width:100%;border-collapse:collapse;table-layout:fixed}th,td{padding:9px 8px;border:1px solid #dddce7;text-align:left;vertical-align:top;overflow-wrap:anywhere}th{color:#3e3a62;background:#e9e4fb;font-size:11px;text-transform:uppercase}tbody tr:nth-child(even){background:#f7f5ff}.serial{width:5%;text-align:center}.number{width:12%;text-align:right;font-variant-numeric:tabular-nums}.reason{width:32%;line-height:1.45}.foot{margin-top:12px;color:#858699;font-size:10px;text-align:right}@media print{body{background:white;-webkit-print-color-adjust:exact;print-color-adjust:exact}.report{max-width:none;padding:0}.screen-actions{display:none}}"+
+    "</style></head><body><main class='report'><div class='screen-actions'><button class='close' type='button' onclick='window.close()'>Close view</button><button class='print' type='button' onclick='window.print()'>Print this report</button></div><div class='family'>"+h(familyName)+"</div><h1>Expenditure statement</h1><p class='period'>From "+h(formatDate(from))+" to "+h(formatDate(to))+"</p><div class='summary'><span>"+h(plural(items.length,"entry","entries"))+"</span><span>Total: <strong>"+h(money(total))+"</strong></span></div><table><thead><tr><th class='serial'>Sl.</th><th class='number'>Amt (Rs.)</th><th>Date Paid</th><th>Send to</th><th>From Acct</th><th class='reason'>Reason</th></tr></thead><tbody>"+rows+"</tbody></table><p class='foot'>Prepared "+h(new Date().toLocaleString("en-IN"))+" · Family Dashboard v"+h(FRONTEND_VERSION)+"</p></main>"+autoPrintScript+"</body></html>");
+  reportWindow.document.close();
+  $("expensePrintDialog").close();
 }
 
 function parseOldExpenseRows(text) {

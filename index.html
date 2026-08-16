@@ -55,14 +55,14 @@
       </div>
       <nav class="main-nav" aria-label="Main navigation">
         <button class="nav-button active" data-view="home"><span>⌂</span> Overview</button>
-        <button class="nav-button" data-view="expenses"><span>₹</span> Expenditure</button>
-        <button class="nav-button" data-view="income"><span>↗</span> Income</button>
-        <button class="nav-button" data-view="targets"><span>◎</span> Targets</button>
-        <button class="nav-button" data-view="dates"><span>◫</span> Reminders</button>
-        <button class="nav-button" data-view="calendar"><span>▦</span> Calendar</button>
-        <button class="nav-button" data-view="diary"><span>☷</span> Family diary</button>
-        <button class="nav-button" data-view="photos"><span>▧</span> Family photos</button>
-        <button class="nav-button" data-view="experiences"><span>✦</span> Experiences</button>
+        <button class="nav-button" data-view="expenses" data-module="EXPENSES"><span>₹</span> Expenditure</button>
+        <button class="nav-button" data-view="income" data-module="INCOME"><span>↗</span> Income</button>
+        <button class="nav-button" data-view="targets" data-module="TARGETS"><span>◎</span> Targets</button>
+        <button class="nav-button" data-view="dates" data-module="DATES"><span>◫</span> Reminders</button>
+        <button class="nav-button" data-view="calendar" data-module="CALENDAR"><span>▦</span> Calendar</button>
+        <button class="nav-button" data-view="diary" data-module="DIARY"><span>☷</span> Family diary</button>
+        <button class="nav-button" data-view="photos" data-module="PHOTOS"><span>▧</span> Family photos</button>
+        <button class="nav-button" data-view="experiences" data-module="EXPERIENCES"><span>✦</span> Experiences</button>
         <button id="adminNav" class="nav-button hidden" data-view="admin"><span>⚙</span> Administration</button>
       </nav>
       <div class="sidebar-quote">
@@ -97,24 +97,24 @@
               <h3 id="welcomeHeading">Good to see you.</h3>
               <p>Track shared spending, celebrate progress and never miss a special day.</p>
             </div>
-            <button class="light-button" data-open="expenseDialog">＋ Add expenditure</button>
+            <button class="light-button" data-open="expenseDialog" data-module="EXPENSES">＋ Add expenditure</button>
           </div>
 
           <div class="summary-grid">
-            <article class="summary-card violet"><span class="summary-icon">₹</span><div><small>This month's spend</small><strong id="monthSpend">₹0</strong><em id="monthExpenseCount">0 entries</em></div></article>
-            <article class="summary-card green"><span class="summary-icon">↗</span><div><small>This month's income</small><strong id="monthIncome">₹0</strong><em id="monthIncomeCount">0 entries</em></div></article>
-            <article class="summary-card teal"><span class="summary-icon">◎</span><div><small>Target progress</small><strong id="targetProgress">0%</strong><em id="targetCaption">No active targets</em></div></article>
-            <article class="summary-card coral"><span class="summary-icon">◫</span><div><small>Coming up</small><strong id="upcomingCount">0 dates</strong><em>Next 30 days</em></div></article>
-            <article class="summary-card gold"><span class="summary-icon">▧</span><div><small>Shared memories</small><strong id="photoCount">0 photos</strong><em>In the family gallery</em></div></article>
-            <article class="summary-card rose"><span class="summary-icon">✦</span><div><small>Family experiences</small><strong id="experienceCount">0 stories</strong><em>Moments worth remembering</em></div></article>
+            <article class="summary-card violet" data-module="EXPENSES"><span class="summary-icon">₹</span><div><small>This month's spend</small><strong id="monthSpend">₹0</strong><em id="monthExpenseCount">0 entries</em></div></article>
+            <article class="summary-card green" data-module="INCOME"><span class="summary-icon">↗</span><div><small>This month's income</small><strong id="monthIncome">₹0</strong><em id="monthIncomeCount">0 entries</em></div></article>
+            <article class="summary-card teal" data-module="TARGETS"><span class="summary-icon">◎</span><div><small>Target progress</small><strong id="targetProgress">0%</strong><em id="targetCaption">No active targets</em></div></article>
+            <article class="summary-card coral" data-module="DATES"><span class="summary-icon">◫</span><div><small>Coming up</small><strong id="upcomingCount">0 dates</strong><em>Next 30 days</em></div></article>
+            <article class="summary-card gold" data-module="PHOTOS"><span class="summary-icon">▧</span><div><small>Shared memories</small><strong id="photoCount">0 photos</strong><em>In the family gallery</em></div></article>
+            <article class="summary-card rose" data-module="EXPERIENCES"><span class="summary-icon">✦</span><div><small>Family experiences</small><strong id="experienceCount">0 stories</strong><em>Moments worth remembering</em></div></article>
           </div>
 
           <div class="dashboard-grid">
-            <article class="panel spend-panel">
+            <article class="panel spend-panel" data-module="EXPENSES">
               <div class="panel-heading"><div><p class="eyebrow">THIS MONTH</p><h3>Spending by category</h3></div><button class="text-button" data-go="expenses">View all</button></div>
               <div id="categoryBars" class="category-bars empty-block">No expenditure added this month.</div>
             </article>
-            <article class="panel dates-panel">
+            <article class="panel dates-panel" data-module="DATES">
               <div class="panel-heading"><div><p class="eyebrow">DON'T MISS</p><h3>Upcoming dates</h3></div><button class="text-button" data-go="dates">View all</button></div>
               <div id="upcomingList" class="mini-list empty-block">No important dates coming up.</div>
             </article>
@@ -149,19 +149,19 @@
 
         <section id="view-expenses" class="view">
           <div class="section-toolbar">
-            <div><p class="section-intro">Record and review household or personal expenditure.</p></div>
-            <div class="toolbar-actions"><button id="exportExpenses" class="secondary-button">⇩ Export CSV</button><button id="printExpenses" class="secondary-button">⌑ Print</button><button class="primary-button" data-open="expenseDialog">＋ Add expenditure</button></div>
+            <div><p class="section-intro">Record old and new payments using your family's expenditure format.</p></div>
+            <div class="toolbar-actions"><button id="exportExpenses" class="secondary-button">⇩ Export CSV</button><button id="printExpenses" class="secondary-button">⌑ Print</button><button class="secondary-button" data-open="bulkExpenseDialog">⇧ Import old records</button><button class="primary-button" data-open="expenseDialog">＋ Add expenditure</button></div>
           </div>
           <div class="filter-bar">
             <label>Month<input id="expenseMonth" type="month"></label>
-            <label>Category<select id="expenseCategoryFilter"><option value="">All categories</option></select></label>
-            <label>Paid by<select id="expenseMemberFilter"><option value="">All members</option></select></label>
-            <label class="search-label">Search<input id="expenseSearch" type="search" placeholder="Description or payment mode"></label>
+            <label>Send to<select id="expenseSendToFilter"><option value="">All recipients</option></select></label>
+            <label>From account<select id="expenseAccountFilter"><option value="">All accounts</option></select></label>
+            <label class="search-label">Search<input id="expenseSearch" type="search" placeholder="Recipient, account or reason"></label>
           </div>
           <div id="expenseTotals" class="inline-totals"></div>
           <div class="table-wrap">
-            <table>
-              <thead><tr><th>Date</th><th>Description</th><th>Category</th><th>Paid by</th><th>Mode</th><th class="number">Amount</th><th></th></tr></thead>
+            <table class="expense-table">
+              <thead><tr><th class="number">Amt (Rs.)</th><th>Date Paid</th><th>Send to</th><th>From Acct</th><th>Reason</th><th></th></tr></thead>
               <tbody id="expenseRows"></tbody>
             </table>
             <div id="expenseEmpty" class="table-empty hidden">No expenditure matches these filters.</div>
@@ -266,11 +266,21 @@
     <form id="expenseForm" method="dialog">
       <div class="modal-head"><div><p class="eyebrow">EXPENDITURE</p><h3 id="expenseDialogTitle">Add expenditure</h3></div><button class="modal-close" type="button" data-close>×</button></div>
       <input id="expenseId" type="hidden">
-      <div class="two-fields"><label>Date<input id="expenseDate" type="date" required></label><label>Amount<input id="expenseAmount" type="number" min="0.01" step="0.01" required placeholder="0.00"></label></div>
-      <label>Description<input id="expenseDescription" required maxlength="100" placeholder="What was this for?"></label>
-      <div class="two-fields"><label>Category<select id="expenseCategory" required><option>Groceries</option><option>Utilities</option><option>Housing</option><option>Health</option><option>Travel</option><option>Education</option><option>Dining</option><option>Shopping</option><option>Entertainment</option><option>Gifts</option><option>Other</option></select></label><label>Paid by<select id="expensePaidBy" required></select></label></div>
-      <label>Payment mode<select id="expenseMode"><option>UPI</option><option>Card</option><option>Cash</option><option>Bank transfer</option><option>Other</option></select></label>
+      <div class="two-fields"><label>Amt (Rs.)<input id="expenseAmount" type="number" min="0.01" step="0.01" required placeholder="12000"></label><label>Date Paid<input id="expenseDate" type="date" required></label></div>
+      <div class="two-fields"><label>Send to<input id="expenseSendTo" required maxlength="100" placeholder="e.g. Mani SBI"></label><label>From Acct<input id="expenseFromAccount" required maxlength="100" placeholder="e.g. Family SBI"></label></div>
+      <label>Reason<textarea id="expenseReason" rows="3" required maxlength="500" placeholder="e.g. Monthly 12k sent to Mani SBI on 05th &amp; 20th of each month"></textarea></label>
       <div class="modal-actions"><button type="button" class="secondary-button" data-close>Cancel</button><button type="submit" class="primary-button">Save expenditure</button></div>
+    </form>
+  </dialog>
+
+  <dialog id="bulkExpenseDialog" class="modal bulk-modal">
+    <form id="bulkExpenseForm" method="dialog">
+      <div class="modal-head"><div><p class="eyebrow">OLD EXPENDITURE</p><h3>Import old records</h3></div><button class="modal-close" type="button" data-close>×</button></div>
+      <p class="bulk-note">Copy five columns from Excel or Google Sheets and paste them below in this exact order. A heading row is optional.</p>
+      <div class="bulk-example"><strong>Amt (Rs.)</strong><span>Date Paid</span><span>Send to</span><span>From Acct</span><span>Reason</span></div>
+      <label>Paste rows<textarea id="bulkExpenseText" rows="11" required spellcheck="false" placeholder="12000&#9;05/01/2024&#9;Mani SBI&#9;Family SBI&#9;Monthly transfer"></textarea></label>
+      <small id="bulkExpenseHelp" class="muted">Dates accepted: DD/MM/YYYY, DD-MM-YYYY, or YYYY-MM-DD. Up to 500 records at a time.</small>
+      <div class="modal-actions"><button type="button" class="secondary-button" data-close>Cancel</button><button type="submit" class="primary-button">Import records</button></div>
     </form>
   </dialog>
 
@@ -339,6 +349,16 @@
       <label>Full name<input id="memberName" required maxlength="70"></label>
       <div class="two-fields"><label>Username<input id="memberUsername" required maxlength="30" pattern="[A-Za-z0-9._-]+"></label><label>Email<input id="memberEmail" type="email" placeholder="For reminders"></label></div>
       <div class="two-fields"><label>Role<select id="memberRole"><option value="MEMBER">Member</option><option value="ADMIN">Administrator</option></select></label><label>6-digit PIN<input id="memberPin" type="password" inputmode="numeric" pattern="[0-9]{6}" maxlength="6" placeholder="Required for a new member"></label></div>
+      <fieldset id="memberAccessFieldset"><legend>Can view and use</legend><div class="permission-grid">
+        <label><input type="checkbox" name="memberPermission" value="EXPENSES" checked> Expenditure</label>
+        <label><input type="checkbox" name="memberPermission" value="INCOME" checked> Income</label>
+        <label><input type="checkbox" name="memberPermission" value="TARGETS" checked> Targets</label>
+        <label><input type="checkbox" name="memberPermission" value="DATES" checked> Reminders</label>
+        <label><input type="checkbox" name="memberPermission" value="CALENDAR" checked> Calendar</label>
+        <label><input type="checkbox" name="memberPermission" value="PHOTOS" checked> Photos</label>
+        <label><input type="checkbox" name="memberPermission" value="EXPERIENCES" checked> Experiences</label>
+        <label><input type="checkbox" name="memberPermission" value="DIARY" checked> Diary</label>
+      </div><small>Administrators always have access to every section.</small></fieldset>
       <label class="check-row"><input id="memberActive" type="checkbox" checked> Active account</label>
       <div class="modal-actions"><button type="button" class="secondary-button" data-close>Cancel</button><button type="submit" class="primary-button">Save member</button></div>
     </form>

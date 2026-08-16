@@ -15,6 +15,7 @@ const viewTitles = {
   dates: "Reminders", calendar: "Family calendar", diary: "Family diary", photos: "Family photos",
   experiences: "Family experiences", admin: "Administration"
 };
+const viewModules = { expenses: "EXPENSES", income: "INCOME", targets: "TARGETS", dates: "DATES", calendar: "CALENDAR", diary: "DIARY", photos: "PHOTOS", experiences: "EXPERIENCES" };
 const currencySymbols = { INR: "₹", USD: "$", EUR: "€", GBP: "£" };
 
 document.addEventListener("DOMContentLoaded", init);
@@ -37,6 +38,7 @@ function memberName(id) {
   return member ? member.name : "Family member";
 }
 function isAdmin() { return !!(state.data && state.data.user && state.data.user.role === "ADMIN"); }
+function hasModuleAccess(module) { return isAdmin() || !!(state.data && state.data.user && (state.data.user.permissions || []).indexOf(module) >= 0); }
 function mayDelete(item) { return isAdmin() || (item && item.createdBy === state.data.user.id); }
 function formatDate(iso) {
   if (!iso) return "—";
@@ -118,6 +120,7 @@ function bindNavigation() {
 function closeSidebar() { $("sidebar").classList.remove("open"); $("sidebarShade").classList.remove("show"); }
 function goTo(view) {
   if (view === "admin" && !isAdmin()) return;
+  if (viewModules[view] && !hasModuleAccess(viewModules[view])) return toast("Your administrator has not enabled this section for your account.", "error");
   state.view = view;
   all(".view").forEach(function (el) { el.classList.toggle("active", el.id === "view-" + view); });
   all(".nav-button").forEach(function (el) { el.classList.toggle("active", el.dataset.view === view); });
@@ -153,13 +156,14 @@ function prepareNewDialog(id) {
     $(defaults[id][1]).value = "";
     if (defaults[id][2]) $(defaults[id][2]).value = todayIso();
   }
-  if (id === "expenseDialog") { $("expenseDialogTitle").textContent = "Add expenditure"; fillMemberSelect($("expensePaidBy"), state.data.user.id); }
+  if (id === "expenseDialog") $("expenseDialogTitle").textContent = "Add expenditure";
+  if (id === "bulkExpenseDialog") $("bulkExpenseForm").reset();
   if (id === "incomeDialog") { $("incomeDialogTitle").textContent = "Add income"; fillMemberSelect($("incomeReceivedBy"), state.data.user.id); }
   if (id === "targetDialog") { $("targetForm").reset(); $("targetDueDate").value = todayIso(); fillMemberSelect($("targetOwner"), state.data.user.id, true); }
   if (id === "contributionDialog") { $("contributionForm").reset(); $("contributionDate").value = todayIso(); }
   if (id === "dateDialog") { $("dateDialogTitle").textContent = "Add important date"; $("notifyEveryone").checked = true; $("recipientChecks").classList.add("hidden"); renderRecipientChecks([]); }
   if (id === "photoDialog") { $("photoForm").reset(); $("photoTakenDate").value = todayIso(); $("photoPreview").classList.add("hidden"); state.pendingPhoto = null; }
-  if (id === "memberDialog") { $("memberDialogTitle").textContent = "Add family member"; $("memberActive").checked = true; $("memberPin").required = true; }
+  if (id === "memberDialog") { $("memberDialogTitle").textContent = "Add family member"; $("memberActive").checked = true; $("memberPin").required = true; setMemberPermissions(["EXPENSES","INCOME","TARGETS","DATES","CALENDAR","PHOTOS","EXPERIENCES","DIARY"]); syncMemberAccessRole(); }
   if (id === "experienceDialog") $("experienceDialogTitle").textContent = "Add experience";
   if (id === "diaryDialog") $("diaryDialogTitle").textContent = "Write diary entry";
 }
@@ -167,6 +171,7 @@ function prepareNewDialog(id) {
 function bindForms() {
   $("loginForm").addEventListener("submit", login);
   $("expenseForm").addEventListener("submit", saveExpense);
+  $("bulkExpenseForm").addEventListener("submit", importOldExpenses);
   $("incomeForm").addEventListener("submit", saveIncome);
   $("targetForm").addEventListener("submit", saveTarget);
   $("contributionForm").addEventListener("submit", saveContribution);
@@ -176,17 +181,18 @@ function bindForms() {
   $("diaryForm").addEventListener("submit", saveDiary);
   $("memberForm").addEventListener("submit", saveMember);
   $("settingsForm").addEventListener("submit", saveSettings);
+  $("memberRole").addEventListener("change", syncMemberAccessRole);
 }
 
 function bindFilters() {
-  ["expenseMonth", "expenseCategoryFilter", "expenseMemberFilter", "expenseSearch"].forEach(function (id) { $(id).addEventListener("input", renderExpenses); });
+  ["expenseMonth", "expenseSendToFilter", "expenseAccountFilter", "expenseSearch"].forEach(function (id) { $(id).addEventListener("input", renderExpenses); });
   ["incomeMonth", "incomeCategoryFilter", "incomeMemberFilter", "incomeSearch"].forEach(function (id) { $(id).addEventListener("input", renderIncome); });
   ["dateTypeFilter", "dateSearch"].forEach(function (id) { $(id).addEventListener("input", renderDates); });
   $("photoSearch").addEventListener("input", renderPhotos);
   ["experienceYear", "experienceSearch"].forEach(function (id) { $(id).addEventListener("input", renderExperiences); });
   ["diaryMonth", "diaryWriterFilter", "diarySearch"].forEach(function (id) { $(id).addEventListener("input", renderDiary); });
   $("globalSearch").addEventListener("input", renderGlobalSearch);
-  $("exportExpenses").addEventListener("click", function () { exportCsv("family-expenditure.csv", filteredExpenses(), ["date", "description", "category", "paidByName", "paymentMode", "amount"]); });
+  $("exportExpenses").addEventListener("click", function () { exportCsv("family-expenditure.csv", filteredExpenses(), ["amount", "date", "sentTo", "fromAccount", "reason"], ["Amt (Rs.)", "Date Paid", "Send to", "From Acct", "Reason"]); });
   $("exportIncome").addEventListener("click", function () { exportCsv("family-income.csv", filteredIncome(), ["date", "source", "category", "receivedByName", "receivingMode", "amount"]); });
   $("printExpenses").addEventListener("click", function () { window.print(); });
   $("printIncome").addEventListener("click", function () { window.print(); });
@@ -240,9 +246,64 @@ async function saveExpense(event) {
   event.preventDefault();
   await mutate($("expenseId").value ? "updateExpense" : "createExpense", {
     id: $("expenseId").value, date: $("expenseDate").value, amount: $("expenseAmount").value,
-    description: $("expenseDescription").value.trim(), category: $("expenseCategory").value,
-    paidBy: $("expensePaidBy").value, paymentMode: $("expenseMode").value
+    sentTo: $("expenseSendTo").value.trim(), fromAccount: $("expenseFromAccount").value.trim(),
+    reason: $("expenseReason").value.trim(), entryType: "OLD"
   }, "Expenditure saved.", "expenseDialog");
+}
+
+async function importOldExpenses(event) {
+  event.preventDefault();
+  let entries;
+  try { entries = parseOldExpenseRows($("bulkExpenseText").value); }
+  catch (error) { return toast(error.message, "error"); }
+  const result = await mutate("bulkCreateExpenses", { entries: entries }, plural(entries.length, "old expenditure") + " imported.", "bulkExpenseDialog", "Importing old expenditure…");
+  if (result) { $("expenseMonth").value = ""; renderExpenses(); }
+}
+
+function parseOldExpenseRows(text) {
+  const lines = String(text || "").replace(/\r/g, "").split("\n").filter(function (line) { return line.trim(); });
+  if (!lines.length) throw new Error("Paste at least one expenditure row.");
+  let rows = lines.map(function (line) { return line.indexOf("\t") >= 0 ? line.split("\t") : parseCsvLine(line); });
+  if (/amt|amount/.test(normalize(rows[0][0])) && /date/.test(normalize(rows[0][1]))) rows.shift();
+  if (!rows.length) throw new Error("No expenditure rows were found below the heading.");
+  if (rows.length > 500) throw new Error("Import no more than 500 records at a time.");
+  return rows.map(function (columns, index) {
+    const rowNumber = index + 1;
+    if (columns.length !== 5) throw new Error("Row " + rowNumber + " must contain exactly 5 columns.");
+    const amount = Number(String(columns[0]).replace(/₹|rs\.?/ig, "").replace(/,/g, "").trim());
+    if (!isFinite(amount) || amount <= 0) throw new Error("Row " + rowNumber + " has an invalid amount.");
+    const date = parseImportedDate(columns[1]);
+    if (!date) throw new Error("Row " + rowNumber + " has an invalid date. Use DD/MM/YYYY or YYYY-MM-DD.");
+    const sentTo = String(columns[2] || "").trim(), fromAccount = String(columns[3] || "").trim(), reason = String(columns[4] || "").trim();
+    if (!sentTo || !fromAccount || !reason) throw new Error("Row " + rowNumber + " needs Send to, From Acct and Reason.");
+    if (sentTo.length > 100 || fromAccount.length > 100 || reason.length > 500) throw new Error("Row " + rowNumber + " contains text that is too long.");
+    return { amount: amount, date: date, sentTo: sentTo, fromAccount: fromAccount, reason: reason, entryType: "OLD" };
+  });
+}
+
+function parseCsvLine(line) {
+  const values = []; let value = "", quoted = false;
+  for (let i = 0; i < line.length; i++) {
+    const char = line[i];
+    if (char === '"' && quoted && line[i + 1] === '"') { value += '"'; i++; }
+    else if (char === '"') quoted = !quoted;
+    else if (char === "," && !quoted) { values.push(value.trim()); value = ""; }
+    else value += char;
+  }
+  values.push(value.trim()); return values;
+}
+
+function parseImportedDate(value) {
+  const text = String(value || "").trim(); let match;
+  if ((match = text.match(/^(\d{4})-(\d{1,2})-(\d{1,2})$/))) return validIsoDate(match[1], match[2], match[3]);
+  if ((match = text.match(/^(\d{1,2})[\/.\-](\d{1,2})[\/.\-](\d{4})$/))) return validIsoDate(match[3], match[2], match[1]);
+  return "";
+}
+
+function validIsoDate(year, month, day) {
+  const iso = String(year).padStart(4, "0") + "-" + String(month).padStart(2, "0") + "-" + String(day).padStart(2, "0");
+  const date = new Date(iso + "T00:00:00Z");
+  return !isNaN(date.getTime()) && date.toISOString().slice(0, 10) === iso ? iso : "";
 }
 async function saveIncome(event) {
   event.preventDefault();
@@ -287,7 +348,8 @@ async function saveDiary(event) {
 async function saveMember(event) {
   event.preventDefault();
   const id = $("memberId").value;
-  const payload = { id: id, name: $("memberName").value.trim(), username: $("memberUsername").value.trim(), email: $("memberEmail").value.trim(), role: $("memberRole").value, pin: $("memberPin").value, active: $("memberActive").checked };
+  const permissions = all("input[name='memberPermission']:checked").map(function (el) { return el.value; });
+  const payload = { id: id, name: $("memberName").value.trim(), username: $("memberUsername").value.trim(), email: $("memberEmail").value.trim(), role: $("memberRole").value, pin: $("memberPin").value, active: $("memberActive").checked, permissions: permissions };
   if (!id && !payload.pin) return toast("Enter a 6-digit PIN for the new member.", "error");
   await mutate("saveMember", payload, id ? "Member updated." : "Family member added.", "memberDialog");
 }
@@ -312,7 +374,7 @@ async function confirmDelete(action, id, message) { if (window.confirm(message))
 
 function editExpense(id) {
   const item = state.data.expenses.find(function (x) { return x.id === id; }); if (!item) return;
-  prepareNewDialog("expenseDialog"); $("expenseId").value = item.id; $("expenseDate").value = item.date; $("expenseAmount").value = item.amount; $("expenseDescription").value = item.description; $("expenseCategory").value = item.category; fillMemberSelect($("expensePaidBy"), item.paidBy); $("expenseMode").value = item.paymentMode; $("expenseDialogTitle").textContent = "Edit expenditure"; openDialog("expenseDialog");
+  const expense = normalizeExpense(item); prepareNewDialog("expenseDialog"); $("expenseId").value = expense.id; $("expenseDate").value = expense.date; $("expenseAmount").value = expense.amount; $("expenseSendTo").value = expense.sentTo; $("expenseFromAccount").value = expense.fromAccount; $("expenseReason").value = expense.reason; $("expenseDialogTitle").textContent = "Edit expenditure"; openDialog("expenseDialog");
 }
 function editIncome(id) {
   const item = state.data.income.find(function (x) { return x.id === id; }); if (!item) return;
@@ -334,8 +396,10 @@ function editDiary(id) {
 }
 function editMember(id) {
   const item = (state.data.adminMembers || []).find(function (x) { return x.id === id; }); if (!item) return;
-  prepareNewDialog("memberDialog"); $("memberId").value = item.id; $("memberName").value = item.name; $("memberUsername").value = item.username; $("memberEmail").value = item.email || ""; $("memberRole").value = item.role; $("memberActive").checked = item.active; $("memberPin").value = ""; $("memberPin").required = false; $("memberDialogTitle").textContent = "Edit family member"; openDialog("memberDialog");
+  prepareNewDialog("memberDialog"); $("memberId").value = item.id; $("memberName").value = item.name; $("memberUsername").value = item.username; $("memberEmail").value = item.email || ""; $("memberRole").value = item.role; setMemberPermissions(item.permissions || []); syncMemberAccessRole(); $("memberActive").checked = item.active; $("memberPin").value = ""; $("memberPin").required = false; $("memberDialogTitle").textContent = "Edit family member"; openDialog("memberDialog");
 }
+function setMemberPermissions(permissions) { all("input[name='memberPermission']").forEach(function (el) { el.checked = permissions.indexOf(el.value) >= 0; }); }
+function syncMemberAccessRole() { const admin = $("memberRole").value === "ADMIN"; if (admin) setMemberPermissions(["EXPENSES","INCOME","TARGETS","DATES","CALENDAR","PHOTOS","EXPERIENCES","DIARY"]); all("input[name='memberPermission']").forEach(function (el) { el.disabled = admin; }); }
 async function resetMemberPin(id) {
   if (!window.confirm("Generate a new 6-digit PIN for this member? Their old PIN will stop working.")) return;
   showLoading("Generating a new PIN…");
@@ -353,14 +417,17 @@ function renderAll() {
   $("userAvatar").textContent = state.data.user.name.charAt(0).toUpperCase();
   $("adminNav").classList.toggle("hidden", !isAdmin());
   if (!isAdmin() && state.view === "admin") goTo("home");
+  applyAccessUI();
   populateFilters(); renderHome(); renderExpenses(); renderIncome(); renderTargets(); renderDates(); renderPhotos(); renderExperiences(); renderDiary(); renderCalendar(); if (isAdmin()) renderAdmin();
 }
+function applyAccessUI() { all("[data-module]").forEach(function (el) { el.classList.toggle("hidden", !hasModuleAccess(el.dataset.module)); }); if (viewModules[state.view] && !hasModuleAccess(viewModules[state.view])) goTo("home"); }
 function populateFilters() {
-  fillMemberFilter($("expenseMemberFilter")); fillMemberFilter($("incomeMemberFilter")); fillMemberFilter($("diaryWriterFilter"));
-  const expenseCats = Array.from(new Set(state.data.expenses.map(function (x) { return x.category; }))).sort();
+  fillMemberFilter($("incomeMemberFilter")); fillMemberFilter($("diaryWriterFilter"));
+  const recipients = Array.from(new Set(state.data.expenses.map(function (x) { return normalizeExpense(x).sentTo; }).filter(Boolean))).sort();
+  const accounts = Array.from(new Set(state.data.expenses.map(function (x) { return normalizeExpense(x).fromAccount; }).filter(Boolean))).sort();
   const incomeCats = Array.from(new Set(state.data.income.map(function (x) { return x.category; }))).sort();
-  fillOptions($("expenseCategoryFilter"), expenseCats, "All categories"); fillOptions($("incomeCategoryFilter"), incomeCats, "All categories");
-  fillMemberSelect($("expensePaidBy"), $("expensePaidBy").value || state.data.user.id); fillMemberSelect($("incomeReceivedBy"), $("incomeReceivedBy").value || state.data.user.id); fillMemberSelect($("targetOwner"), $("targetOwner").value || state.data.user.id, true);
+  fillOptions($("expenseSendToFilter"), recipients, "All recipients"); fillOptions($("expenseAccountFilter"), accounts, "All accounts"); fillOptions($("incomeCategoryFilter"), incomeCats, "All categories");
+  fillMemberSelect($("incomeReceivedBy"), $("incomeReceivedBy").value || state.data.user.id); fillMemberSelect($("targetOwner"), $("targetOwner").value || state.data.user.id, true);
   renderRecipientChecks([]);
   const years = Array.from(new Set(state.data.experiences.map(function (x) { return String(x.experienceDate).slice(0,4); }))).filter(Boolean).sort().reverse(); const selectedYear = $("experienceYear").value; fillOptions($("experienceYear"), years, "All years"); $("experienceYear").value = years.indexOf(selectedYear) >= 0 ? selectedYear : "";
 }
@@ -388,7 +455,7 @@ function renderHome() {
   renderCategoryBars(monthExpenses); renderUpcoming(upcoming); renderActivity();
 }
 function renderCategoryBars(items) {
-  const totals = {}; items.forEach(function (x) { totals[x.category] = (totals[x.category] || 0) + Number(x.amount || 0); });
+  const totals = {}; items.forEach(function (x) { const label = normalizeExpense(x).sentTo || x.category || "Other"; totals[label] = (totals[label] || 0) + Number(x.amount || 0); });
   const rows = Object.keys(totals).map(function (key) { return [key, totals[key]]; }).sort(function (a,b) { return b[1] - a[1]; }).slice(0,6); const max = rows.length ? rows[0][1] : 1;
   $("categoryBars").classList.toggle("empty-block", !rows.length); $("categoryBars").innerHTML = rows.length ? rows.map(function (row) { return '<div class="category-row"><span>' + h(row[0]) + '</span><div class="bar-track"><div class="bar-fill" style="width:' + Math.max(4,row[1]/max*100) + '%"></div></div><strong>' + h(money(row[1])) + "</strong></div>"; }).join("") : "No expenditure added this month.";
 }
@@ -398,7 +465,7 @@ function renderUpcoming(items) {
 }
 function renderActivity() {
   let items = [];
-  state.data.expenses.slice(0,4).forEach(function (x) { items.push({date:x.createdAt,icon:"₹",title:x.description,meta:money(x.amount)+" expenditure · "+memberName(x.createdBy)}); });
+  state.data.expenses.slice(0,4).forEach(function (x) { const expense=normalizeExpense(x); items.push({date:x.createdAt,icon:"₹",title:expense.reason||expense.sentTo,meta:money(x.amount)+" sent to "+expense.sentTo+" · "+memberName(x.createdBy)}); });
   state.data.income.slice(0,3).forEach(function (x) { items.push({date:x.createdAt,icon:"↗",title:x.source,meta:money(x.amount)+" income · "+memberName(x.createdBy)}); });
   state.data.photos.slice(0,3).forEach(function (x) { items.push({date:x.createdAt,icon:"▧",title:x.title,meta:"Photo shared by "+memberName(x.uploadedBy)}); });
   state.data.diary.slice(0,3).forEach(function (x) { items.push({date:x.createdAt,icon:"☷",title:x.title,meta:"Diary by "+memberName(x.createdBy)}); });
@@ -406,8 +473,9 @@ function renderActivity() {
   $("activityList").classList.toggle("empty-block", !items.length); $("activityList").innerHTML = items.length ? items.map(function(x){return '<div class="activity-item"><span class="activity-icon">'+h(x.icon)+'</span><p><strong>'+h(x.title)+'</strong><br><small>'+h(x.meta)+'</small></p></div>';}).join("") : "Your family's latest additions will appear here.";
 }
 
-function filteredExpenses() { const month=$("expenseMonth").value,cat=$("expenseCategoryFilter").value,member=$("expenseMemberFilter").value,q=normalize($("expenseSearch").value); return state.data.expenses.filter(function(x){return (!month||String(x.date).slice(0,7)===month)&&(!cat||x.category===cat)&&(!member||x.paidBy===member)&&(!q||normalize([x.description,x.category,x.paymentMode,memberName(x.paidBy)].join(" ")).includes(q));}).map(function(x){return Object.assign({},x,{paidByName:memberName(x.paidBy)});}); }
-function renderExpenses() { const items=filteredExpenses(),total=items.reduce(function(s,x){return s+Number(x.amount||0);},0); $("expenseTotals").innerHTML='<span class="total-pill">'+plural(items.length,"entry","entries")+'</span><span class="total-pill">Total '+h(money(total))+'</span>'; $("expenseRows").innerHTML=items.map(function(x){return '<tr><td>'+h(formatDate(x.date))+'</td><td><strong>'+h(x.description)+'</strong></td><td>'+h(x.category)+'</td><td>'+h(x.paidByName)+'</td><td>'+h(x.paymentMode)+'</td><td class="number"><strong>'+h(money(x.amount))+'</strong></td><td><div class="row-actions"><button class="tiny-button" data-action="edit-expense" data-id="'+h(x.id)+'">Edit</button>'+(mayDelete(x)?'<button class="danger-button" data-action="delete-expense" data-id="'+h(x.id)+'">×</button>':"")+'</div></td></tr>';}).join(""); $("expenseEmpty").classList.toggle("hidden",items.length>0); }
+function normalizeExpense(item) { return Object.assign({}, item, { sentTo: item.sentTo || item.description || "", fromAccount: item.fromAccount || item.paymentMode || "", reason: item.reason || item.description || "" }); }
+function filteredExpenses() { const month=$("expenseMonth").value,recipient=$("expenseSendToFilter").value,account=$("expenseAccountFilter").value,q=normalize($("expenseSearch").value); return state.data.expenses.map(normalizeExpense).filter(function(x){return (!month||String(x.date).slice(0,7)===month)&&(!recipient||x.sentTo===recipient)&&(!account||x.fromAccount===account)&&(!q||normalize([x.sentTo,x.fromAccount,x.reason,x.date].join(" ")).includes(q));}); }
+function renderExpenses() { const items=filteredExpenses(),total=items.reduce(function(s,x){return s+Number(x.amount||0);},0); $("expenseTotals").innerHTML='<span class="total-pill">'+plural(items.length,"entry","entries")+'</span><span class="total-pill">Total '+h(money(total))+'</span>'; $("expenseRows").innerHTML=items.map(function(x){return '<tr><td class="number"><strong>'+h(money(x.amount))+'</strong></td><td>'+h(formatDate(x.date))+'</td><td><strong>'+h(x.sentTo)+'</strong></td><td>'+h(x.fromAccount)+'</td><td class="expense-reason">'+h(x.reason)+'</td><td><div class="row-actions"><button class="tiny-button" data-action="edit-expense" data-id="'+h(x.id)+'">Edit</button>'+(mayDelete(x)?'<button class="danger-button" data-action="delete-expense" data-id="'+h(x.id)+'">×</button>':"")+'</div></td></tr>';}).join(""); $("expenseEmpty").classList.toggle("hidden",items.length>0); }
 function filteredIncome() { const month=$("incomeMonth").value,cat=$("incomeCategoryFilter").value,member=$("incomeMemberFilter").value,q=normalize($("incomeSearch").value); return state.data.income.filter(function(x){return (!month||String(x.date).slice(0,7)===month)&&(!cat||x.category===cat)&&(!member||x.receivedBy===member)&&(!q||normalize([x.source,x.category,x.receivingMode,memberName(x.receivedBy)].join(" ")).includes(q));}).map(function(x){return Object.assign({},x,{receivedByName:memberName(x.receivedBy)});}); }
 function renderIncome() { const items=filteredIncome(),total=items.reduce(function(s,x){return s+Number(x.amount||0);},0); $("incomeTotals").innerHTML='<span class="total-pill green">'+plural(items.length,"entry","entries")+'</span><span class="total-pill green">Total '+h(money(total))+'</span>'; $("incomeRows").innerHTML=items.map(function(x){return '<tr><td>'+h(formatDate(x.date))+'</td><td><strong>'+h(x.source)+'</strong></td><td>'+h(x.category)+'</td><td>'+h(x.receivedByName)+'</td><td>'+h(x.receivingMode)+'</td><td class="number"><strong>'+h(money(x.amount))+'</strong></td><td><div class="row-actions"><button class="tiny-button" data-action="edit-income" data-id="'+h(x.id)+'">Edit</button>'+(mayDelete(x)?'<button class="danger-button" data-action="delete-income" data-id="'+h(x.id)+'">×</button>':"")+'</div></td></tr>';}).join(""); $("incomeEmpty").classList.toggle("hidden",items.length>0); }
 
@@ -434,12 +502,12 @@ function renderCalendar() {
 
 function renderAdmin() {
   $("settingFamilyName").value=state.data.settings.familyName||""; $("settingCurrency").value=state.data.settings.currency||"INR"; $("settingTimezone").value=state.data.settings.timezone||"Asia/Kolkata";
-  const items=state.data.adminMembers||[]; $("memberCount").textContent=plural(items.length,"person","people"); $("memberList").innerHTML=items.map(function(x){return '<div class="member-row"><span class="avatar">'+h(x.name.charAt(0).toUpperCase())+'</span><div><strong>'+h(x.name)+'</strong><small>@'+h(x.username)+'</small></div><div><strong>'+h(x.email||"No email")+'</strong><small>Reminder address</small></div><span class="role-chip">'+(x.role==="ADMIN"?"ADMIN":"MEMBER")+'</span><span class="active-chip '+(!x.active?'inactive':'')+'">'+(x.active?'● Active':'● Inactive')+'</span><div class="member-actions"><button class="tiny-button" data-action="edit-member" data-id="'+h(x.id)+'">Edit</button><button class="tiny-button" data-action="reset-pin" data-id="'+h(x.id)+'">New PIN</button></div></div>';}).join("");
+  const labels={EXPENSES:"Exp",INCOME:"Income",TARGETS:"Targets",DATES:"Reminders",CALENDAR:"Calendar",PHOTOS:"Photos",EXPERIENCES:"Experiences",DIARY:"Diary"}; const items=state.data.adminMembers||[]; $("memberCount").textContent=plural(items.length,"person","people"); $("memberList").innerHTML=items.map(function(x){const access=x.role==="ADMIN"?"All sections":(x.permissions||[]).map(function(key){return labels[key]||key;}).join(", ")||"No sections";return '<div class="member-row"><span class="avatar">'+h(x.name.charAt(0).toUpperCase())+'</span><div><strong>'+h(x.name)+'</strong><small>@'+h(x.username)+'</small></div><div><strong>'+h(x.email||"No email")+'</strong><small>Access: '+h(access)+'</small></div><span class="role-chip">'+(x.role==="ADMIN"?"ADMIN":"MEMBER")+'</span><span class="active-chip '+(!x.active?'inactive':'')+'">'+(x.active?'● Active':'● Inactive')+'</span><div class="member-actions"><button class="tiny-button" data-action="edit-member" data-id="'+h(x.id)+'">Edit</button><button class="tiny-button" data-action="reset-pin" data-id="'+h(x.id)+'">New PIN</button></div></div>';}).join("");
 }
 
 function renderGlobalSearch() {
   const q=normalize($("globalSearch").value); if(q.length<2){$("globalSearchResults").innerHTML='<p class="muted">Type at least 2 characters to search all family records.</p>';return;} let results=[];
-  state.data.expenses.forEach(function(x){if(normalize([x.description,x.category,memberName(x.paidBy)].join(" ")).includes(q))results.push({view:"expenses",icon:"₹",title:x.description,meta:money(x.amount)+" · "+formatDate(x.date)});});
+  state.data.expenses.forEach(function(x){const expense=normalizeExpense(x);if(normalize([expense.sentTo,expense.fromAccount,expense.reason].join(" ")).includes(q))results.push({view:"expenses",icon:"₹",title:expense.reason||expense.sentTo,meta:money(x.amount)+" · "+formatDate(x.date)});});
   state.data.income.forEach(function(x){if(normalize([x.source,x.category,memberName(x.receivedBy)].join(" ")).includes(q))results.push({view:"income",icon:"↗",title:x.source,meta:money(x.amount)+" · "+formatDate(x.date)});});
   state.data.targets.forEach(function(x){if(normalize([x.title,x.category,x.notes].join(" ")).includes(q))results.push({view:"targets",icon:"◎",title:x.title,meta:"Target · "+money(x.targetAmount)});});
   state.data.importantDates.forEach(function(x){if(normalize([x.title,x.eventType,x.notes].join(" ")).includes(q))results.push({view:"dates",icon:"◫",title:x.title,meta:x.eventType+" · "+formatDate(x.nextOccurrence)});});
@@ -454,7 +522,7 @@ async function previewPhoto() {
   showLoading("Preparing photo…"); try { const full=await resizeImage(file,1600,.82),thumb=await resizeImage(file,280,.55); state.pendingPhoto={name:file.name.replace(/[^A-Za-z0-9._-]/g,"_"),fullData:full,thumbData:thumb}; $("photoPreview").src=full; $("photoPreview").classList.remove("hidden"); if(!$("photoTitle").value)$("photoTitle").value=file.name.replace(/\.[^.]+$/,"").replace(/[_-]+/g," "); } catch(e){toast("This photo could not be prepared.","error");} finally{hideLoading();}
 }
 function resizeImage(file,maxDimension,quality){return new Promise(function(resolve,reject){const reader=new FileReader();reader.onerror=reject;reader.onload=function(){const img=new Image();img.onerror=reject;img.onload=function(){let w=img.width,hgt=img.height;if(Math.max(w,hgt)>maxDimension){const scale=maxDimension/Math.max(w,hgt);w=Math.round(w*scale);hgt=Math.round(hgt*scale);}const canvas=document.createElement("canvas");canvas.width=w;canvas.height=hgt;const ctx=canvas.getContext("2d");ctx.fillStyle="#fff";ctx.fillRect(0,0,w,hgt);ctx.drawImage(img,0,0,w,hgt);resolve(canvas.toDataURL("image/jpeg",quality));};img.src=reader.result;};reader.readAsDataURL(file);});}
-function exportCsv(filename,items,fields){if(!items.length)return toast("There is no filtered data to export.","error");const lines=[fields.join(",")].concat(items.map(function(item){return fields.map(function(field){return '"'+String(item[field]==null?"":item[field]).replace(/"/g,'""')+'"';}).join(",");}));const blob=new Blob(["\ufeff"+lines.join("\n")],{type:"text/csv;charset=utf-8"});const url=URL.createObjectURL(blob),a=document.createElement("a");a.href=url;a.download=filename;a.click();setTimeout(function(){URL.revokeObjectURL(url);},1000);}
+function exportCsv(filename,items,fields,headers){if(!items.length)return toast("There is no filtered data to export.","error");const lines=[(headers||fields).join(",")].concat(items.map(function(item){return fields.map(function(field){return '"'+String(item[field]==null?"":item[field]).replace(/"/g,'""')+'"';}).join(",");}));const blob=new Blob(["\ufeff"+lines.join("\n")],{type:"text/csv;charset=utf-8"});const url=URL.createObjectURL(blob),a=document.createElement("a");a.href=url;a.download=filename;a.click();setTimeout(function(){URL.revokeObjectURL(url);},1000);}
 
 function api(action,payload) {
   return new Promise(function (resolve,reject) {

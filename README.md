@@ -1,10 +1,10 @@
-# Family Dashboard v1.0.0
+# Family Dashboard v1.0.2
 
 A private, mobile-friendly dashboard for about 10 family members. The frontend runs on GitHub Pages. Google Apps Script supplies the protected backend, Google Sheets stores the records, Google Drive stores full photos, and Gmail sends reminders.
 
 ## What the family can use
 
-- Expenditure: add, edit, search, filter by month/category/member, print, and export CSV.
+- Expenditure: use the exact `Amt (Rs.) / Date Paid / Send to / From Acct / Reason` format; add or edit one payment, bulk-paste up to 500 old records from Excel/Google Sheets, search, filter, print, and export CSV.
 - Income: add, edit, search, filter, print, and export CSV.
 - Targets: create family or personal targets and record contributions.
 - Reminders: birthdays, anniversaries, appointments, renewals, payments, or other dates; choose same-day and advance email reminders.
@@ -13,9 +13,19 @@ A private, mobile-friendly dashboard for about 10 family members. The frontend r
 - Photos: upload, resize, caption, search, view full-size, and store privately in Drive.
 - Experiences: preserve trips, celebrations, lessons, and memories with date, place, tags, and writer name.
 - Search: one search box across expenditure, income, targets, reminders, diary, photos, and experiences.
-- Administration: add about 10 members, set Member/Admin roles, activate/deactivate access, and reset PINs.
+- Administration: add about 10 members, choose exactly which sections each member can view and use, set Member/Admin roles, activate/deactivate access, and reset PINs.
 
-All active members can see the shared family information and add or edit records. A member can delete an item they originally added; an administrator can delete any item and manage users/settings.
+Each active member sees only the sections enabled for them by an administrator. Access is enforced by the backend as well as hidden in the interface. Within an enabled section, members can see shared information and add or edit records. A member can delete an item they originally added; an administrator can delete any item and manage users/settings.
+
+## Import old expenditure
+
+Open **Expenditure → Import old records**. Copy rows from Excel or Google Sheets and paste these five columns in this order:
+
+| Amt (Rs.) | Date Paid | Send to | From Acct | Reason |
+|---:|---|---|---|---|
+| 12000 | 05/01/2024 | Mani SBI | Family SBI | Monthly 12k sent to Mani SBI on 05th & 20th of each month |
+
+The heading row is optional. Dates can be `DD/MM/YYYY`, `DD-MM-YYYY`, or `YYYY-MM-DD`. Review the columns before importing; up to 500 rows can be added at once.
 
 ## Files in this package
 
@@ -59,7 +69,7 @@ Running setup automatically creates all Sheet tabs, the private Drive photo fold
 
 1. In Apps Script click **Deploy → New deployment**.
 2. Click the gear beside **Select type** and choose **Web app**.
-3. Description: `Family Dashboard v1.0.0`.
+3. Description: `Family Dashboard v1.0.2`.
 4. **Execute as:** `Me`.
 5. **Who has access:** `Anyone`.
 6. Click **Deploy**, approve if asked, and copy the Web App URL ending in `/exec`.
@@ -99,6 +109,7 @@ Running setup automatically creates all Sheet tabs, the private Drive photo fold
 3. Enter name, username, reminder email, role, and a private 6-digit PIN.
 4. Give each person only their own username and PIN.
 5. Add email addresses for members who should receive important-date notifications.
+6. For each member, tick only the sections they may view and use. For example, untick **Expenditure** to prevent that member from receiving or changing expenditure data.
 
 Use the Member role for normal family access. Give Administrator only to someone who should manage users, reset PINs, change settings, and delete any shared item.
 
@@ -137,7 +148,7 @@ Frontend change:
 Backend change:
 
 1. Replace `Code.gs` in Apps Script.
-2. Run `setupFamilyDashboard()` once; it preserves existing data and adds any missing structure.
+2. Run `setupFamilyDashboard()` once. Version 1.0.2 safely appends the new expenditure and member-access columns while preserving existing rows.
 3. Open **Deploy → Manage deployments → Edit**.
 4. Choose **New version** and click **Deploy**. The `/exec` URL normally remains the same.
 

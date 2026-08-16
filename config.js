@@ -3,7 +3,7 @@
  * Example: https://script.google.com/macros/s/ABC123/exec
  */
 window.FAMILY_DASHBOARD_CONFIG = Object.freeze({
-  API_URL: "https://script.google.com/macros/s/AKfycbw5N_RPO7KU7xrsBvMtapqR9YwDqrfn5zQj9Dk1pWdHhHJUMVSIlbPLh2_Wq_hemyCxxg/exec",
+  API_URL: "https://script.google.com/macros/s/AKfycbzLZBecO1E4PZr7yiJidbPs56v-9Zw2GHs86jcIWWkx1bOPP-KycTqOeuT91TL9YcHFag/exec",
   REQUEST_TIMEOUT_MS: 60000,
   APP_VERSION: "1.0.1"
 });

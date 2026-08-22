@@ -6,7 +6,7 @@
   <meta name="theme-color" content="#5743a8">
   <meta name="description" content="Private family dashboard for expenses, goals, important dates and photos.">
   <title>Our Family Hub</title>
-  <link rel="stylesheet" href="styles.css?v=1.0.8">
+  <link rel="stylesheet" href="styles.css?v=1.0.9">
 </head>
 <body>
   <div class="ambient ambient-one"></div>
@@ -37,7 +37,7 @@
             <button id="togglePin" type="button" class="icon-button" aria-label="Show or hide PIN">👁</button>
           </div>
         </label>
-        <div class="login-options"><label class="remember-row"><input id="rememberUsername" type="checkbox" checked> Save username on this device</label><span id="loginVersion">Version 1.0.8</span></div>
+        <div class="login-options"><label class="remember-row"><input id="rememberUsername" type="checkbox" checked> Save username on this device</label><span id="loginVersion">Version 1.0.9</span></div>
         <button class="primary-button wide" type="submit">Sign in securely</button>
       </form>
       <p id="setupHint" class="setup-hint hidden">Open <strong>config.js</strong> and paste your Apps Script Web App URL first.</p>
@@ -51,7 +51,7 @@
         <div class="brand-mark small">FH</div>
         <div>
           <strong id="sidebarFamilyName">Our Family Hub</strong>
-          <span>Family Dashboard · <b id="sidebarVersion">v1.0.8</b></span>
+          <span>Family Dashboard · <b id="sidebarVersion">v1.0.9</b></span>
         </div>
       </div>
       <nav class="main-nav" aria-label="Main navigation">
@@ -282,21 +282,47 @@
     <button id="stickyLauncher" class="sticky-launcher hidden" type="button" aria-controls="stickyBoard" aria-expanded="false">
       <span aria-hidden="true">🗒</span><strong>Target / Reminder</strong><b id="stickyActiveCount">0</b>
     </button>
+    <div id="stickyBoardShade" class="sticky-board-shade hidden"></div>
     <section id="stickyBoard" class="sticky-board hidden" aria-label="Target and reminder sticky notes">
       <header class="sticky-board-head">
-        <div class="sticky-board-title"><span aria-hidden="true">🗒</span><div><strong>Target / Reminder</strong><small id="stickyBoardSummary">0 active notes</small></div></div>
+        <div class="sticky-board-title"><div><span>FAMILY ORGANISER</span><strong>Targets &amp; Reminders</strong><small>Active notes stay visible here; completed notes move safely into history.</small></div></div>
         <div class="sticky-board-controls">
-          <button id="addTargetSticky" class="sticky-head-button" type="button">＋ Target</button>
-          <button id="addReminderSticky" class="sticky-head-button" type="button">＋ Reminder</button>
           <button id="stickyTabActive" class="sticky-tab active" type="button">Active</button>
-          <button id="stickyTabCompleted" class="sticky-tab" type="button">Completed</button>
-          <button id="stickyMinimize" class="sticky-minimize" type="button" aria-label="Collapse sticky-note board">—</button>
+          <button id="stickyTabCompleted" class="sticky-tab" type="button">History</button>
+          <button id="stickyMinimize" class="sticky-minimize" type="button" aria-label="Close sticky-note organiser">×</button>
         </div>
       </header>
-      <div id="stickyCanvas" class="sticky-canvas"></div>
-      <div id="stickyCompletedList" class="sticky-completed-list hidden"></div>
-      <div id="stickyEmpty" class="sticky-empty hidden"><span>📝</span><strong>No notes here</strong><p>Add a target or reminder sticky note.</p></div>
+      <div class="sticky-board-scroll">
+        <form id="stickyQuickForm" class="sticky-quick-form">
+          <div class="sticky-quick-heading"><strong>Add a sticky note</strong><small>Saved in the Family Dashboard spreadsheet</small></div>
+          <div class="sticky-quick-fields">
+            <label>Type<select id="quickStickyType" required><option value="REMINDER">Reminder</option><option value="TARGET">Target</option></select></label>
+            <label class="quick-title">Title *<input id="quickStickyTitle" required maxlength="100" placeholder="Enter target or reminder"></label>
+            <label>Due date<input id="quickStickyDueDate" type="date"></label>
+            <label class="quick-details">Details<textarea id="quickStickyBody" rows="2" maxlength="2000" placeholder="Optional details"></textarea></label>
+          </div>
+          <fieldset class="quick-colour-fieldset"><legend>Colour</legend><div class="quick-colour-options">
+            <label class="colour-yellow"><input type="radio" name="quickStickyColor" value="yellow" checked><span>Yellow</span></label>
+            <label class="colour-pink"><input type="radio" name="quickStickyColor" value="pink"><span>Pink</span></label>
+            <label class="colour-blue"><input type="radio" name="quickStickyColor" value="blue"><span>Blue</span></label>
+            <label class="colour-green"><input type="radio" name="quickStickyColor" value="green"><span>Green</span></label>
+            <label class="colour-purple"><input type="radio" name="quickStickyColor" value="purple"><span>Purple</span></label>
+            <label class="colour-orange"><input type="radio" name="quickStickyColor" value="orange"><span>Orange</span></label>
+          </div></fieldset>
+          <button class="sticky-save-button" type="submit">Save note</button>
+        </form>
+        <section class="sticky-workspace">
+          <div class="sticky-section-heading"><h3 id="stickySectionTitle">Active</h3><span id="stickyBoardSummary">0 active notes</span></div>
+          <div id="stickyCanvas" class="sticky-canvas"></div>
+          <div id="stickyCompletedList" class="sticky-completed-list hidden"></div>
+          <div id="stickyEmpty" class="sticky-empty hidden"><span>📝</span><strong>No notes here</strong><p>Add a target or reminder sticky note.</p></div>
+        </section>
+      </div>
+      <footer class="sticky-board-footer"><button type="button" class="secondary-button" data-sticky-close>Close</button></footer>
     </section>
+    <div id="stickyPinnedLayer" class="sticky-pinned-layer hidden" aria-label="Pinned notes kept open over the dashboard">
+      <div id="stickyPinnedCanvas" class="sticky-pinned-canvas"></div>
+    </div>
   </div>
 
   <dialog id="expenseDialog" class="modal">
@@ -485,7 +511,7 @@
   <div id="loadingOverlay" class="loading-overlay hidden"><div class="spinner"></div><p id="loadingText">Working…</p></div>
   <div id="toastRegion" class="toast-region" aria-live="polite"></div>
 
-  <script src="config.js?v=1.0.8"></script>
-  <script src="app.js?v=1.0.8"></script>
+  <script src="config.js?v=1.0.9"></script>
+  <script src="app.js?v=1.0.9"></script>
 </body>
 </html>

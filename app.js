@@ -1,8 +1,8 @@
 "use strict";
 
 const CONFIG = window.FAMILY_DASHBOARD_CONFIG || {};
-const PLACEHOLDER_URL = "https://script.google.com/macros/s/AKfycby4YPjQL165mIQgKjSHR4DX7EHjORbskRQL-Leyr5hCz0lD-d_0P93fPvyqgJx1HjbpPw/exec";
-const FRONTEND_VERSION = "1.0.8";
+const PLACEHOLDER_URL = "PASTE_YOUR_APPS_SCRIPT_WEB_APP_URL_HERE";
+const FRONTEND_VERSION = "1.0.9";
 const SAVED_USERNAME_KEY = "familyDashboardUsername";
 const state = {
   token: localStorage.getItem("familyDashboardToken") || "",
@@ -113,7 +113,9 @@ function showApp() {
 }
 function showLogin() {
   $("stickyBoard").classList.add("hidden");
+  $("stickyBoardShade").classList.add("hidden");
   $("stickyLauncher").classList.add("hidden");
+  $("stickyPinnedLayer").classList.add("hidden");
   $("appShell").classList.add("hidden");
   $("loginScreen").classList.remove("hidden");
   loadSavedUsername();
@@ -204,6 +206,7 @@ function bindForms() {
   $("memberForm").addEventListener("submit", saveMember);
   $("settingsForm").addEventListener("submit", saveSettings);
   $("stickyNoteForm").addEventListener("submit", saveStickyNote);
+  $("stickyQuickForm").addEventListener("submit", saveQuickStickyNote);
   $("createBackupNow").addEventListener("click", createBackupNow);
   $("memberRole").addEventListener("change", syncMemberAccessRole);
 }
@@ -261,11 +264,12 @@ function bindActions() {
 function bindStickyBoard() {
   $("stickyLauncher").addEventListener("click", function () { openStickyBoard("active"); });
   $("stickyMinimize").addEventListener("click", closeStickyBoard);
+  $("stickyBoardShade").addEventListener("click", closeStickyBoard);
+  all("[data-sticky-close]").forEach(function (button) { button.addEventListener("click", closeStickyBoard); });
   $("stickyTabActive").addEventListener("click", function () { state.stickyView = "active"; renderStickyNotes(); });
   $("stickyTabCompleted").addEventListener("click", function () { state.stickyView = "completed"; renderStickyNotes(); });
-  $("addTargetSticky").addEventListener("click", function () { prepareStickyNoteDialog("TARGET"); });
-  $("addReminderSticky").addEventListener("click", function () { prepareStickyNoteDialog("REMINDER"); });
   $("stickyCanvas").addEventListener("pointerdown", startStickyDrag);
+  $("stickyPinnedCanvas").addEventListener("pointerdown", startStickyDrag);
   window.addEventListener("pointermove", moveStickyDrag);
   window.addEventListener("pointerup", endStickyDrag);
   window.addEventListener("pointercancel", endStickyDrag);
@@ -275,6 +279,8 @@ function openStickyBoard(view) {
   if (!canUseStickyNotes()) return;
   if (view) state.stickyView = view;
   $("stickyBoard").classList.remove("hidden");
+  $("stickyBoardShade").classList.remove("hidden");
+  $("stickyPinnedLayer").classList.add("hidden");
   $("stickyLauncher").classList.add("hidden");
   $("stickyLauncher").setAttribute("aria-expanded", "true");
   renderStickyNotes();
@@ -282,8 +288,10 @@ function openStickyBoard(view) {
 
 function closeStickyBoard() {
   $("stickyBoard").classList.add("hidden");
+  $("stickyBoardShade").classList.add("hidden");
   $("stickyLauncher").classList.toggle("hidden", !canUseStickyNotes());
   $("stickyLauncher").setAttribute("aria-expanded", "false");
+  renderStickyPinnedLayer();
 }
 
 function canUseStickyNotes() { return hasModuleAccess("TARGETS") || hasModuleAccess("DATES"); }
@@ -510,6 +518,32 @@ async function saveStickyNote(event) {
   if (result) openStickyBoard("active");
 }
 
+async function saveQuickStickyNote(event) {
+  event.preventDefault();
+  const title = $("quickStickyTitle").value.trim();
+  const selectedColour = document.querySelector("input[name='quickStickyColor']:checked");
+  const active = state.data.stickyNotes.filter(function (note) { return note.status !== "COMPLETED"; });
+  const slot = active.length;
+  const result = await mutate("createStickyNote", {
+    noteType: $("quickStickyType").value,
+    title: title,
+    body: $("quickStickyBody").value.trim() || title,
+    dueDate: $("quickStickyDueDate").value,
+    color: selectedColour ? selectedColour.value : "yellow",
+    positionX: 18 + (slot % 3) * 300,
+    positionY: 18 + Math.floor(slot / 3) * 238,
+    width: 280,
+    height: 220,
+    collapsed: false,
+    pinned: false
+  }, "Sticky note added.");
+  if (result) {
+    $("quickStickyTitle").value = ""; $("quickStickyBody").value = ""; $("quickStickyDueDate").value = "";
+    const yellow = document.querySelector("input[name='quickStickyColor'][value='yellow']"); if (yellow) yellow.checked = true;
+    state.stickyView = "active"; renderStickyNotes(); $("quickStickyTitle").focus();
+  }
+}
+
 function prepareStickyNoteDialog(noteType) {
   const type = noteType === "REMINDER" ? "REMINDER" : "TARGET";
   $("stickyNoteForm").reset();
@@ -522,14 +556,13 @@ function prepareStickyNoteDialog(noteType) {
 }
 
 function configureStickyTypeChoices() {
-  all("option", $("stickyNoteType")).forEach(function (option) {
-    const allowed = option.value === "TARGET" ? hasModuleAccess("TARGETS") : hasModuleAccess("DATES");
-    option.disabled = !allowed;
-    option.hidden = !allowed;
+  [$("stickyNoteType"), $("quickStickyType")].forEach(function (select) {
+    all("option", select).forEach(function (option) {
+      const allowed = option.value === "TARGET" ? hasModuleAccess("TARGETS") : hasModuleAccess("DATES");
+      option.disabled = !allowed; option.hidden = !allowed;
+    });
+    if (select.selectedOptions[0] && select.selectedOptions[0].disabled) select.value = hasModuleAccess("DATES") ? "REMINDER" : "TARGET";
   });
-  if ($("stickyNoteType").selectedOptions[0] && $("stickyNoteType").selectedOptions[0].disabled) {
-    $("stickyNoteType").value = hasModuleAccess("TARGETS") ? "TARGET" : "REMINDER";
-  }
 }
 
 function setStickyColour(colour) {
@@ -574,7 +607,7 @@ async function mutate(action, payload, successMessage, closeId, loadingMessage) 
     await refreshData();
     toast(successMessage || (result && result.message) || "Saved.", "success");
     return result;
-  } catch (error) { toast(error.message || "The change could not be saved.", "error"); return null; }
+  } catch (error) { toast(friendlyApiError(error), "error"); return null; }
   finally { hideLoading(); }
 }
 async function refreshData() { state.data = normalizeBootstrapData(await api("bootstrap", {})); renderAll(); }
@@ -615,12 +648,14 @@ async function completeStickyNote(id) {
 }
 function changeStickyLayout(id, change) {
   const note = state.data.stickyNotes.find(function (item) { return item.id === id; }); if (!note) return;
+  if (change === "collapse" && note.pinned) return toast("This note is pinned open. Unpin it before collapsing.", "error");
   if (change === "collapse") note.collapsed = !note.collapsed;
   if (change === "pin") { note.pinned = !note.pinned; if (note.pinned) note.collapsed = false; }
   if (change === "grow") { note.width = Math.min(520, Number(note.width || 280) + 40); note.height = Math.min(500, Number(note.height || 220) + 35); }
   if (change === "shrink") { note.width = Math.max(220, Number(note.width || 280) - 40); note.height = Math.max(160, Number(note.height || 220) - 35); }
   renderStickyNotes();
   queueStickyLayoutSave(note);
+  if (change === "pin") toast(note.pinned ? "Pinned open above the dashboard." : "Note unpinned; it can now be collapsed.", "success");
 }
 function queueStickyLayoutSave(note) {
   const oldTimer = state.stickyLayoutTimers.get(note.id); if (oldTimer) clearTimeout(oldTimer);
@@ -628,7 +663,7 @@ function queueStickyLayoutSave(note) {
     state.stickyLayoutTimers.delete(note.id);
     try {
       await api("updateStickyLayout", { id: note.id, positionX: note.positionX, positionY: note.positionY, width: note.width, height: note.height, collapsed: !!note.collapsed, pinned: !!note.pinned });
-    } catch (error) { toast(error.message || "The sticky-note layout could not be saved.", "error"); }
+    } catch (error) { toast(friendlyApiError(error), "error"); }
   }, 220));
 }
 function editExperience(id) {
@@ -668,9 +703,8 @@ function renderAll() {
 function applyAccessUI() {
   all("[data-module]").forEach(function (el) { el.classList.toggle("hidden", !hasModuleAccess(el.dataset.module)); });
   if (viewModules[state.view] && !hasModuleAccess(viewModules[state.view])) goTo("home");
-  $("addTargetSticky").classList.toggle("hidden", !hasModuleAccess("TARGETS"));
-  $("addReminderSticky").classList.toggle("hidden", !hasModuleAccess("DATES"));
-  if (!canUseStickyNotes()) { $("stickyBoard").classList.add("hidden"); $("stickyLauncher").classList.add("hidden"); }
+  configureStickyTypeChoices();
+  if (!canUseStickyNotes()) { $("stickyBoard").classList.add("hidden"); $("stickyBoardShade").classList.add("hidden"); $("stickyLauncher").classList.add("hidden"); $("stickyPinnedLayer").classList.add("hidden"); }
   else if ($("stickyBoard").classList.contains("hidden")) $("stickyLauncher").classList.remove("hidden");
 }
 function populateFilters() {
@@ -783,25 +817,14 @@ function renderStickyNotes() {
   const active = notes.filter(function (note) { return note.status !== "COMPLETED"; });
   const completed = notes.filter(function (note) { return note.status === "COMPLETED"; });
   $("stickyActiveCount").textContent = active.length;
-  $("stickyBoardSummary").textContent = plural(active.length, "active note") + " · " + plural(completed.length, "completed note");
+  $("stickySectionTitle").textContent = state.stickyView === "active" ? "Active" : "Completed history";
+  $("stickyBoardSummary").textContent = state.stickyView === "active" ? plural(active.length, "active note") : plural(completed.length, "completed note");
   $("stickyTabActive").classList.toggle("active", state.stickyView === "active");
   $("stickyTabCompleted").classList.toggle("active", state.stickyView === "completed");
   $("stickyCanvas").classList.toggle("hidden", state.stickyView !== "active");
   $("stickyCompletedList").classList.toggle("hidden", state.stickyView !== "completed");
 
-  $("stickyCanvas").innerHTML = active.map(function (note, index) {
-    const width = Math.max(220, Math.min(520, Number(note.width || 280)));
-    const height = Math.max(160, Math.min(500, Number(note.height || 220)));
-    const x = Math.max(0, Math.min(2000, Number(note.positionX || 20)));
-    const y = Math.max(0, Math.min(2000, Number(note.positionY || 20)));
-    const dueClass = note.dueDate && note.dueDate < todayIso() ? " overdue" : "";
-    const dueText = note.dueDate ? ((dueClass ? "Overdue · " : "Due · ") + formatDate(note.dueDate)) : "No due date";
-    const z = note.pinned ? 2000 + index : 20 + index;
-    return '<article class="sticky-note sticky-'+h(note.color||"yellow")+(note.collapsed?' collapsed':'')+(note.pinned?' pinned':'')+'" data-sticky-id="'+h(note.id)+'" style="left:'+x+'px;top:'+y+'px;width:'+width+'px;height:'+height+'px;z-index:'+z+'">'+
-      '<header class="sticky-note-head sticky-drag-handle"><span class="sticky-type">'+(note.noteType==="REMINDER"?'REMINDER':'TARGET')+'</span><button class="sticky-note-title" type="button" data-action="collapse-sticky" data-id="'+h(note.id)+'" title="Open or collapse this note">'+h(note.title)+'</button><div class="sticky-head-actions"><button type="button" data-action="pin-sticky" data-id="'+h(note.id)+'" title="'+(note.pinned?'Unpin note':'Keep note open above others')+'">'+(note.pinned?'📌':'○')+'</button><button type="button" data-action="collapse-sticky" data-id="'+h(note.id)+'" title="'+(note.collapsed?'Open note':'Collapse note')+'">'+(note.collapsed?'▾':'▴')+'</button></div></header>'+
-      '<div class="sticky-note-content"><p>'+h(note.body)+'</p><small class="sticky-due'+dueClass+'">'+h(dueText)+'</small><small>Added by '+h(memberName(note.createdBy))+'</small></div>'+
-      '<footer class="sticky-note-actions"><button class="complete" type="button" data-action="complete-sticky" data-id="'+h(note.id)+'">✓ Complete</button><button type="button" data-action="edit-sticky" data-id="'+h(note.id)+'">Edit</button>'+(mayDelete(note)?'<button class="delete" type="button" data-action="delete-sticky" data-id="'+h(note.id)+'">Delete</button>':'')+'<span class="sticky-size-actions"><button type="button" data-action="shrink-sticky" data-id="'+h(note.id)+'" title="Decrease note size">−</button><button type="button" data-action="grow-sticky" data-id="'+h(note.id)+'" title="Increase note size">＋</button></span></footer></article>';
-  }).join("");
+  $("stickyCanvas").innerHTML = active.map(function (note, index) { return stickyNoteMarkup(note, index, false); }).join("");
 
   $("stickyCompletedList").innerHTML = completed.map(function (note) {
     const completedText = note.completedAt ? formatDate(note.completedAt) : "Completed";
@@ -812,6 +835,33 @@ function renderStickyNotes() {
   $("stickyEmpty").classList.toggle("hidden", !empty);
   $("stickyEmpty").querySelector("strong").textContent = state.stickyView === "active" ? "No active sticky notes" : "No completed sticky notes";
   $("stickyEmpty").querySelector("p").textContent = state.stickyView === "active" ? "Add a target or reminder. You can move, resize, pin and collapse it." : "Completed notes are saved here and can be restored.";
+  renderStickyPinnedLayer(active);
+}
+
+function stickyNoteMarkup(note, index, pinnedOverlay) {
+  const width = Math.max(220, Math.min(520, Number(note.width || 280)));
+  const height = Math.max(160, Math.min(500, Number(note.height || 220)));
+  let x = Math.max(0, Math.min(2000, Number(note.positionX || 20)));
+  let y = Math.max(0, Math.min(2000, Number(note.positionY || 20)));
+  if (pinnedOverlay && window.matchMedia("(max-width: 640px)").matches) { x = 0; y = 8 + index * 30; }
+  const dueClass = note.dueDate && note.dueDate < todayIso() ? " overdue" : "";
+  const dueText = note.dueDate ? ((dueClass ? "Overdue · " : "Due · ") + formatDate(note.dueDate)) : "No due date";
+  const z = note.pinned ? 5000 + index : 20 + index;
+  const collapseControl = note.pinned ? '<button class="sticky-locked-open" type="button" disabled title="Pinned notes stay open">🔒</button>' : '<button type="button" data-action="collapse-sticky" data-id="'+h(note.id)+'" title="'+(note.collapsed?'Open note':'Collapse note')+'">'+(note.collapsed?'▾':'▴')+'</button>';
+  const titleControl = note.pinned ? '<strong class="sticky-note-title" title="This pinned note stays open">'+h(note.title)+'</strong>' : '<button class="sticky-note-title" type="button" data-action="collapse-sticky" data-id="'+h(note.id)+'" title="Open or collapse this note">'+h(note.title)+'</button>';
+  return '<article class="sticky-note sticky-'+h(note.color||"yellow")+(!note.pinned&&note.collapsed?' collapsed':'')+(note.pinned?' pinned':'')+(pinnedOverlay?' pinned-overlay-note':'')+'" data-sticky-id="'+h(note.id)+'" style="left:'+x+'px;top:'+y+'px;--overlay-top:'+y+'px;width:'+width+'px;height:'+height+'px;z-index:'+z+'">'+
+    '<header class="sticky-note-head sticky-drag-handle"><span class="sticky-type">'+(note.noteType==="REMINDER"?'REMINDER':'TARGET')+'</span>'+titleControl+'<div class="sticky-head-actions">'+collapseControl+'</div></header>'+
+    '<div class="sticky-note-content"><span class="sticky-pinned-label '+(note.pinned?'':'hidden')+'">📌 PINNED OPEN</span><p>'+h(note.body)+'</p><small class="sticky-due'+dueClass+'">'+h(dueText)+'</small><small>Added by '+h(memberName(note.createdBy))+'</small></div>'+
+    '<footer class="sticky-note-actions"><button class="pin-action" type="button" data-action="pin-sticky" data-id="'+h(note.id)+'">'+(note.pinned?'📌 Kept open':'📌 Keep open')+'</button><button type="button" data-action="edit-sticky" data-id="'+h(note.id)+'">Edit</button><button class="complete" type="button" data-action="complete-sticky" data-id="'+h(note.id)+'">✓ Completed</button>'+(mayDelete(note)?'<button class="delete" type="button" data-action="delete-sticky" data-id="'+h(note.id)+'">Delete</button>':'')+'<span class="sticky-size-actions"><button type="button" data-action="shrink-sticky" data-id="'+h(note.id)+'" title="Decrease note size">−</button><button type="button" data-action="grow-sticky" data-id="'+h(note.id)+'" title="Increase note size">＋</button></span></footer></article>';
+}
+
+function renderStickyPinnedLayer(activeNotes) {
+  if (!state.data || !canUseStickyNotes()) { $("stickyPinnedLayer").classList.add("hidden"); return; }
+  const notes = activeNotes || (state.data.stickyNotes || []).filter(function (note) { return note.status !== "COMPLETED"; });
+  const pinned = notes.filter(function (note) { return note.pinned; });
+  const boardOpen = !$("stickyBoard").classList.contains("hidden");
+  $("stickyPinnedCanvas").innerHTML = pinned.map(function (note, index) { return stickyNoteMarkup(note, index, true); }).join("");
+  $("stickyPinnedLayer").classList.toggle("hidden", boardOpen || !pinned.length);
 }
 
 function startStickyDrag(event) {
@@ -821,12 +871,12 @@ function startStickyDrag(event) {
   event.preventDefault();
   state.stickyHighestZ += 1; element.style.zIndex = note.pinned ? 3000 + state.stickyHighestZ : 300 + state.stickyHighestZ;
   element.classList.add("dragging");
-  state.stickyDrag = { element: element, note: note, startClientX: event.clientX, startClientY: event.clientY, startX: parseFloat(element.style.left) || 0, startY: parseFloat(element.style.top) || 0 };
+  state.stickyDrag = { element: element, container: element.parentElement, note: note, startClientX: event.clientX, startClientY: event.clientY, startX: parseFloat(element.style.left) || 0, startY: parseFloat(element.style.top) || 0 };
 }
 function moveStickyDrag(event) {
   const drag = state.stickyDrag; if (!drag) return;
   event.preventDefault();
-  const canvas = $("stickyCanvas"), maxX = Math.max(canvas.clientWidth, canvas.scrollWidth) - drag.element.offsetWidth, maxY = Math.max(canvas.clientHeight, canvas.scrollHeight) - drag.element.offsetHeight;
+  const canvas = drag.container, maxX = Math.max(canvas.clientWidth, canvas.scrollWidth) - drag.element.offsetWidth, maxY = Math.max(canvas.clientHeight, canvas.scrollHeight) - drag.element.offsetHeight;
   const x = Math.max(0, Math.min(maxX, drag.startX + event.clientX - drag.startClientX));
   const y = Math.max(0, Math.min(maxY, drag.startY + event.clientY - drag.startClientY));
   drag.element.style.left = Math.round(x) + "px"; drag.element.style.top = Math.round(y) + "px";
@@ -877,3 +927,4 @@ function cleanupRequest(id){const req=pendingRequests.get(id);if(!req)return;cle
 function showLoading(text){$("loadingText").textContent=text||"Working…";$("loadingOverlay").classList.remove("hidden");}
 function hideLoading(){$("loadingOverlay").classList.add("hidden");}
 function toast(message,type){const el=document.createElement("div");el.className="toast "+(type||"");el.textContent=message;$("toastRegion").appendChild(el);setTimeout(function(){el.remove();},4200);}
+function friendlyApiError(error){const message=(error&&error.message)||"The change could not be saved.";return /Unknown dashboard action/i.test(message)?"Backend update required. Deploy the latest Code.gs as a New version, then refresh this page.":message;}

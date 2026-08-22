@@ -2,14 +2,18 @@
 
 const CONFIG = window.FAMILY_DASHBOARD_CONFIG || {};
 const PLACEHOLDER_URL = "PASTE_YOUR_APPS_SCRIPT_WEB_APP_URL_HERE";
-const FRONTEND_VERSION = "1.0.7";
+const FRONTEND_VERSION = "1.0.8";
 const SAVED_USERNAME_KEY = "familyDashboardUsername";
 const state = {
   token: localStorage.getItem("familyDashboardToken") || "",
   data: null,
   view: "home",
   calendarCursor: new Date(new Date().getFullYear(), new Date().getMonth(), 1),
-  pendingPhoto: null
+  pendingPhoto: null,
+  stickyView: "active",
+  stickyDrag: null,
+  stickyHighestZ: 100,
+  stickyLayoutTimers: new Map()
 };
 const pendingRequests = new Map();
 const viewTitles = {
@@ -78,6 +82,7 @@ function init() {
   bindForms();
   bindFilters();
   bindActions();
+  bindStickyBoard();
   const configured = CONFIG.API_URL && CONFIG.API_URL !== PLACEHOLDER_URL && /^https:\/\/script\.google\.com\//.test(CONFIG.API_URL);
   if (!configured) {
     $("setupHint").classList.remove("hidden");
@@ -107,12 +112,14 @@ function showApp() {
   renderAll();
 }
 function showLogin() {
+  $("stickyBoard").classList.add("hidden");
+  $("stickyLauncher").classList.add("hidden");
   $("appShell").classList.add("hidden");
   $("loginScreen").classList.remove("hidden");
   loadSavedUsername();
 }
 function loadSavedUsername() { const saved = localStorage.getItem(SAVED_USERNAME_KEY) || ""; $("loginUsername").value = saved; $("rememberUsername").checked = !!saved || $("rememberUsername").checked; }
-function normalizeBootstrapData(data) { const result = data || {}; ["members","expenses","recurringExpenses","income","targets","importantDates","photos","experiences","diary"].forEach(function (key) { if (!Array.isArray(result[key])) result[key] = []; }); if (!result.settings) result.settings = {}; return result; }
+function normalizeBootstrapData(data) { const result = data || {}; ["members","expenses","recurringExpenses","income","targets","importantDates","photos","experiences","diary","stickyNotes"].forEach(function (key) { if (!Array.isArray(result[key])) result[key] = []; }); if (!result.settings) result.settings = {}; return result; }
 
 function bindNavigation() {
   all(".nav-button").forEach(function (button) {
@@ -196,6 +203,7 @@ function bindForms() {
   $("diaryForm").addEventListener("submit", saveDiary);
   $("memberForm").addEventListener("submit", saveMember);
   $("settingsForm").addEventListener("submit", saveSettings);
+  $("stickyNoteForm").addEventListener("submit", saveStickyNote);
   $("createBackupNow").addEventListener("click", createBackupNow);
   $("memberRole").addEventListener("change", syncMemberAccessRole);
 }
@@ -239,8 +247,46 @@ function bindActions() {
     if (action === "delete-diary") confirmDelete("deleteDiary", id, "Delete this diary entry?");
     if (action === "edit-member") editMember(id);
     if (action === "reset-pin") resetMemberPin(id);
+    if (action === "edit-sticky") editStickyNote(id);
+    if (action === "delete-sticky") confirmDelete("deleteStickyNote", id, "Delete this sticky note permanently?");
+    if (action === "complete-sticky") completeStickyNote(id);
+    if (action === "restore-sticky") mutate("restoreStickyNote", { id: id }, "Sticky note restored.");
+    if (action === "collapse-sticky") changeStickyLayout(id, "collapse");
+    if (action === "pin-sticky") changeStickyLayout(id, "pin");
+    if (action === "grow-sticky") changeStickyLayout(id, "grow");
+    if (action === "shrink-sticky") changeStickyLayout(id, "shrink");
   });
 }
+
+function bindStickyBoard() {
+  $("stickyLauncher").addEventListener("click", function () { openStickyBoard("active"); });
+  $("stickyMinimize").addEventListener("click", closeStickyBoard);
+  $("stickyTabActive").addEventListener("click", function () { state.stickyView = "active"; renderStickyNotes(); });
+  $("stickyTabCompleted").addEventListener("click", function () { state.stickyView = "completed"; renderStickyNotes(); });
+  $("addTargetSticky").addEventListener("click", function () { prepareStickyNoteDialog("TARGET"); });
+  $("addReminderSticky").addEventListener("click", function () { prepareStickyNoteDialog("REMINDER"); });
+  $("stickyCanvas").addEventListener("pointerdown", startStickyDrag);
+  window.addEventListener("pointermove", moveStickyDrag);
+  window.addEventListener("pointerup", endStickyDrag);
+  window.addEventListener("pointercancel", endStickyDrag);
+}
+
+function openStickyBoard(view) {
+  if (!canUseStickyNotes()) return;
+  if (view) state.stickyView = view;
+  $("stickyBoard").classList.remove("hidden");
+  $("stickyLauncher").classList.add("hidden");
+  $("stickyLauncher").setAttribute("aria-expanded", "true");
+  renderStickyNotes();
+}
+
+function closeStickyBoard() {
+  $("stickyBoard").classList.add("hidden");
+  $("stickyLauncher").classList.toggle("hidden", !canUseStickyNotes());
+  $("stickyLauncher").setAttribute("aria-expanded", "false");
+}
+
+function canUseStickyNotes() { return hasModuleAccess("TARGETS") || hasModuleAccess("DATES"); }
 
 async function login(event) {
   event.preventDefault();
@@ -260,7 +306,7 @@ async function login(event) {
 }
 async function logout() {
   try { if (state.token) await api("logout", {}); } catch (e) { /* local logout still succeeds */ }
-  state.token = ""; state.data = null; localStorage.removeItem("familyDashboardToken"); showLogin();
+  state.token = ""; state.data = null; state.stickyView = "active"; localStorage.removeItem("familyDashboardToken"); showLogin();
 }
 
 async function saveExpense(event) {
@@ -437,6 +483,59 @@ async function saveImportantDate(event) {
     remindDays: $("importantDateRemind").value, recipientIds: recipients.join(","), notes: $("importantDateNotes").value.trim()
   }, "Reminder saved.", "dateDialog");
 }
+
+async function saveStickyNote(event) {
+  event.preventDefault();
+  const id = $("stickyNoteId").value;
+  const selectedColour = document.querySelector("input[name='stickyColor']:checked");
+  const active = state.data.stickyNotes.filter(function (note) { return note.status !== "COMPLETED"; });
+  const slot = active.length;
+  const payload = {
+    id: id,
+    noteType: $("stickyNoteType").value,
+    title: $("stickyNoteTitle").value.trim(),
+    body: $("stickyNoteBody").value.trim(),
+    dueDate: $("stickyNoteDueDate").value,
+    color: selectedColour ? selectedColour.value : "yellow"
+  };
+  if (!id) {
+    payload.positionX = 24 + (slot % 3) * 300;
+    payload.positionY = 24 + Math.floor(slot / 3) * 238;
+    payload.width = 280;
+    payload.height = 220;
+    payload.collapsed = false;
+    payload.pinned = false;
+  }
+  const result = await mutate(id ? "updateStickyNote" : "createStickyNote", payload, id ? "Sticky note updated." : "Sticky note added.", "stickyNoteDialog");
+  if (result) openStickyBoard("active");
+}
+
+function prepareStickyNoteDialog(noteType) {
+  const type = noteType === "REMINDER" ? "REMINDER" : "TARGET";
+  $("stickyNoteForm").reset();
+  $("stickyNoteId").value = "";
+  $("stickyNoteType").value = type;
+  configureStickyTypeChoices();
+  setStickyColour("yellow");
+  $("stickyNoteDialogTitle").textContent = type === "TARGET" ? "Add target note" : "Add reminder note";
+  openDialog("stickyNoteDialog");
+}
+
+function configureStickyTypeChoices() {
+  all("option", $("stickyNoteType")).forEach(function (option) {
+    const allowed = option.value === "TARGET" ? hasModuleAccess("TARGETS") : hasModuleAccess("DATES");
+    option.disabled = !allowed;
+    option.hidden = !allowed;
+  });
+  if ($("stickyNoteType").selectedOptions[0] && $("stickyNoteType").selectedOptions[0].disabled) {
+    $("stickyNoteType").value = hasModuleAccess("TARGETS") ? "TARGET" : "REMINDER";
+  }
+}
+
+function setStickyColour(colour) {
+  const input = document.querySelector("input[name='stickyColor'][value='" + String(colour || "yellow").replace(/[^a-z]/g, "") + "']");
+  if (input) input.checked = true;
+}
 async function savePhoto(event) {
   event.preventDefault();
   if (!state.pendingPhoto) return toast("Choose a photo first.", "error");
@@ -504,6 +603,34 @@ function editImportantDate(id) {
   prepareNewDialog("dateDialog"); $("importantDateId").value = item.id; $("importantDateTitle").value = item.title; $("importantDateValue").value = item.eventDate; $("importantDateType").value = item.eventType; $("importantDateRepeat").checked = item.repeatYearly; $("importantDateRemind").value = item.remindDays; $("importantDateNotes").value = item.notes || "";
   const ids = String(item.recipientIds || "").split(","); const everyone = ids.indexOf("ALL") >= 0; $("notifyEveryone").checked = everyone; $("recipientChecks").classList.toggle("hidden", everyone); renderRecipientChecks(ids); $("dateDialogTitle").textContent = "Edit reminder"; openDialog("dateDialog");
 }
+function editStickyNote(id) {
+  const item = state.data.stickyNotes.find(function (note) { return note.id === id; }); if (!item) return;
+  $("stickyNoteForm").reset(); $("stickyNoteId").value = item.id; $("stickyNoteType").value = item.noteType; configureStickyTypeChoices();
+  $("stickyNoteTitle").value = item.title; $("stickyNoteBody").value = item.body; $("stickyNoteDueDate").value = item.dueDate || ""; setStickyColour(item.color);
+  $("stickyNoteDialogTitle").textContent = "Edit " + (item.noteType === "REMINDER" ? "reminder" : "target") + " note"; openDialog("stickyNoteDialog");
+}
+async function completeStickyNote(id) {
+  if (!window.confirm("Mark this sticky note complete? It will move to the saved Completed list.")) return;
+  await mutate("completeStickyNote", { id: id }, "Completed and saved in the sticky-note archive.");
+}
+function changeStickyLayout(id, change) {
+  const note = state.data.stickyNotes.find(function (item) { return item.id === id; }); if (!note) return;
+  if (change === "collapse") note.collapsed = !note.collapsed;
+  if (change === "pin") { note.pinned = !note.pinned; if (note.pinned) note.collapsed = false; }
+  if (change === "grow") { note.width = Math.min(520, Number(note.width || 280) + 40); note.height = Math.min(500, Number(note.height || 220) + 35); }
+  if (change === "shrink") { note.width = Math.max(220, Number(note.width || 280) - 40); note.height = Math.max(160, Number(note.height || 220) - 35); }
+  renderStickyNotes();
+  queueStickyLayoutSave(note);
+}
+function queueStickyLayoutSave(note) {
+  const oldTimer = state.stickyLayoutTimers.get(note.id); if (oldTimer) clearTimeout(oldTimer);
+  state.stickyLayoutTimers.set(note.id, setTimeout(async function () {
+    state.stickyLayoutTimers.delete(note.id);
+    try {
+      await api("updateStickyLayout", { id: note.id, positionX: note.positionX, positionY: note.positionY, width: note.width, height: note.height, collapsed: !!note.collapsed, pinned: !!note.pinned });
+    } catch (error) { toast(error.message || "The sticky-note layout could not be saved.", "error"); }
+  }, 220));
+}
 function editExperience(id) {
   const item = state.data.experiences.find(function (x) { return x.id === id; }); if (!item) return;
   prepareNewDialog("experienceDialog"); $("experienceId").value = item.id; $("experienceTitle").value = item.title; $("experienceDate").value = item.experienceDate; $("experiencePlace").value = item.place || ""; $("experienceStory").value = item.story; $("experienceTags").value = item.tags || ""; $("experienceDialogTitle").textContent = "Edit experience"; openDialog("experienceDialog");
@@ -536,9 +663,16 @@ function renderAll() {
   $("adminNav").classList.toggle("hidden", !isAdmin());
   if (!isAdmin() && state.view === "admin") goTo("home");
   applyAccessUI();
-  populateFilters(); renderHome(); renderExpenses(); renderRecurringExpenses(); renderIncome(); renderTargets(); renderDates(); renderPhotos(); renderExperiences(); renderDiary(); renderCalendar(); if (isAdmin()) renderAdmin();
+  populateFilters(); renderHome(); renderExpenses(); renderRecurringExpenses(); renderIncome(); renderTargets(); renderDates(); renderPhotos(); renderExperiences(); renderDiary(); renderCalendar(); renderStickyNotes(); if (isAdmin()) renderAdmin();
 }
-function applyAccessUI() { all("[data-module]").forEach(function (el) { el.classList.toggle("hidden", !hasModuleAccess(el.dataset.module)); }); if (viewModules[state.view] && !hasModuleAccess(viewModules[state.view])) goTo("home"); }
+function applyAccessUI() {
+  all("[data-module]").forEach(function (el) { el.classList.toggle("hidden", !hasModuleAccess(el.dataset.module)); });
+  if (viewModules[state.view] && !hasModuleAccess(viewModules[state.view])) goTo("home");
+  $("addTargetSticky").classList.toggle("hidden", !hasModuleAccess("TARGETS"));
+  $("addReminderSticky").classList.toggle("hidden", !hasModuleAccess("DATES"));
+  if (!canUseStickyNotes()) { $("stickyBoard").classList.add("hidden"); $("stickyLauncher").classList.add("hidden"); }
+  else if ($("stickyBoard").classList.contains("hidden")) $("stickyLauncher").classList.remove("hidden");
+}
 function populateFilters() {
   fillMemberFilter($("incomeMemberFilter")); fillMemberFilter($("diaryWriterFilter"));
   const recipients = Array.from(new Set(state.data.expenses.map(function (x) { return normalizeExpense(x).sentTo; }).filter(Boolean))).sort();
@@ -643,6 +777,66 @@ function renderAdmin() {
   const labels={EXPENSES:"Exp",INCOME:"Income",TARGETS:"Targets",DATES:"Reminders",CALENDAR:"Calendar",PHOTOS:"Photos",EXPERIENCES:"Experiences",DIARY:"Diary"}; const items=state.data.adminMembers||[]; $("memberCount").textContent=plural(items.length,"person","people"); $("memberList").innerHTML=items.map(function(x){const access=x.role==="ADMIN"?"All sections":(x.permissions||[]).map(function(key){return labels[key]||key;}).join(", ")||"No sections";return '<div class="member-row"><span class="avatar">'+h(x.name.charAt(0).toUpperCase())+'</span><div><strong>'+h(x.name)+'</strong><small>@'+h(x.username)+'</small></div><div><strong>'+h(x.email||"No email")+'</strong><small>Access: '+h(access)+'</small></div><span class="role-chip">'+(x.role==="ADMIN"?"ADMIN":"MEMBER")+'</span><span class="active-chip '+(!x.active?'inactive':'')+'">'+(x.active?'● Active':'● Inactive')+'</span><div class="member-actions"><button class="tiny-button" data-action="edit-member" data-id="'+h(x.id)+'">Edit</button><button class="tiny-button" data-action="reset-pin" data-id="'+h(x.id)+'">New PIN</button></div></div>';}).join("");
 }
 
+function renderStickyNotes() {
+  if (!state.data || !canUseStickyNotes()) return;
+  const notes = state.data.stickyNotes || [];
+  const active = notes.filter(function (note) { return note.status !== "COMPLETED"; });
+  const completed = notes.filter(function (note) { return note.status === "COMPLETED"; });
+  $("stickyActiveCount").textContent = active.length;
+  $("stickyBoardSummary").textContent = plural(active.length, "active note") + " · " + plural(completed.length, "completed note");
+  $("stickyTabActive").classList.toggle("active", state.stickyView === "active");
+  $("stickyTabCompleted").classList.toggle("active", state.stickyView === "completed");
+  $("stickyCanvas").classList.toggle("hidden", state.stickyView !== "active");
+  $("stickyCompletedList").classList.toggle("hidden", state.stickyView !== "completed");
+
+  $("stickyCanvas").innerHTML = active.map(function (note, index) {
+    const width = Math.max(220, Math.min(520, Number(note.width || 280)));
+    const height = Math.max(160, Math.min(500, Number(note.height || 220)));
+    const x = Math.max(0, Math.min(2000, Number(note.positionX || 20)));
+    const y = Math.max(0, Math.min(2000, Number(note.positionY || 20)));
+    const dueClass = note.dueDate && note.dueDate < todayIso() ? " overdue" : "";
+    const dueText = note.dueDate ? ((dueClass ? "Overdue · " : "Due · ") + formatDate(note.dueDate)) : "No due date";
+    const z = note.pinned ? 2000 + index : 20 + index;
+    return '<article class="sticky-note sticky-'+h(note.color||"yellow")+(note.collapsed?' collapsed':'')+(note.pinned?' pinned':'')+'" data-sticky-id="'+h(note.id)+'" style="left:'+x+'px;top:'+y+'px;width:'+width+'px;height:'+height+'px;z-index:'+z+'">'+
+      '<header class="sticky-note-head sticky-drag-handle"><span class="sticky-type">'+(note.noteType==="REMINDER"?'REMINDER':'TARGET')+'</span><button class="sticky-note-title" type="button" data-action="collapse-sticky" data-id="'+h(note.id)+'" title="Open or collapse this note">'+h(note.title)+'</button><div class="sticky-head-actions"><button type="button" data-action="pin-sticky" data-id="'+h(note.id)+'" title="'+(note.pinned?'Unpin note':'Keep note open above others')+'">'+(note.pinned?'📌':'○')+'</button><button type="button" data-action="collapse-sticky" data-id="'+h(note.id)+'" title="'+(note.collapsed?'Open note':'Collapse note')+'">'+(note.collapsed?'▾':'▴')+'</button></div></header>'+
+      '<div class="sticky-note-content"><p>'+h(note.body)+'</p><small class="sticky-due'+dueClass+'">'+h(dueText)+'</small><small>Added by '+h(memberName(note.createdBy))+'</small></div>'+
+      '<footer class="sticky-note-actions"><button class="complete" type="button" data-action="complete-sticky" data-id="'+h(note.id)+'">✓ Complete</button><button type="button" data-action="edit-sticky" data-id="'+h(note.id)+'">Edit</button>'+(mayDelete(note)?'<button class="delete" type="button" data-action="delete-sticky" data-id="'+h(note.id)+'">Delete</button>':'')+'<span class="sticky-size-actions"><button type="button" data-action="shrink-sticky" data-id="'+h(note.id)+'" title="Decrease note size">−</button><button type="button" data-action="grow-sticky" data-id="'+h(note.id)+'" title="Increase note size">＋</button></span></footer></article>';
+  }).join("");
+
+  $("stickyCompletedList").innerHTML = completed.map(function (note) {
+    const completedText = note.completedAt ? formatDate(note.completedAt) : "Completed";
+    return '<article class="sticky-completed-card sticky-'+h(note.color||"yellow")+'" data-sticky-id="'+h(note.id)+'"><span class="sticky-completed-colour"></span><div><small>'+h(note.noteType==="REMINDER"?"REMINDER":"TARGET")+'</small><h4>'+h(note.title)+'</h4><p>'+h(note.body)+'</p><em>'+h(completedText)+' by '+h(memberName(note.completedBy))+(note.dueDate?' · Due '+h(formatDate(note.dueDate)):'')+'</em></div><div class="sticky-archive-actions"><button type="button" data-action="restore-sticky" data-id="'+h(note.id)+'">↶ Restore</button>'+(mayDelete(note)?'<button class="delete" type="button" data-action="delete-sticky" data-id="'+h(note.id)+'">Delete</button>':'')+'</div></article>';
+  }).join("");
+
+  const empty = state.stickyView === "active" ? !active.length : !completed.length;
+  $("stickyEmpty").classList.toggle("hidden", !empty);
+  $("stickyEmpty").querySelector("strong").textContent = state.stickyView === "active" ? "No active sticky notes" : "No completed sticky notes";
+  $("stickyEmpty").querySelector("p").textContent = state.stickyView === "active" ? "Add a target or reminder. You can move, resize, pin and collapse it." : "Completed notes are saved here and can be restored.";
+}
+
+function startStickyDrag(event) {
+  if (window.matchMedia("(max-width: 640px)").matches || event.button !== 0 || event.target.closest("button")) return;
+  const handle = event.target.closest(".sticky-drag-handle"); if (!handle) return;
+  const element = handle.closest(".sticky-note"), note = state.data.stickyNotes.find(function (item) { return item.id === element.dataset.stickyId; }); if (!note) return;
+  event.preventDefault();
+  state.stickyHighestZ += 1; element.style.zIndex = note.pinned ? 3000 + state.stickyHighestZ : 300 + state.stickyHighestZ;
+  element.classList.add("dragging");
+  state.stickyDrag = { element: element, note: note, startClientX: event.clientX, startClientY: event.clientY, startX: parseFloat(element.style.left) || 0, startY: parseFloat(element.style.top) || 0 };
+}
+function moveStickyDrag(event) {
+  const drag = state.stickyDrag; if (!drag) return;
+  event.preventDefault();
+  const canvas = $("stickyCanvas"), maxX = Math.max(canvas.clientWidth, canvas.scrollWidth) - drag.element.offsetWidth, maxY = Math.max(canvas.clientHeight, canvas.scrollHeight) - drag.element.offsetHeight;
+  const x = Math.max(0, Math.min(maxX, drag.startX + event.clientX - drag.startClientX));
+  const y = Math.max(0, Math.min(maxY, drag.startY + event.clientY - drag.startClientY));
+  drag.element.style.left = Math.round(x) + "px"; drag.element.style.top = Math.round(y) + "px";
+}
+function endStickyDrag() {
+  const drag = state.stickyDrag; if (!drag) return;
+  drag.element.classList.remove("dragging"); drag.note.positionX = Math.round(parseFloat(drag.element.style.left) || 0); drag.note.positionY = Math.round(parseFloat(drag.element.style.top) || 0);
+  state.stickyDrag = null; queueStickyLayoutSave(drag.note);
+}
+
 function renderGlobalSearch() {
   const q=normalize($("globalSearch").value); if(q.length<2){$("globalSearchResults").innerHTML='<p class="muted">Type at least 2 characters to search all family records.</p>';return;} let results=[];
   state.data.expenses.forEach(function(x){const expense=normalizeExpense(x);if(normalize([expense.sentTo,expense.fromAccount,expense.reason].join(" ")).includes(q))results.push({view:"expenses",icon:"₹",title:expense.reason||expense.sentTo,meta:money(x.amount)+" · "+formatDate(x.date)});});
@@ -653,7 +847,8 @@ function renderGlobalSearch() {
   state.data.photos.forEach(function(x){if(normalize([x.title,x.caption,memberName(x.uploadedBy)].join(" ")).includes(q))results.push({view:"photos",icon:"▧",title:x.title,meta:"Photo by "+memberName(x.uploadedBy)});});
   state.data.experiences.forEach(function(x){if(normalize([x.title,x.place,x.story,x.tags].join(" ")).includes(q))results.push({view:"experiences",icon:"✦",title:x.title,meta:formatDate(x.experienceDate)+" · "+memberName(x.createdBy)});});
   state.data.diary.forEach(function(x){if(normalize([x.title,x.body,x.mood,x.tags].join(" ")).includes(q))results.push({view:"diary",icon:"☷",title:x.title,meta:formatDate(x.diaryDate)+" · "+memberName(x.createdBy)});});
-  results=results.slice(0,30); $("globalSearchResults").innerHTML=results.length?results.map(function(x){return '<button class="search-result" data-search-view="'+h(x.view)+'"><span>'+h(x.icon)+'</span><div><strong>'+h(x.title)+'</strong><small>'+h(x.meta)+'</small></div></button>';}).join(""):'<p class="muted">No matching family records.</p>'; all("[data-search-view]",$("globalSearchResults")).forEach(function(btn){btn.addEventListener("click",function(){ $("searchDialog").close(); goTo(btn.dataset.searchView); });});
+  state.data.stickyNotes.forEach(function(x){if(normalize([x.title,x.body,x.noteType,x.color].join(" ")).includes(q))results.push({view:"home",icon:"🗒",title:x.title,meta:(x.noteType==="REMINDER"?"Reminder":"Target")+" sticky note · "+(x.status==="COMPLETED"?"Completed":"Active"),stickyId:x.id,stickyStatus:x.status});});
+  results=results.slice(0,30); $("globalSearchResults").innerHTML=results.length?results.map(function(x){return '<button class="search-result" data-search-view="'+h(x.view)+'"'+(x.stickyId?' data-search-sticky="'+h(x.stickyId)+'" data-search-status="'+h(x.stickyStatus)+'"':'')+'><span>'+h(x.icon)+'</span><div><strong>'+h(x.title)+'</strong><small>'+h(x.meta)+'</small></div></button>';}).join(""):'<p class="muted">No matching family records.</p>'; all("[data-search-view]",$("globalSearchResults")).forEach(function(btn){btn.addEventListener("click",function(){ $("searchDialog").close(); goTo(btn.dataset.searchView); if(btn.dataset.searchSticky){openStickyBoard(btn.dataset.searchStatus==="COMPLETED"?"completed":"active");setTimeout(function(){const note=all("[data-sticky-id]").find(function(item){return item.dataset.stickyId===btn.dataset.searchSticky;});if(note){note.classList.add("sticky-highlight");note.scrollIntoView({block:"center",inline:"center"});setTimeout(function(){note.classList.remove("sticky-highlight");},1800);}},80);} });});
 }
 
 async function previewPhoto() {

@@ -1,7 +1,7 @@
 "use strict";
 
 const CONFIG = window.FAMILY_DASHBOARD_CONFIG || {};
-const PLACEHOLDER_URL = "https://script.google.com/macros/s/AKfycby4YPjQL165mIQgKjSHR4DX7EHjORbskRQL-Leyr5hCz0lD-d_0P93fPvyqgJx1HjbpPw/exec";
+const PLACEHOLDER_URL = "https://script.google.com/macros/s/AKfycbypWoUinivEj-1mGfNAzy5r-h2J4Gtw7Cu_RKN4DISt2CgRb3AM0h2AfmZYdEiC0KiTpg/exec";
 const FRONTEND_VERSION = "1.0.9";
 const SAVED_USERNAME_KEY = "familyDashboardUsername";
 const state = {

@@ -1,7 +1,7 @@
 "use strict";
 
 const CONFIG = window.FAMILY_DASHBOARD_CONFIG || {};
-const PLACEHOLDER_URL = "PASTE_YOUR_APPS_SCRIPT_WEB_APP_URL_HERE";
+const PLACEHOLDER_URL = "https://script.google.com/macros/s/AKfycby4YPjQL165mIQgKjSHR4DX7EHjORbskRQL-Leyr5hCz0lD-d_0P93fPvyqgJx1HjbpPw/exec";
 const FRONTEND_VERSION = "1.0.8";
 const SAVED_USERNAME_KEY = "familyDashboardUsername";
 const state = {

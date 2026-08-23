@@ -2,8 +2,9 @@
 
 const CONFIG = window.FAMILY_DASHBOARD_CONFIG || {};
 const PLACEHOLDER_URL = "PASTE_YOUR_APPS_SCRIPT_WEB_APP_URL_HERE";
-const FRONTEND_VERSION = "1.0.11";
+const FRONTEND_VERSION = "1.0.12";
 const SAVED_USERNAME_KEY = "familyDashboardUsername";
+const EXPENSE_COLUMN_WIDTHS_KEY = "familyDashboardExpenseColumnWidths";
 const state = {
   token: localStorage.getItem("familyDashboardToken") || "",
   data: null,
@@ -14,7 +15,9 @@ const state = {
   stickyDrag: null,
   stickyHighestZ: 100,
   stickyLayoutTimers: new Map(),
-  stickyLauncherTimer: null
+  stickyLauncherTimer: null,
+  backendVersion: "Checking…",
+  expenseResize: null
 };
 const pendingRequests = new Map();
 const viewTitles = {
@@ -69,8 +72,7 @@ function normalize(value) { return String(value || "").toLowerCase().trim(); }
 
 function init() {
   const now = new Date();
-  $("loginVersion").textContent = "Version " + FRONTEND_VERSION;
-  $("sidebarVersion").textContent = "v" + FRONTEND_VERSION;
+  renderVersionLabels();
   loadSavedUsername();
   $("todayLabel").textContent = now.toLocaleDateString("en-IN", { weekday: "long", day: "numeric", month: "long" }).toUpperCase();
   $("expenseMonth").value = currentMonth();
@@ -84,14 +86,38 @@ function init() {
   bindFilters();
   bindActions();
   bindStickyBoard();
+  bindExpenseColumnResize();
   const configured = CONFIG.API_URL && CONFIG.API_URL !== PLACEHOLDER_URL && /^https:\/\/script\.google\.com\//.test(CONFIG.API_URL);
   if (!configured) {
+    state.backendVersion = "Not connected";
+    renderVersionLabels();
     $("setupHint").classList.remove("hidden");
     state.token = "";
     localStorage.removeItem("familyDashboardToken");
     return;
   }
+  loadBackendVersion();
   if (state.token) restoreSession();
+}
+
+async function loadBackendVersion() {
+  try {
+    const result = await api("version", {});
+    state.backendVersion = result && result.version ? String(result.version) : "Unavailable";
+  } catch (error) {
+    state.backendVersion = /Unknown dashboard action/i.test((error && error.message) || "") ? "Update required" : "Unavailable";
+  }
+  renderVersionLabels();
+}
+
+function renderVersionLabels() {
+  const backend = state.data && state.data.backendVersion ? String(state.data.backendVersion) : state.backendVersion;
+  $("loginFrontendVersion").textContent = "FE v" + FRONTEND_VERSION;
+  $("sidebarFrontendVersion").textContent = "FE v" + FRONTEND_VERSION;
+  $("loginBackendVersion").textContent = /^\d/.test(backend) ? "BE v" + backend : "BE " + backend;
+  $("sidebarBackendVersion").textContent = /^\d/.test(backend) ? "BE v" + backend : "BE " + backend;
+  $("loginBackendVersion").classList.toggle("version-warning", !/^\d/.test(backend));
+  $("sidebarBackendVersion").classList.toggle("version-warning", !/^\d/.test(backend));
 }
 
 async function restoreSession() {
@@ -110,6 +136,7 @@ async function restoreSession() {
 function showApp() {
   $("loginScreen").classList.add("hidden");
   $("appShell").classList.remove("hidden");
+  renderVersionLabels();
   renderAll();
 }
 function showLogin() {
@@ -226,6 +253,45 @@ function bindFilters() {
   $("printExpenses").addEventListener("click", function () { prepareExpensePrintDialog(); openDialog("expensePrintDialog"); });
   $("printIncome").addEventListener("click", function () { window.print(); });
 }
+
+function bindExpenseColumnResize() {
+  const table = $("expenseTable"), columns = all("col", table), defaults = [140,140,190,190,360,90];
+  let saved = [];
+  try { saved = JSON.parse(localStorage.getItem(EXPENSE_COLUMN_WIDTHS_KEY) || "[]"); } catch (error) { saved = []; }
+  columns.forEach(function (column,index) { column.style.width = Math.max(70,Math.min(620,Number(saved[index] || defaults[index]))) + "px"; });
+  syncExpenseTableWidth();
+  all(".column-resizer",table).forEach(function (handle) {
+    handle.addEventListener("pointerdown",function (event) {
+      event.preventDefault(); event.stopPropagation();
+      const index=Number(handle.dataset.expenseColumn),width=parseFloat(columns[index].style.width)||defaults[index];
+      handle.setPointerCapture(event.pointerId); handle.classList.add("dragging");
+      state.expenseResize={handle:handle,index:index,startX:event.clientX,startWidth:width};
+    });
+    handle.addEventListener("keydown",function (event) {
+      if (event.key!=="ArrowLeft"&&event.key!=="ArrowRight") return;
+      event.preventDefault();
+      const index=Number(handle.dataset.expenseColumn),current=parseFloat(columns[index].style.width)||defaults[index];
+      setExpenseColumnWidth(index,current+(event.key==="ArrowRight"?10:-10));
+    });
+  });
+  window.addEventListener("pointermove",function (event) {
+    if (!state.expenseResize) return;
+    event.preventDefault();
+    setExpenseColumnWidth(state.expenseResize.index,state.expenseResize.startWidth+event.clientX-state.expenseResize.startX,false);
+  });
+  window.addEventListener("pointerup",finishExpenseColumnResize);
+  window.addEventListener("pointercancel",finishExpenseColumnResize);
+}
+
+function setExpenseColumnWidth(index,width,save) {
+  const columns=all("col",$("expenseTable")); if(!columns[index]) return;
+  columns[index].style.width=Math.max(70,Math.min(620,Math.round(width)))+"px";
+  syncExpenseTableWidth();
+  if(save!==false) saveExpenseColumnWidths();
+}
+function syncExpenseTableWidth() { const columns=all("col",$("expenseTable")); $("expenseTable").style.width=columns.reduce(function(sum,column){return sum+(parseFloat(column.style.width)||0);},0)+"px"; }
+function saveExpenseColumnWidths() { localStorage.setItem(EXPENSE_COLUMN_WIDTHS_KEY,JSON.stringify(all("col",$("expenseTable")).map(function(column){return Math.round(parseFloat(column.style.width)||0);}))); }
+function finishExpenseColumnResize() { if(!state.expenseResize)return; state.expenseResize.handle.classList.remove("dragging"); state.expenseResize=null; saveExpenseColumnWidths(); }
 
 function bindActions() {
   document.addEventListener("click", async function (event) {
@@ -396,6 +462,13 @@ function prepareExpensePrintDialog() {
     $("expensePrintFrom").value = dates[0] || currentMonth() + "-01";
     $("expensePrintTo").value = dates[dates.length - 1] || todayIso();
   }
+  const recipients = Array.from(new Set(state.data.expenses.map(function (item) { return normalizeExpense(item).sentTo; }).filter(Boolean))).sort();
+  const accounts = Array.from(new Set(state.data.expenses.map(function (item) { return normalizeExpense(item).fromAccount; }).filter(Boolean))).sort();
+  $("expensePrintSendTo").innerHTML = '<option value="">All recipients</option>' + recipients.map(function (value) { return '<option value="'+h(value)+'">'+h(value)+'</option>'; }).join("");
+  $("expensePrintAccount").innerHTML = '<option value="">All accounts</option>' + accounts.map(function (value) { return '<option value="'+h(value)+'">'+h(value)+'</option>'; }).join("");
+  $("expensePrintSendTo").value = $("expenseSendToFilter").value || "";
+  $("expensePrintAccount").value = $("expenseAccountFilter").value || "";
+  $("expensePrintSearch").value = $("expenseSearch").value || "";
 }
 
 function viewExpenseRange() { openExpenseRangeOutput(false); }
@@ -403,15 +476,22 @@ function printExpenseRange(event) { event.preventDefault(); openExpenseRangeOutp
 
 function openExpenseRangeOutput(autoPrint) {
   const from = $("expensePrintFrom").value, to = $("expensePrintTo").value;
+  const recipient = $("expensePrintSendTo").value, account = $("expensePrintAccount").value, query = normalize($("expensePrintSearch").value);
+  const density = ["comfortable","compact","minimum"].indexOf($("expensePrintDensity").value) >= 0 ? $("expensePrintDensity").value : "comfortable";
   if (!from || !to) return toast("Choose both From date and To date.", "error");
   if (from > to) return toast("From date cannot be later than To date.", "error");
   const items = state.data.expenses.map(normalizeExpense).filter(function (item) {
-    const date = String(item.date || "").slice(0,10); return date >= from && date <= to;
+    const date = String(item.date || "").slice(0,10);
+    return date >= from && date <= to && (!recipient || item.sentTo === recipient) && (!account || item.fromAccount === account) && (!query || normalize([item.sentTo,item.fromAccount,item.reason,item.date].join(" ")).includes(query));
   }).sort(function (a,b) { return String(a.date).localeCompare(String(b.date)); });
   if (!items.length) return toast("No expenditure was found in the selected period.", "error");
 
   const total = items.reduce(function (sum,item) { return sum + Number(item.amount || 0); }, 0);
   const familyName = (state.data.settings && state.data.settings.familyName) || "Our Family Hub";
+  const appliedFilters = [recipient ? "Send to: " + recipient : "", account ? "From account: " + account : "", query ? "Search: " + $("expensePrintSearch").value.trim() : ""].filter(Boolean);
+  const filterLine = appliedFilters.length ? '<p class="filters">'+h(appliedFilters.join(" · "))+'</p>' : "";
+  const densityOptions = '<option value="density-comfortable"'+(density==="comfortable"?' selected':'')+'>Comfortable</option><option value="density-compact"'+(density==="compact"?' selected':'')+'>Compact</option><option value="density-minimum"'+(density==="minimum"?' selected':'')+'>Minimum width</option>';
+  const reportResizeScript = "<script>(function(){var table=document.getElementById('expenseReportTable'),cols=Array.from(table.querySelectorAll('col')),drag=null,presets={comfortable:[55,135,135,190,190,395],compact:[45,115,110,165,165,360],minimum:[38,95,92,140,140,310]};function applyWidths(widths){var total=0;cols.forEach(function(col,i){var width=Math.max(38,Math.min(620,Number(widths[i])||100));col.style.width=width+'px';total+=width;});table.style.width=total+'px';}window.setReportDensity=function(value){var name=String(value).replace('density-','');document.body.className='density-'+name;applyWidths(presets[name]||presets.comfortable);};document.addEventListener('pointerdown',function(event){var handle=event.target.closest('.report-resizer');if(!handle)return;event.preventDefault();var index=Number(handle.dataset.col);drag={index:index,startX:event.clientX,startWidth:parseFloat(cols[index].style.width)||100,handle:handle};handle.classList.add('dragging');});document.addEventListener('pointermove',function(event){if(!drag)return;event.preventDefault();var widths=cols.map(function(col){return parseFloat(col.style.width)||100;});widths[drag.index]=drag.startWidth+event.clientX-drag.startX;applyWidths(widths);});document.addEventListener('pointerup',function(){if(!drag)return;drag.handle.classList.remove('dragging');drag=null;});window.setReportDensity('density-"+density+"');})();<\/script>";
   const rows = items.map(function (item,index) {
     return "<tr><td class='serial'>"+(index+1)+"</td><td class='number'>"+h(money(item.amount))+"</td><td>"+h(formatDate(item.date))+"</td><td><strong>"+h(item.sentTo)+"</strong></td><td>"+h(item.fromAccount)+"</td><td class='reason'>"+h(item.reason)+"</td></tr>";
   }).join("");
@@ -420,8 +500,8 @@ function openExpenseRangeOutput(autoPrint) {
   const autoPrintScript = autoPrint ? "<script>window.onload=function(){window.focus();setTimeout(function(){window.print();},200)};<\/script>" : "";
   reportWindow.document.open();
   reportWindow.document.write("<!doctype html><html><head><meta charset='utf-8'><title>Expenditure "+h(from)+" to "+h(to)+"</title><style>"+
-    "@page{size:A4 landscape;margin:12mm}*{box-sizing:border-box}body{margin:0;color:#25243b;background:#f5f3fb;font:13px Arial,sans-serif}.report{max-width:1200px;margin:0 auto;padding:28px;background:white;min-height:100vh}.screen-actions{position:sticky;top:0;z-index:5;display:flex;justify-content:flex-end;gap:8px;margin:-12px -12px 18px;padding:10px;background:rgba(255,255,255,.94);border-bottom:1px solid #e5e2ee}.screen-actions button{border:0;border-radius:9px;padding:9px 14px;font-weight:700;cursor:pointer}.screen-actions .print{color:white;background:#6752c7}.screen-actions .close{color:#4d4e67;background:#efedf5}h1{margin:0 0 5px;font-size:24px}.family{color:#6752c7;font-size:12px;font-weight:700;letter-spacing:1px;text-transform:uppercase}.period{margin:0;color:#66687d}.summary{display:flex;gap:14px;margin:16px 0;padding:11px 14px;border:1px solid #dedbe9;border-radius:10px;background:#f7f5ff;font-weight:700}.summary strong{color:#4b389e}table{width:100%;border-collapse:collapse;table-layout:fixed}th,td{padding:9px 8px;border:1px solid #dddce7;text-align:left;vertical-align:top;overflow-wrap:anywhere}th{color:#3e3a62;background:#e9e4fb;font-size:11px;text-transform:uppercase}tbody tr:nth-child(even){background:#f7f5ff}.serial{width:5%;text-align:center}.number{width:12%;text-align:right;font-variant-numeric:tabular-nums}.reason{width:32%;line-height:1.45}.foot{margin-top:12px;color:#858699;font-size:10px;text-align:right}@media print{body{background:white;-webkit-print-color-adjust:exact;print-color-adjust:exact}.report{max-width:none;padding:0}.screen-actions{display:none}}"+
-    "</style></head><body><main class='report'><div class='screen-actions'><button class='close' type='button' onclick='window.close()'>Close view</button><button class='print' type='button' onclick='window.print()'>Print this report</button></div><div class='family'>"+h(familyName)+"</div><h1>Expenditure statement</h1><p class='period'>From "+h(formatDate(from))+" to "+h(formatDate(to))+"</p><div class='summary'><span>"+h(plural(items.length,"entry","entries"))+"</span><span>Total: <strong>"+h(money(total))+"</strong></span></div><table><thead><tr><th class='serial'>Sl.</th><th class='number'>Amt (Rs.)</th><th>Date Paid</th><th>Send to</th><th>From Acct</th><th class='reason'>Reason</th></tr></thead><tbody>"+rows+"</tbody></table><p class='foot'>Prepared "+h(new Date().toLocaleString("en-IN"))+" · Family Dashboard v"+h(FRONTEND_VERSION)+"</p></main>"+autoPrintScript+"</body></html>");
+    "@page{size:A4 landscape;margin:12mm}*{box-sizing:border-box}body{margin:0;color:#25243b;background:#f5f3fb;font:13px Arial,sans-serif}.report{max-width:1200px;margin:0 auto;padding:28px;background:white;min-height:100vh;overflow:auto}.screen-actions{position:sticky;top:0;z-index:5;display:flex;align-items:center;justify-content:flex-end;gap:8px;margin:-12px -12px 18px;padding:10px;background:rgba(255,255,255,.94);border-bottom:1px solid #e5e2ee}.screen-actions label{display:flex;align-items:center;gap:6px;color:#55566d;font-size:11px;font-weight:700}.screen-actions select,.screen-actions button{border:0;border-radius:9px;padding:9px 12px;font-weight:700}.screen-actions select{background:#f1eff7}.screen-actions button{cursor:pointer}.screen-actions .print{color:white;background:#6752c7}.screen-actions .close{color:#4d4e67;background:#efedf5}h1{margin:0 0 5px;font-size:24px}.family{color:#6752c7;font-size:12px;font-weight:700;letter-spacing:1px;text-transform:uppercase}.period{margin:0;color:#66687d}.filters{margin:5px 0 0;color:#5f537f;font-size:11px;font-weight:700}.summary{display:flex;gap:14px;margin:16px 0;padding:11px 14px;border:1px solid #dedbe9;border-radius:10px;background:#f7f5ff;font-weight:700}.summary strong{color:#4b389e}table{border-collapse:collapse;table-layout:fixed}th,td{padding:9px 8px;border:1px solid #dddce7;text-align:left;vertical-align:top;overflow-wrap:anywhere}th{position:relative;color:#3e3a62;background:#e9e4fb;font-size:11px;text-transform:uppercase}tbody tr:nth-child(odd){background:#fff}tbody tr:nth-child(even){background:#edf6ff}.serial{text-align:center}.number{text-align:right;font-variant-numeric:tabular-nums}.reason{line-height:1.45}.report-resizer{position:absolute;right:-5px;top:0;width:11px;height:100%;z-index:2;cursor:col-resize;touch-action:none}.report-resizer:after{content:'';position:absolute;left:5px;top:20%;width:2px;height:60%;background:#b7afd0;border-radius:2px}.report-resizer:hover:after,.report-resizer.dragging:after{background:#6752c7}.density-compact{font-size:11px}.density-compact th,.density-compact td{padding:6px 5px}.density-minimum{font-size:9px}.density-minimum th,.density-minimum td{padding:3px 4px;line-height:1.2}.density-minimum th{font-size:9px}.foot{margin-top:12px;color:#858699;font-size:10px;text-align:right}@media print{body{background:white;-webkit-print-color-adjust:exact;print-color-adjust:exact}.report{max-width:none;padding:0;overflow:visible}.screen-actions{display:none}.report-resizer{display:none}}"+
+    "</style></head><body class='density-"+h(density)+"'><main class='report'><div class='screen-actions'><label>Column width <select onchange=\"setReportDensity(this.value)\">"+densityOptions+"</select></label><button class='close' type='button' onclick='window.close()'>Close view</button><button class='print' type='button' onclick='window.print()'>Print this report</button></div><div class='family'>"+h(familyName)+"</div><h1>Expenditure statement</h1><p class='period'>From "+h(formatDate(from))+" to "+h(formatDate(to))+"</p>"+filterLine+"<div class='summary'><span>"+h(plural(items.length,"entry","entries"))+"</span><span>Total: <strong>"+h(money(total))+"</strong></span></div><table id='expenseReportTable'><colgroup><col><col><col><col><col><col></colgroup><thead><tr><th class='serial'>Sl.<span class='report-resizer' data-col='0'></span></th><th class='number'>Amt (Rs.)<span class='report-resizer' data-col='1'></span></th><th>Date Paid<span class='report-resizer' data-col='2'></span></th><th>Send to<span class='report-resizer' data-col='3'></span></th><th>From Acct<span class='report-resizer' data-col='4'></span></th><th class='reason'>Reason<span class='report-resizer' data-col='5'></span></th></tr></thead><tbody>"+rows+"</tbody></table><p class='foot'>Prepared "+h(new Date().toLocaleString("en-IN"))+" · FE v"+h(FRONTEND_VERSION)+" · BE v"+h(state.data.backendVersion||state.backendVersion||"—")+"</p></main>"+reportResizeScript+autoPrintScript+"</body></html>");
   reportWindow.document.close();
   $("expensePrintDialog").close();
 }
@@ -642,7 +722,7 @@ async function mutate(action, payload, successMessage, closeId, loadingMessage) 
   } catch (error) { toast(friendlyApiError(error), "error"); return null; }
   finally { hideLoading(); }
 }
-async function refreshData() { state.data = normalizeBootstrapData(await api("bootstrap", {})); renderAll(); }
+async function refreshData() { state.data = normalizeBootstrapData(await api("bootstrap", {})); renderVersionLabels(); renderAll(); }
 async function confirmDelete(action, id, message) { if (window.confirm(message)) await mutate(action, { id: id }, "Deleted."); }
 
 function editExpense(id) {
@@ -948,7 +1028,7 @@ function api(action,payload) {
     const requestId="fd_"+Date.now()+"_"+Math.random().toString(36).slice(2),frameName="family_api_"+requestId;
     const iframe=document.createElement("iframe"); iframe.name=frameName; iframe.hidden=true; iframe.setAttribute("aria-hidden","true"); document.body.appendChild(iframe);
     const form=document.createElement("form"); form.method="POST"; form.action=CONFIG.API_URL; form.target=frameName; form.style.display="none";
-    const body=Object.assign({},payload||{}); if(action!=="login")body.token=state.token;
+    const body=Object.assign({},payload||{}); if(action!=="login"&&action!=="version")body.token=state.token;
     [["action",action],["requestId",requestId],["payload",JSON.stringify(body)]].forEach(function(pair){const input=document.createElement("textarea");input.name=pair[0];input.value=pair[1];form.appendChild(input);}); document.body.appendChild(form);
     const timeout=setTimeout(function(){cleanupRequest(requestId);reject(new Error("The server took too long to respond. Please try again."));},Number(CONFIG.REQUEST_TIMEOUT_MS)||60000);
     pendingRequests.set(requestId,{resolve:resolve,reject:reject,iframe:iframe,form:form,timeout:timeout}); form.submit();

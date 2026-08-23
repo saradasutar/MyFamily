@@ -6,7 +6,7 @@
   <meta name="theme-color" content="#5743a8">
   <meta name="description" content="Private family dashboard for expenses, goals, important dates and photos.">
   <title>Our Family Hub</title>
-  <link rel="stylesheet" href="styles.css?v=1.0.11">
+  <link rel="stylesheet" href="styles.css?v=1.0.12">
 </head>
 <body>
   <div class="ambient ambient-one"></div>
@@ -37,7 +37,7 @@
             <button id="togglePin" type="button" class="icon-button" aria-label="Show or hide PIN">👁</button>
           </div>
         </label>
-        <div class="login-options"><label class="remember-row"><input id="rememberUsername" type="checkbox" checked> Save username on this device</label><span id="loginVersion">Version 1.0.11</span></div>
+        <div class="login-options"><label class="remember-row"><input id="rememberUsername" type="checkbox" checked> Save username on this device</label><span class="version-pair"><b id="loginFrontendVersion">FE v1.0.12</b><b id="loginBackendVersion">BE checking…</b></span></div>
         <button class="primary-button wide" type="submit">Sign in securely</button>
       </form>
       <p id="setupHint" class="setup-hint hidden">Open <strong>config.js</strong> and paste your Apps Script Web App URL first.</p>
@@ -51,7 +51,7 @@
         <div class="brand-mark small">FH</div>
         <div>
           <strong id="sidebarFamilyName">Our Family Hub</strong>
-          <span>Family Dashboard · <b id="sidebarVersion">v1.0.11</b></span>
+          <span class="sidebar-version-pair"><b id="sidebarFrontendVersion">FE v1.0.12</b><b id="sidebarBackendVersion">BE checking…</b></span>
         </div>
       </div>
       <nav class="main-nav" aria-label="Main navigation">
@@ -171,8 +171,9 @@
           </div>
           <div id="expenseTotals" class="inline-totals"></div>
           <div class="table-wrap">
-            <table class="expense-table">
-              <thead><tr><th class="number">Amt (Rs.)</th><th>Date Paid</th><th>Send to</th><th>From Acct</th><th>Reason</th><th></th></tr></thead>
+            <table id="expenseTable" class="expense-table">
+              <colgroup><col><col><col><col><col><col></colgroup>
+              <thead><tr><th class="number">Amt (Rs.)<span class="column-resizer" data-expense-column="0" tabindex="0" role="separator" aria-label="Resize amount column"></span></th><th>Date Paid<span class="column-resizer" data-expense-column="1" tabindex="0" role="separator" aria-label="Resize date column"></span></th><th>Send to<span class="column-resizer" data-expense-column="2" tabindex="0" role="separator" aria-label="Resize recipient column"></span></th><th>From Acct<span class="column-resizer" data-expense-column="3" tabindex="0" role="separator" aria-label="Resize account column"></span></th><th>Reason<span class="column-resizer" data-expense-column="4" tabindex="0" role="separator" aria-label="Resize reason column"></span></th><th>Actions<span class="column-resizer" data-expense-column="5" tabindex="0" role="separator" aria-label="Resize actions column"></span></th></tr></thead>
               <tbody id="expenseRows"></tbody>
             </table>
             <div id="expenseEmpty" class="table-empty hidden">No expenditure matches these filters.</div>
@@ -367,8 +368,15 @@
   <dialog id="expensePrintDialog" class="modal small-modal">
     <form id="expensePrintForm" method="dialog">
       <div class="modal-head"><div><p class="eyebrow">PRINT EXPENDITURE</p><h3>Select payment period</h3></div><button class="modal-close" type="button" data-close>×</button></div>
-      <p class="bulk-note">Only expenditure paid between these two dates will be included. A total is printed below the heading.</p>
-      <div class="two-fields"><label>From date<input id="expensePrintFrom" type="date" required></label><label>To date<input id="expensePrintTo" type="date" required></label></div>
+      <p class="bulk-note">Filter the expenditure, choose the column width, then view or print the same report.</p>
+      <div class="report-filter-grid">
+        <label>From date<input id="expensePrintFrom" type="date" required></label>
+        <label>To date<input id="expensePrintTo" type="date" required></label>
+        <label>Send to<select id="expensePrintSendTo"><option value="">All recipients</option></select></label>
+        <label>From account<select id="expensePrintAccount"><option value="">All accounts</option></select></label>
+        <label>Search<input id="expensePrintSearch" type="search" placeholder="Recipient, account or reason"></label>
+        <label>Column width<select id="expensePrintDensity"><option value="comfortable">Comfortable</option><option value="compact">Compact</option><option value="minimum">Minimum width</option></select></label>
+      </div>
       <div class="modal-actions"><button type="button" class="secondary-button" data-close>Cancel</button><button id="viewExpenseReport" type="button" class="secondary-button">◉ View selected period</button><button type="submit" class="primary-button">⌑ Print selected period</button></div>
     </form>
   </dialog>
@@ -512,7 +520,7 @@
   <div id="loadingOverlay" class="loading-overlay hidden"><div class="spinner"></div><p id="loadingText">Working…</p></div>
   <div id="toastRegion" class="toast-region" aria-live="polite"></div>
 
-  <script src="config.js?v=1.0.11"></script>
-  <script src="app.js?v=1.0.11"></script>
+  <script src="config.js?v=1.0.12"></script>
+  <script src="app.js?v=1.0.12"></script>
 </body>
 </html>

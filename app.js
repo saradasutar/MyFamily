@@ -2,7 +2,7 @@
 
 const CONFIG = window.FAMILY_DASHBOARD_CONFIG || {};
 const PLACEHOLDER_URL = "PASTE_YOUR_APPS_SCRIPT_WEB_APP_URL_HERE";
-const FRONTEND_VERSION = "1.0.10";
+const FRONTEND_VERSION = "1.0.11";
 const SAVED_USERNAME_KEY = "familyDashboardUsername";
 const state = {
   token: localStorage.getItem("familyDashboardToken") || "",
@@ -13,7 +13,8 @@ const state = {
   stickyView: "active",
   stickyDrag: null,
   stickyHighestZ: 100,
-  stickyLayoutTimers: new Map()
+  stickyLayoutTimers: new Map(),
+  stickyLauncherTimer: null
 };
 const pendingRequests = new Map();
 const viewTitles = {
@@ -112,6 +113,7 @@ function showApp() {
   renderAll();
 }
 function showLogin() {
+  clearTimeout(state.stickyLauncherTimer);
   $("stickyBoard").classList.add("hidden");
   $("stickyBoardShade").classList.add("hidden");
   $("stickyLauncher").classList.add("hidden");
@@ -263,6 +265,10 @@ function bindActions() {
 
 function bindStickyBoard() {
   $("stickyLauncher").addEventListener("click", function () { openStickyBoard("active"); });
+  $("stickyLauncher").addEventListener("pointerenter", expandStickyLauncher);
+  $("stickyLauncher").addEventListener("pointerleave", function () { scheduleStickyLauncherCollapse(900); });
+  $("stickyLauncher").addEventListener("focus", expandStickyLauncher);
+  $("stickyLauncher").addEventListener("blur", function () { scheduleStickyLauncherCollapse(500); });
   $("stickyMinimize").addEventListener("click", minimizeStickyBoard);
   $("stickyClose").addEventListener("click", closeStickyBoard);
   $("stickyBoardShade").addEventListener("click", closeStickyBoard);
@@ -278,6 +284,7 @@ function bindStickyBoard() {
 
 function openStickyBoard(view) {
   if (!canUseStickyNotes()) return;
+  clearTimeout(state.stickyLauncherTimer);
   if (view) state.stickyView = view;
   $("stickyBoard").classList.remove("hidden");
   $("stickyBoardShade").classList.remove("hidden");
@@ -293,6 +300,24 @@ function closeStickyBoard() {
   $("stickyLauncher").classList.toggle("hidden", !canUseStickyNotes());
   $("stickyLauncher").setAttribute("aria-expanded", "false");
   renderStickyPinnedLayer();
+  scheduleStickyLauncherCollapse(4200);
+}
+
+function expandStickyLauncher() {
+  clearTimeout(state.stickyLauncherTimer);
+  $("stickyLauncher").classList.remove("compact");
+}
+
+function scheduleStickyLauncherCollapse(delay) {
+  clearTimeout(state.stickyLauncherTimer);
+  const launcher = $("stickyLauncher");
+  if (launcher.classList.contains("hidden") || !$("stickyBoard").classList.contains("hidden")) return;
+  launcher.classList.remove("compact");
+  state.stickyLauncherTimer = setTimeout(function () {
+    if (!launcher.classList.contains("hidden") && $("stickyBoard").classList.contains("hidden") && !launcher.matches(":hover") && document.activeElement !== launcher) {
+      launcher.classList.add("compact");
+    }
+  }, Number(delay) || 4200);
 }
 
 function minimizeStickyBoard() {
@@ -712,7 +737,7 @@ function applyAccessUI() {
   if (viewModules[state.view] && !hasModuleAccess(viewModules[state.view])) goTo("home");
   configureStickyTypeChoices();
   if (!canUseStickyNotes()) { $("stickyBoard").classList.add("hidden"); $("stickyBoardShade").classList.add("hidden"); $("stickyLauncher").classList.add("hidden"); $("stickyPinnedLayer").classList.add("hidden"); }
-  else if ($("stickyBoard").classList.contains("hidden")) $("stickyLauncher").classList.remove("hidden");
+  else if ($("stickyBoard").classList.contains("hidden")) { $("stickyLauncher").classList.remove("hidden"); scheduleStickyLauncherCollapse(4200); }
 }
 function populateFilters() {
   fillMemberFilter($("incomeMemberFilter")); fillMemberFilter($("diaryWriterFilter"));

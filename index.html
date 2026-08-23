@@ -6,7 +6,7 @@
   <meta name="theme-color" content="#5743a8">
   <meta name="description" content="Private family dashboard for expenses, goals, important dates and photos.">
   <title>Our Family Hub</title>
-  <link rel="stylesheet" href="styles.css?v=1.0.12">
+  <link rel="stylesheet" href="styles.css?v=1.0.13">
 </head>
 <body>
   <div class="ambient ambient-one"></div>
@@ -37,7 +37,11 @@
             <button id="togglePin" type="button" class="icon-button" aria-label="Show or hide PIN">👁</button>
           </div>
         </label>
-        <div class="login-options"><label class="remember-row"><input id="rememberUsername" type="checkbox" checked> Save username on this device</label><span class="version-pair"><b id="loginFrontendVersion">FE v1.0.12</b><b id="loginBackendVersion">BE checking…</b></span></div>
+        <div class="login-options">
+          <label class="remember-row"><input id="rememberUsername" type="checkbox" checked> Save username on this device</label>
+          <span class="version-pair"><b id="loginFrontendVersion">FE v1.0.13</b><b id="loginBackendVersion">BE checking…</b></span>
+          <span id="loginVersion" class="legacy-version hidden" aria-hidden="true">Version 1.0.13</span>
+        </div>
         <button class="primary-button wide" type="submit">Sign in securely</button>
       </form>
       <p id="setupHint" class="setup-hint hidden">Open <strong>config.js</strong> and paste your Apps Script Web App URL first.</p>
@@ -51,7 +55,8 @@
         <div class="brand-mark small">FH</div>
         <div>
           <strong id="sidebarFamilyName">Our Family Hub</strong>
-          <span class="sidebar-version-pair"><b id="sidebarFrontendVersion">FE v1.0.12</b><b id="sidebarBackendVersion">BE checking…</b></span>
+          <span class="sidebar-version-pair"><b id="sidebarFrontendVersion">FE v1.0.13</b><b id="sidebarBackendVersion">BE checking…</b></span>
+          <b id="sidebarVersion" class="legacy-version hidden" aria-hidden="true">v1.0.13</b>
         </div>
       </div>
       <nav class="main-nav" aria-label="Main navigation">
@@ -520,7 +525,7 @@
   <div id="loadingOverlay" class="loading-overlay hidden"><div class="spinner"></div><p id="loadingText">Working…</p></div>
   <div id="toastRegion" class="toast-region" aria-live="polite"></div>
 
-  <script src="config.js?v=1.0.12"></script>
-  <script src="app.js?v=1.0.12"></script>
+  <script src="config.js?v=1.0.13"></script>
+  <script src="app.js?v=1.0.13"></script>
 </body>
 </html>

@@ -1,8 +1,8 @@
 "use strict";
 
 const CONFIG = window.FAMILY_DASHBOARD_CONFIG || {};
-const PLACEHOLDER_URL = "https://script.google.com/macros/s/AKfycbxo5CDn2ryklvlx2i_XQuh_nno-H2jcxrWiCDlLQe_daXO2U9dL5x9ouv6Zgs2VAvHn/exec";
-const FRONTEND_VERSION = "1.0.12";
+const PLACEHOLDER_URL = "PASTE_YOUR_APPS_SCRIPT_WEB_APP_URL_HERE";
+const FRONTEND_VERSION = "1.0.13";
 const SAVED_USERNAME_KEY = "familyDashboardUsername";
 const EXPENSE_COLUMN_WIDTHS_KEY = "familyDashboardExpenseColumnWidths";
 const state = {
@@ -112,12 +112,15 @@ async function loadBackendVersion() {
 
 function renderVersionLabels() {
   const backend = state.data && state.data.backendVersion ? String(state.data.backendVersion) : state.backendVersion;
-  $("loginFrontendVersion").textContent = "FE v" + FRONTEND_VERSION;
-  $("sidebarFrontendVersion").textContent = "FE v" + FRONTEND_VERSION;
-  $("loginBackendVersion").textContent = /^\d/.test(backend) ? "BE v" + backend : "BE " + backend;
-  $("sidebarBackendVersion").textContent = /^\d/.test(backend) ? "BE v" + backend : "BE " + backend;
-  $("loginBackendVersion").classList.toggle("version-warning", !/^\d/.test(backend));
-  $("sidebarBackendVersion").classList.toggle("version-warning", !/^\d/.test(backend));
+  const backendLabel = /^\d/.test(backend) ? "BE v" + backend : "BE " + backend;
+  const loginFrontend = $("loginFrontendVersion"), sidebarFrontend = $("sidebarFrontendVersion");
+  const loginBackend = $("loginBackendVersion"), sidebarBackend = $("sidebarBackendVersion");
+  if (loginFrontend) loginFrontend.textContent = "FE v" + FRONTEND_VERSION;
+  if (sidebarFrontend) sidebarFrontend.textContent = "FE v" + FRONTEND_VERSION;
+  if (loginBackend) { loginBackend.textContent = backendLabel; loginBackend.classList.toggle("version-warning", !/^\d/.test(backend)); }
+  if (sidebarBackend) { sidebarBackend.textContent = backendLabel; sidebarBackend.classList.toggle("version-warning", !/^\d/.test(backend)); }
+  if ($("loginVersion")) $("loginVersion").textContent = "FE v" + FRONTEND_VERSION + " · " + backendLabel;
+  if ($("sidebarVersion")) $("sidebarVersion").textContent = "FE v" + FRONTEND_VERSION + " · " + backendLabel;
 }
 
 async function restoreSession() {
@@ -256,6 +259,7 @@ function bindFilters() {
 
 function bindExpenseColumnResize() {
   const table = $("expenseTable"), columns = all("col", table), defaults = [140,140,190,190,360,90];
+  if (!table || !columns.length) return;
   let saved = [];
   try { saved = JSON.parse(localStorage.getItem(EXPENSE_COLUMN_WIDTHS_KEY) || "[]"); } catch (error) { saved = []; }
   columns.forEach(function (column,index) { column.style.width = Math.max(70,Math.min(620,Number(saved[index] || defaults[index]))) + "px"; });
@@ -289,8 +293,8 @@ function setExpenseColumnWidth(index,width,save) {
   syncExpenseTableWidth();
   if(save!==false) saveExpenseColumnWidths();
 }
-function syncExpenseTableWidth() { const columns=all("col",$("expenseTable")); $("expenseTable").style.width=columns.reduce(function(sum,column){return sum+(parseFloat(column.style.width)||0);},0)+"px"; }
-function saveExpenseColumnWidths() { localStorage.setItem(EXPENSE_COLUMN_WIDTHS_KEY,JSON.stringify(all("col",$("expenseTable")).map(function(column){return Math.round(parseFloat(column.style.width)||0);}))); }
+function syncExpenseTableWidth() { const table=$("expenseTable"); if(!table)return; const columns=all("col",table); table.style.width=columns.reduce(function(sum,column){return sum+(parseFloat(column.style.width)||0);},0)+"px"; }
+function saveExpenseColumnWidths() { const table=$("expenseTable"); if(!table)return; localStorage.setItem(EXPENSE_COLUMN_WIDTHS_KEY,JSON.stringify(all("col",table).map(function(column){return Math.round(parseFloat(column.style.width)||0);}))); }
 function finishExpenseColumnResize() { if(!state.expenseResize)return; state.expenseResize.handle.classList.remove("dragging"); state.expenseResize=null; saveExpenseColumnWidths(); }
 
 function bindActions() {

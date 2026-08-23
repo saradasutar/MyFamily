@@ -1,8 +1,8 @@
 "use strict";
 
 const CONFIG = window.FAMILY_DASHBOARD_CONFIG || {};
-const PLACEHOLDER_URL = "https://script.google.com/macros/s/AKfycbypWoUinivEj-1mGfNAzy5r-h2J4Gtw7Cu_RKN4DISt2CgRb3AM0h2AfmZYdEiC0KiTpg/exec";
-const FRONTEND_VERSION = "1.0.9";
+const PLACEHOLDER_URL = "PASTE_YOUR_APPS_SCRIPT_WEB_APP_URL_HERE";
+const FRONTEND_VERSION = "1.0.10";
 const SAVED_USERNAME_KEY = "familyDashboardUsername";
 const state = {
   token: localStorage.getItem("familyDashboardToken") || "",
@@ -263,7 +263,8 @@ function bindActions() {
 
 function bindStickyBoard() {
   $("stickyLauncher").addEventListener("click", function () { openStickyBoard("active"); });
-  $("stickyMinimize").addEventListener("click", closeStickyBoard);
+  $("stickyMinimize").addEventListener("click", minimizeStickyBoard);
+  $("stickyClose").addEventListener("click", closeStickyBoard);
   $("stickyBoardShade").addEventListener("click", closeStickyBoard);
   all("[data-sticky-close]").forEach(function (button) { button.addEventListener("click", closeStickyBoard); });
   $("stickyTabActive").addEventListener("click", function () { state.stickyView = "active"; renderStickyNotes(); });
@@ -292,6 +293,12 @@ function closeStickyBoard() {
   $("stickyLauncher").classList.toggle("hidden", !canUseStickyNotes());
   $("stickyLauncher").setAttribute("aria-expanded", "false");
   renderStickyPinnedLayer();
+}
+
+function minimizeStickyBoard() {
+  closeStickyBoard();
+  const pinnedCount = (state.data.stickyNotes || []).filter(function (note) { return note.status !== "COMPLETED" && note.pinned; }).length;
+  toast(pinnedCount ? plural(pinnedCount, "pinned note") + " kept open above the dashboard." : "Sticky-note organiser minimized.", "success");
 }
 
 function canUseStickyNotes() { return hasModuleAccess("TARGETS") || hasModuleAccess("DATES"); }
@@ -849,10 +856,13 @@ function stickyNoteMarkup(note, index, pinnedOverlay) {
   const z = note.pinned ? 5000 + index : 20 + index;
   const collapseControl = note.pinned ? '<button class="sticky-locked-open" type="button" disabled title="Pinned notes stay open">🔒</button>' : '<button type="button" data-action="collapse-sticky" data-id="'+h(note.id)+'" title="'+(note.collapsed?'Open note':'Collapse note')+'">'+(note.collapsed?'▾':'▴')+'</button>';
   const titleControl = note.pinned ? '<strong class="sticky-note-title" title="This pinned note stays open">'+h(note.title)+'</strong>' : '<button class="sticky-note-title" type="button" data-action="collapse-sticky" data-id="'+h(note.id)+'" title="Open or collapse this note">'+h(note.title)+'</button>';
+  const footerCollapse = note.pinned
+    ? '<button class="collapse-action locked" type="button" disabled title="Unpin this note before collapsing it">🔒 Stays open</button>'
+    : '<button class="collapse-action" type="button" data-action="collapse-sticky" data-id="'+h(note.id)+'">▴ Collapse</button>';
   return '<article class="sticky-note sticky-'+h(note.color||"yellow")+(!note.pinned&&note.collapsed?' collapsed':'')+(note.pinned?' pinned':'')+(pinnedOverlay?' pinned-overlay-note':'')+'" data-sticky-id="'+h(note.id)+'" style="left:'+x+'px;top:'+y+'px;--overlay-top:'+y+'px;width:'+width+'px;height:'+height+'px;z-index:'+z+'">'+
     '<header class="sticky-note-head sticky-drag-handle"><span class="sticky-type">'+(note.noteType==="REMINDER"?'REMINDER':'TARGET')+'</span>'+titleControl+'<div class="sticky-head-actions">'+collapseControl+'</div></header>'+
     '<div class="sticky-note-content"><span class="sticky-pinned-label '+(note.pinned?'':'hidden')+'">📌 PINNED OPEN</span><p>'+h(note.body)+'</p><small class="sticky-due'+dueClass+'">'+h(dueText)+'</small><small>Added by '+h(memberName(note.createdBy))+'</small></div>'+
-    '<footer class="sticky-note-actions"><button class="pin-action" type="button" data-action="pin-sticky" data-id="'+h(note.id)+'">'+(note.pinned?'📌 Kept open':'📌 Keep open')+'</button><button type="button" data-action="edit-sticky" data-id="'+h(note.id)+'">Edit</button><button class="complete" type="button" data-action="complete-sticky" data-id="'+h(note.id)+'">✓ Completed</button>'+(mayDelete(note)?'<button class="delete" type="button" data-action="delete-sticky" data-id="'+h(note.id)+'">Delete</button>':'')+'<span class="sticky-size-actions"><button type="button" data-action="shrink-sticky" data-id="'+h(note.id)+'" title="Decrease note size">−</button><button type="button" data-action="grow-sticky" data-id="'+h(note.id)+'" title="Increase note size">＋</button></span></footer></article>';
+    '<footer class="sticky-note-actions"><button class="pin-action" type="button" data-action="pin-sticky" data-id="'+h(note.id)+'">'+(note.pinned?'📌 Unpin':'📌 Keep open')+'</button>'+footerCollapse+'<button type="button" data-action="edit-sticky" data-id="'+h(note.id)+'">Edit</button><button class="complete" type="button" data-action="complete-sticky" data-id="'+h(note.id)+'">✓ Completed</button>'+(mayDelete(note)?'<button class="delete" type="button" data-action="delete-sticky" data-id="'+h(note.id)+'">Delete</button>':'')+'<span class="sticky-size-actions"><button type="button" data-action="shrink-sticky" data-id="'+h(note.id)+'" title="Decrease note size">−</button><button type="button" data-action="grow-sticky" data-id="'+h(note.id)+'" title="Increase note size">＋</button></span></footer></article>';
 }
 
 function renderStickyPinnedLayer(activeNotes) {

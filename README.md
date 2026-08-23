@@ -1,21 +1,30 @@
-# Family Dashboard v1.0.2
+# Family Dashboard v1.0.10
 
 A private, mobile-friendly dashboard for about 10 family members. The frontend runs on GitHub Pages. Google Apps Script supplies the protected backend, Google Sheets stores the records, Google Drive stores full photos, and Gmail sends reminders.
 
 ## What the family can use
 
-- Expenditure: use the exact `Amt (Rs.) / Date Paid / Send to / From Acct / Reason` format; add or edit one payment, bulk-paste up to 500 old records from Excel/Google Sheets, search, filter, print, and export CSV.
+- Expenditure: use the exact `Amt (Rs.) / Date Paid / Send to / From Acct / Reason` format; add or edit one payment, bulk-paste up to 500 old records from Excel/Google Sheets, search, filter, export CSV, and view or print an inclusive From/To date-period report with its total.
+- Easier reading: expenditure and income tables use subtle alternating light-colour rows on screen; the dedicated expenditure printout uses matching light row bands.
+- Regular payments: add any monthly or yearly expenditure—such as electricity, maintenance, insurance, land/holding tax, subscriptions, school fees, or another item. Search schedules, receive email reminders, mark a due item as paid, and let the dashboard calculate its next due date automatically.
 - Income: add, edit, search, filter, print, and export CSV.
 - Targets: create family or personal targets and record contributions.
 - Reminders: birthdays, anniversaries, appointments, renewals, payments, or other dates; choose same-day and advance email reminders.
+- Sticky notes: open the HR-style centred Target / Reminder organiser from any page, add a note directly in its top form, choose a colour pill, and manage active cards with visible Keep open, Collapse, Edit, Completed and Delete controls. The whole organiser can minimize into its small floating launcher. Notes can still be dragged and resized. A pinned note is locked open above all other notes and dashboard fields—even after the organiser is minimized or closed. Unpin it to allow collapsing. Completed notes move to saved history and can be restored.
 - Calendar: month view combining reminders, experiences, and diary entries.
 - Family Diary: daily entries with mood, writer, tags, month filter, and full-text search.
 - Photos: upload, resize, caption, search, view full-size, and store privately in Drive.
 - Experiences: preserve trips, celebrations, lessons, and memories with date, place, tags, and writer name.
-- Search: one search box across expenditure, income, targets, reminders, diary, photos, and experiences.
-- Administration: add about 10 members, choose exactly which sections each member can view and use, set Member/Admin roles, activate/deactivate access, and reset PINs.
+- Search: one search box across expenditure, income, targets, reminders, sticky notes, diary, photos, and experiences.
+- Administration: add about 10 members, choose exactly which sections each member can view and use, set Member/Admin roles, activate/deactivate access, reset PINs, and create or inspect private monthly Sheet backups.
+- Login convenience: optionally save the username on the current device; the PIN is never saved. The current version is shown on the login page and dashboard.
+- Overview visibility: shows all active family members, the total number of saved reminders, and how many fall within the next 30 days.
 
 Each active member sees only the sections enabled for them by an administrator. Access is enforced by the backend as well as hidden in the interface. Within an enabled section, members can see shared information and add or edit records. A member can delete an item they originally added; an administrator can delete any item and manage users/settings.
+
+## Print expenditure for a From/To period
+
+Open **Expenditure → Print**, select the inclusive **From date** and **To date**, then choose either **View selected period** or **Print selected period**. View opens the complete on-screen statement with its own **Print this report** button. Both versions contain only payments in that period, their total, family name, selected date range, and alternating light rows for easier reading.
 
 ## Import old expenditure
 
@@ -25,7 +34,7 @@ Open **Expenditure → Import old records**. Copy rows from Excel or Google Shee
 |---:|---|---|---|---|
 | 12000 | 05/01/2024 | Mani SBI | Family SBI | Monthly 12k sent to Mani SBI on 05th & 20th of each month |
 
-The heading row is optional. Dates can be `DD/MM/YYYY`, `DD-MM-YYYY`, or `YYYY-MM-DD`. Review the columns before importing; up to 500 rows can be added at once.
+The heading row is optional. Dates can be `DD/MM/YYYY`, `DD-MMM-YYYY`, `YYYY-MM-DD`, or an Excel date number. Extra blank columns are removed, additional cells are merged into Reason, and missing Send to/From Acct/Reason values receive a clear `Not specified` or `Old expenditure` label. Up to 500 rows can be added at once.
 
 ## Files in this package
 
@@ -69,7 +78,7 @@ Running setup automatically creates all Sheet tabs, the private Drive photo fold
 
 1. In Apps Script click **Deploy → New deployment**.
 2. Click the gear beside **Select type** and choose **Web app**.
-3. Description: `Family Dashboard v1.0.2`.
+3. Description: `Family Dashboard v1.0.10`.
 4. **Execute as:** `Me`.
 5. **Who has access:** `Anyone`.
 6. Click **Deploy**, approve if asked, and copy the Web App URL ending in `/exec`.
@@ -121,8 +130,16 @@ Use the Member role for normal family access. Give Administrator only to someone
 - Yearly repeat is suitable for birthdays and anniversaries.
 - Email is sent from the Google account that owns the Apps Script project.
 - Duplicate emails for the same date/reminder interval are prevented by the `NotificationLog` sheet.
+- Monthly and yearly expenditure schedules use the same reminder system and can notify everyone or selected family members.
 
 To test email immediately, add a reminder for today with **Same day only**, then manually run `sendImportantDateReminders` once in Apps Script.
+
+## Monthly backup behaviour
+
+- Setup creates a private Drive folder named `Family Name · Monthly Backups`.
+- A trigger copies the complete dashboard Google Sheet on the first day of each month at approximately 2 AM.
+- Administration shows the most recent backup and provides **Create backup now** and **Open backup folder**.
+- The latest 24 copies are retained automatically. Photos remain in their original private Drive photo folder.
 
 ## Privacy and security choices
 
@@ -148,7 +165,7 @@ Frontend change:
 Backend change:
 
 1. Replace `Code.gs` in Apps Script.
-2. Run `setupFamilyDashboard()` once. Version 1.0.2 safely appends the new expenditure and member-access columns while preserving existing rows.
+2. Run `setupFamilyDashboard()` once. Version 1.0.10 safely preserves existing rows, adds sticky-note storage plus any previously missing regular-payment or backup storage, appends missing columns, and treats older member/reminder rows without an `active` value as active.
 3. Open **Deploy → Manage deployments → Edit**.
 4. Choose **New version** and click **Deploy**. The `/exec` URL normally remains the same.
 

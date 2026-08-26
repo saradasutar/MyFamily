@@ -1,10 +1,10 @@
-# Family Dashboard v1.0.14
+# Family Dashboard v1.0.16
 
 A private, mobile-friendly dashboard for about 10 family members. The frontend runs on GitHub Pages. Google Apps Script supplies the protected backend, Google Sheets stores the records, Google Drive stores full photos, and Gmail sends reminders.
 
 ## What the family can use
 
-- Expenditure: add paid or preplanned expenditure with Category and Subcategory, then mark a planned item paid using its direct button. The original `Amt (Rs.) / Date Paid / Send to / From Acct / Reason` import remains supported for up to 500 old records. Filter by month, paid/preplanned status, category, subcategory, recipient, account or search text; export CSV; and view or print an inclusive From/To report with the same filters.
+- Expenditure: add paid or preplanned expenditure with Category and Subcategory, then mark a planned item paid using its direct button. Edit any displayed expenditure directly inside its table row with **Edit row → Save**, or use **Form** for the larger pop-up editor. The original `Amt (Rs.) / Date Paid / Send to / From Acct / Reason` import remains supported for up to 500 old records. Filter by month, paid/preplanned status, category, subcategory, recipient, account or search text; export CSV; and view or print an inclusive From/To report with the same filters.
 - Easier reading: expenditure and income tables use alternating eye-soothing light-colour rows on screen, and the expenditure report prints the same row bands. Drag an Expenditure header edge to resize that dashboard column; drag report header edges in View to adjust widths before printing. Dashboard widths are remembered on that device.
 - Regular payments: add any monthly or yearly expenditure—such as electricity, maintenance, insurance, land/holding tax, subscriptions, school fees, or another item. Search schedules, receive email reminders, mark a due item as paid, and let the dashboard calculate its next due date automatically.
 - Income: add, edit, search, filter, print, and export CSV.
@@ -13,14 +13,24 @@ A private, mobile-friendly dashboard for about 10 family members. The frontend r
 - Sticky notes: unpinned notes automatically collapse into coloured side tabs when the organiser closes. Click a tab to open it temporarily; it auto-collapses again. Pin a note to keep it above other dashboard fields, drag its clearly marked **Move note** handle, resize from the bottom-right corner, or use **Auto-fit** for the best content-based size. Multiple typed lines remain visible. Floating notes include direct **Edit** and **Complete** buttons. Completed notes leave the active sheet and move to the separate **Sticky Note Diary** Sheet tab, where they can be restored or deleted.
 - Calendar: month view combining reminders, experiences, and diary entries.
 - Family Diary: daily entries with mood, writer, tags, month filter, and full-text search.
-- Photos: upload, resize, caption, search, view full-size, and store privately in Drive.
+- Family Memories: keep a limited collection of selected photos, resize and caption them, search and view them full-size, and store them privately in Drive. The administrator controls the maximum (1–24), decides whether uploads are administrator-only or available to members having Photos access, and chooses a one-page or two-page printable memory album.
 - Experiences: preserve trips, celebrations, lessons, and memories with date, place, tags, and writer name.
 - Search: one search box across expenditure, income, targets, reminders, sticky notes, diary, photos, and experiences.
-- Administration: add about 10 members, choose exactly which sections each member can view and use, set Member/Admin roles, activate/deactivate access, reset PINs, and create or inspect private monthly Sheet backups.
+- Administration: add about 10 members, choose exactly which sections each member can view and use, set Member/Admin roles, activate/deactivate access, reset PINs, manage expenditure categories/subcategories, and create or inspect private monthly Sheet backups.
 - Login safety and convenience: optionally save only the username; the PIN and session are never permanently saved. The dashboard signs out after five inactive minutes, leaving/closing the page clears the browser session, and the backend independently rejects stale sessions. The login page includes **Repair browser cache / session**. Separate live `FE` and `BE` versions are shown on both the login page and inside the dashboard.
 - Overview visibility: shows all active family members, the total number of saved reminders, and how many fall within the next 30 days.
 
 Each active member sees only the sections enabled for them by an administrator. Access is enforced by the backend as well as hidden in the interface. Within an enabled section, members can see shared information and add or edit records. A member can delete an item they originally added; an administrator can delete any item and manage users/settings.
+
+## Manage expenditure categories and subcategories
+
+Sign in as an administrator and open **Administration → Categories & subcategories → Manage categories**. You can add categories and subcategories, rename them directly, reorder them with the arrow buttons, or archive/restore them. Archived choices disappear from new expenditure forms but remain visible in historical records. Renaming a choice updates matching records in both Expenditure and Regular Payments so filters and reports continue to work. At least one active category and one active subcategory are always retained.
+
+For a quick record correction, open **Expenditure** and choose **Edit row**. Change Amount, Date, Category, Subcategory, Send to, From Account or Reason directly in the row, then choose **Save**. Choose **Form** when a larger editing window is more convenient.
+
+## Control and print Family Memories
+
+Sign in as an administrator and open **Administration → Family settings → Family Memories control**. Choose the maximum number of saved memory photos (1–24), whether only administrators or also members having Photos access may upload, and whether the printable album should fit into one or two A4 pages. Open **Family Memories → View & print memories** to preview the exact administrator-selected layout before printing. Lowering the maximum never removes existing photos; it only pauses new uploads until the saved count is again within the limit.
 
 ## Print expenditure for a From/To period
 
@@ -78,7 +88,7 @@ Running setup automatically creates all Sheet tabs, the private Drive photo fold
 
 1. In Apps Script click **Deploy → New deployment**.
 2. Click the gear beside **Select type** and choose **Web app**.
-3. Description: `Family Dashboard v1.0.14`.
+3. Description: `Family Dashboard v1.0.16`.
 4. **Execute as:** `Me`.
 5. **Who has access:** `Anyone`.
 6. Click **Deploy**, approve if asked, and copy the Web App URL ending in `/exec`.
@@ -161,7 +171,7 @@ Frontend change:
 Backend change:
 
 1. Replace `Code.gs` in Apps Script.
-2. Run `setupFamilyDashboard()` once. Version 1.0.14 preserves existing rows, appends the new session/category/subcategory/status fields, creates the separate `StickyNoteDiary` sheet, and safely migrates earlier completed sticky notes into it.
+2. Run `setupFamilyDashboard()` once. Version 1.0.16 preserves existing rows, adds the expenditure category configuration with safe defaults, retains the Family Memories controls, and keeps the separate `StickyNoteDiary` sheet.
 3. Open **Deploy → Manage deployments → Edit**.
 4. Choose **New version** and click **Deploy**. The `/exec` URL normally remains the same.
 
@@ -175,7 +185,7 @@ Backend change:
 | Email did not arrive | Confirm the member has an email, the reminder includes that member, the daily trigger exists, and check Apps Script Executions/`NotificationLog`. |
 | Photo upload fails | Try a normal JPG/PNG/WebP. The browser resizes it, but the processed full image must remain under 3 MB. |
 | Old page still appears | Use a hard refresh or test in an incognito window. |
-| Login/session still behaves like the old version | On the login page click **Repair browser cache / session**, then confirm both labels show `FE v1.0.14` and `BE v1.0.14`. |
+| Login/session still behaves like the old version | On the login page click **Repair browser cache / session**, then confirm both labels show `FE v1.0.16` and `BE v1.0.16`. |
 | Administrator PIN was lost | Run `resetFirstAdminPin()` manually in Apps Script and read the execution result/log. |
 
 ## Backup

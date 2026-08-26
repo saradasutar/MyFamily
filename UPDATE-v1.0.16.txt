@@ -1,0 +1,57 @@
+FAMILY DASHBOARD UPDATE — v1.0.16
+=================================
+
+What this update adds
+---------------------
+1. Administrator-managed expenditure categories and subcategories.
+2. Add, rename, reorder, archive and restore category choices.
+3. Renaming automatically updates matching existing Expenditure and Regular
+   Payment records so filters and reports remain consistent.
+4. Archive is used instead of destructive deletion. Historical records remain
+   readable and an archived choice can be restored later.
+5. Direct Edit row, Save and Cancel controls inside the expenditure table.
+6. The existing larger pop-up editor remains available through Form.
+7. Inline editing covers Amount, Date, Category, Subcategory, Send to,
+   From Account and Reason.
+8. FE v1.0.16 and BE v1.0.16 appear at login and inside the dashboard.
+
+BACKEND UPDATE — required first
+-------------------------------
+1. Open the existing Family Dashboard Apps Script project.
+2. Replace Code.gs with apps-script/Code.gs from this package.
+3. Save the project.
+4. Run setupFamilyDashboard once. Existing Sheet rows, members, photos,
+   reminders, sticky notes and other records are preserved. The default
+   expenditure category configuration is added only when it is missing.
+5. Choose Deploy > Manage deployments.
+6. Edit the current Web App deployment and choose New version.
+7. Deploy and keep the same /exec Web App URL.
+
+FRONTEND UPDATE — required second
+---------------------------------
+Upload these four files directly to the ROOT of the MyFamily repository:
+  index.html
+  styles.css
+  app.js
+  config.js
+
+Do not upload the ZIP itself and do not put these files inside another folder.
+Wait for the GitHub Pages deployment to show a green tick.
+
+HOW TO MANAGE CATEGORIES
+------------------------
+1. Sign in as administrator.
+2. Open Administration.
+3. In Categories & subcategories choose Manage categories.
+4. Add or rename items directly, use the arrows to reorder, or Archive/Restore.
+5. Click Save category changes.
+
+HOW TO EDIT IN A TABLE ROW
+--------------------------
+1. Open Expenditure.
+2. Find the required record and choose Edit row.
+3. Change the fields directly in that row.
+4. Choose Save or Cancel. Use Form for the larger pop-up editor.
+
+If an old cached page remains, use Repair browser cache / session on the login
+page, then confirm FE v1.0.16 and BE v1.0.16 are both displayed.

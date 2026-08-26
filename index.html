@@ -6,7 +6,7 @@
   <meta name="theme-color" content="#5743a8">
   <meta name="description" content="Private family dashboard for expenses, goals, important dates and photos.">
   <title>Our Family Hub</title>
-  <link rel="stylesheet" href="styles.css?v=1.0.15">
+  <link rel="stylesheet" href="styles.css?v=1.0.16">
 </head>
 <body>
   <div class="ambient ambient-one"></div>
@@ -39,8 +39,8 @@
         </label>
         <div class="login-options">
           <label class="remember-row"><input id="rememberUsername" type="checkbox" checked> Save username on this device</label>
-          <span class="version-pair"><b id="loginFrontendVersion">FE v1.0.15</b><b id="loginBackendVersion">BE checking…</b></span>
-          <span id="loginVersion" class="legacy-version hidden" aria-hidden="true">Version 1.0.15</span>
+          <span class="version-pair"><b id="loginFrontendVersion">FE v1.0.16</b><b id="loginBackendVersion">BE checking…</b></span>
+          <span id="loginVersion" class="legacy-version hidden" aria-hidden="true">Version 1.0.16</span>
         </div>
         <button class="primary-button wide" type="submit">Sign in securely</button>
         <button id="repairSessionButton" class="repair-session-button" type="button">↻ Repair browser cache / session</button>
@@ -57,8 +57,8 @@
         <div class="brand-mark small">FH</div>
         <div>
           <strong id="sidebarFamilyName">Our Family Hub</strong>
-          <span class="sidebar-version-pair"><b id="sidebarFrontendVersion">FE v1.0.15</b><b id="sidebarBackendVersion">BE checking…</b></span>
-          <b id="sidebarVersion" class="legacy-version hidden" aria-hidden="true">v1.0.15</b>
+          <span class="sidebar-version-pair"><b id="sidebarFrontendVersion">FE v1.0.16</b><b id="sidebarBackendVersion">BE checking…</b></span>
+          <b id="sidebarVersion" class="legacy-version hidden" aria-hidden="true">v1.0.16</b>
         </div>
       </div>
       <nav class="main-nav" aria-label="Main navigation">
@@ -287,6 +287,12 @@
               <p id="lastBackupText" class="backup-last">No backup created yet.</p>
               <div class="backup-actions"><button id="createBackupNow" class="secondary-button" type="button">Create backup now</button><a id="backupFolderLink" class="text-button hidden" target="_blank" rel="noopener">Open backup folder</a></div>
             </article>
+            <article class="panel category-admin-panel">
+              <div class="panel-heading"><div><p class="eyebrow">EXPENDITURE</p><h3>Categories &amp; subcategories</h3></div></div>
+              <p>Add, rename, reorder or archive the choices used by paid, preplanned and regular expenditure.</p>
+              <span id="adminExpenseCategorySummary" class="status-badge">12 categories</span>
+              <button class="secondary-button" type="button" data-open="expenseCategoryDialog">Manage categories</button>
+            </article>
           </div>
           <article class="panel members-panel">
             <div class="panel-heading"><div><p class="eyebrow">ACCESS</p><h3>Family members</h3></div><span id="memberCount" class="count-badge">0 people</span></div>
@@ -351,8 +357,8 @@
       <input id="expenseMarkPaidId" type="hidden">
       <p id="expenseRecurringNote" class="recurring-pay-note hidden"></p>
       <div class="two-fields"><label>Entry type<select id="expenseEntryType" required><option value="REGULAR">Paid expenditure</option><option value="PREPLANNED">Preplanned expenditure</option></select></label><label id="expenseDateLabel">Date Paid<input id="expenseDate" type="date" required></label></div>
-      <div class="two-fields"><label>Amt (Rs.)<input id="expenseAmount" type="number" min="0.01" step="0.01" required placeholder="12000"></label><label>Category<select id="expenseCategory" required><option>Home</option><option>Utilities</option><option>Food</option><option>Health</option><option>Transport</option><option>Education</option><option>Family transfer</option><option>Tax &amp; insurance</option><option>Travel</option><option>Shopping</option><option>Entertainment</option><option>Other</option></select></label></div>
-      <div class="two-fields"><label>Subcategory<input id="expenseSubcategory" list="expenseSubcategoryOptions" required maxlength="80" placeholder="Choose or type a subcategory"><datalist id="expenseSubcategoryOptions"></datalist></label><span class="category-help">Subcategories change with the selected category, and you may type another one.</span></div>
+      <div class="two-fields"><label>Amt (Rs.)<input id="expenseAmount" type="number" min="0.01" step="0.01" required placeholder="12000"></label><label>Category<select id="expenseCategory" required></select></label></div>
+      <div class="two-fields"><label>Subcategory<select id="expenseSubcategory" required></select></label><span class="category-help">Subcategories change with the selected category. Administrators manage these choices.</span></div>
       <div class="two-fields"><label>Send to<input id="expenseSendTo" required maxlength="100" placeholder="e.g. Mani SBI"></label><label>From Acct<input id="expenseFromAccount" required maxlength="100" placeholder="e.g. Family SBI"></label></div>
       <label>Reason<textarea id="expenseReason" rows="3" required maxlength="500" placeholder="e.g. Monthly 12k sent to Mani SBI on 05th &amp; 20th of each month"></textarea></label>
       <div class="modal-actions"><button type="button" class="secondary-button" data-close>Cancel</button><button type="submit" class="primary-button">Save expenditure</button></div>
@@ -365,7 +371,7 @@
       <input id="recurringExpenseId" type="hidden">
       <div class="two-fields"><label>Payment name<input id="recurringExpenseTitle" required maxlength="100" placeholder="e.g. Electricity bill"></label><label>Estimated amount (optional)<input id="recurringExpenseAmount" type="number" min="0" step="0.01" placeholder="Amount can be changed when paid"></label></div>
       <div class="two-fields"><label>Repeat<select id="recurringExpenseFrequency" required><option value="MONTHLY">Every month</option><option value="YEARLY">Every year</option></select></label><label>Next due date<input id="recurringExpenseDueDate" type="date" required></label></div>
-      <div class="two-fields"><label>Category<select id="recurringExpenseCategory" required><option>Home</option><option>Utilities</option><option>Food</option><option>Health</option><option>Transport</option><option>Education</option><option>Family transfer</option><option>Tax &amp; insurance</option><option>Travel</option><option>Shopping</option><option>Entertainment</option><option>Other</option></select></label><label>Subcategory<input id="recurringExpenseSubcategory" list="recurringExpenseSubcategoryOptions" required maxlength="80" placeholder="Choose or type"><datalist id="recurringExpenseSubcategoryOptions"></datalist></label></div>
+      <div class="two-fields"><label>Category<select id="recurringExpenseCategory" required></select></label><label>Subcategory<select id="recurringExpenseSubcategory" required></select></label></div>
       <div class="two-fields"><label>Send to<input id="recurringExpenseSendTo" required maxlength="100" placeholder="e.g. BESCOM"></label><label>From Acct<input id="recurringExpenseFromAccount" required maxlength="100" placeholder="e.g. Family SBI"></label></div>
       <label>Reason<textarea id="recurringExpenseReason" rows="3" required maxlength="500" placeholder="e.g. Monthly home electricity bill"></textarea></label>
       <label>Send email reminder<select id="recurringExpenseRemind"><option value="7,1,0">7 days, 1 day and same day</option><option value="3,1,0">3 days, 1 day and same day</option><option value="1,0">1 day and same day</option><option value="0">Same day only</option><option value="14,7,1,0">14 days, 7 days, 1 day and same day</option></select></label>
@@ -462,6 +468,17 @@
     </form>
   </dialog>
 
+  <dialog id="expenseCategoryDialog" class="modal category-manager-dialog">
+    <div class="modal-head"><div><p class="eyebrow">ADMINISTRATION</p><h3>Expenditure categories</h3><small>Changes apply to paid, preplanned and regular expenditure.</small></div><button class="modal-close" type="button" data-close>×</button></div>
+    <form id="expenseCategoryAddForm" class="category-add-form">
+      <label>New category<input id="newExpenseCategoryName" maxlength="60" placeholder="e.g. Property" required></label>
+      <button class="primary-button" type="submit">＋ Add category</button>
+    </form>
+    <div class="category-manager-heading"><strong id="expenseCategoryManagerSummary">0 categories</strong><small>Use ↑ ↓ to change order. Archive hides a choice from new entries without changing historical records.</small></div>
+    <div id="expenseCategoryManagerList" class="expense-category-manager-list"></div>
+    <div class="category-manager-footer"><small>Renaming a category or subcategory also updates matching old expenditure and regular-payment records.</small><div><button type="button" class="secondary-button" data-close>Cancel</button><button id="saveExpenseCategories" type="button" class="primary-button">Save category changes</button></div></div>
+  </dialog>
+
   <dialog id="memberDialog" class="modal">
     <form id="memberForm" method="dialog">
       <div class="modal-head"><div><p class="eyebrow">ACCESS</p><h3 id="memberDialogTitle">Add family member</h3></div><button class="modal-close" type="button" data-close>×</button></div>
@@ -543,7 +560,7 @@
   <div id="loadingOverlay" class="loading-overlay hidden"><div class="spinner"></div><p id="loadingText">Working…</p></div>
   <div id="toastRegion" class="toast-region" aria-live="polite"></div>
 
-  <script src="config.js?v=1.0.15"></script>
-  <script src="app.js?v=1.0.15"></script>
+  <script src="config.js?v=1.0.16"></script>
+  <script src="app.js?v=1.0.16"></script>
 </body>
 </html>

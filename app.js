@@ -2,7 +2,7 @@
 
 const CONFIG = window.FAMILY_DASHBOARD_CONFIG || {};
 const PLACEHOLDER_URL = "PASTE_YOUR_APPS_SCRIPT_WEB_APP_URL_HERE";
-const FRONTEND_VERSION = "1.0.15";
+const FRONTEND_VERSION = "1.0.16";
 const SAVED_USERNAME_KEY = "familyDashboardUsername";
 const SESSION_TOKEN_KEY = "familyDashboardToken";
 const IDLE_TIMEOUT_MS = 5 * 60 * 1000;
@@ -26,7 +26,9 @@ const state = {
   lastKeepAliveAt: 0,
   stickyResize: null,
   stickySideOpenId: "",
-  stickySideTimer: null
+  stickySideTimer: null,
+  inlineExpenseId: "",
+  categoryDraft: []
 };
 const pendingRequests = new Map();
 const viewTitles = {
@@ -36,7 +38,7 @@ const viewTitles = {
 };
 const viewModules = { expenses: "EXPENSES", income: "INCOME", targets: "TARGETS", dates: "DATES", calendar: "CALENDAR", diary: "DIARY", photos: "PHOTOS", experiences: "EXPERIENCES" };
 const currencySymbols = { INR: "₹", USD: "$", EUR: "€", GBP: "£" };
-const EXPENSE_SUBCATEGORIES = {
+const DEFAULT_EXPENSE_SUBCATEGORIES = {
   "Home": ["Maintenance", "Repairs", "Rent", "Furniture", "Domestic help", "Other home"],
   "Utilities": ["Electricity", "Water", "Gas", "Internet", "Mobile", "DTH / cable"],
   "Food": ["Groceries", "Vegetables", "Dining out", "Milk", "Snacks"],
@@ -50,6 +52,17 @@ const EXPENSE_SUBCATEGORIES = {
   "Entertainment": ["Movies", "Subscriptions", "Events", "Hobbies"],
   "Other": ["General", "Donation", "Unexpected"]
 };
+
+function fallbackExpenseCategories() {
+  return Object.keys(DEFAULT_EXPENSE_SUBCATEGORIES).map(function (name, categoryIndex) {
+    return {
+      id: "CAT_" + String(categoryIndex + 1).padStart(2, "0"), name: name, active: true,
+      subcategories: DEFAULT_EXPENSE_SUBCATEGORIES[name].map(function (subcategory, subcategoryIndex) {
+        return { id: "SUB_" + String(categoryIndex + 1).padStart(2, "0") + "_" + String(subcategoryIndex + 1).padStart(2, "0"), name: subcategory, active: true };
+      })
+    };
+  });
+}
 
 document.addEventListener("DOMContentLoaded", init);
 window.addEventListener("message", receiveApiMessage);
@@ -266,7 +279,38 @@ async function repairBrowserSession() {
   const url = new URL(window.location.href); url.searchParams.set("fresh", String(Date.now())); window.location.replace(url.toString());
 }
 function loadSavedUsername() { const saved = localStorage.getItem(SAVED_USERNAME_KEY) || ""; $("loginUsername").value = saved; $("rememberUsername").checked = !!saved || $("rememberUsername").checked; }
-function normalizeBootstrapData(data) { const result = data || {}; ["members","expenses","recurringExpenses","income","targets","importantDates","photos","experiences","diary","stickyNotes"].forEach(function (key) { if (!Array.isArray(result[key])) result[key] = []; }); if (!result.settings) result.settings = {}; return result; }
+function normalizeBootstrapData(data) { const result = data || {}; ["members","expenses","recurringExpenses","income","targets","importantDates","photos","experiences","diary","stickyNotes"].forEach(function (key) { if (!Array.isArray(result[key])) result[key] = []; }); if (!result.settings) result.settings = {}; if (!Array.isArray(result.expenseCategories) || !result.expenseCategories.length) result.expenseCategories = fallbackExpenseCategories(); return result; }
+
+function expenseCategoryConfig() { return state.data && Array.isArray(state.data.expenseCategories) && state.data.expenseCategories.length ? state.data.expenseCategories : fallbackExpenseCategories(); }
+function activeExpenseCategories() { return expenseCategoryConfig().filter(function (category) { return category.active !== false; }); }
+function expenseCategoryByName(name) { return expenseCategoryConfig().find(function (category) { return category.name === name; }); }
+function expenseSubcategoryNames(categoryName, includeArchived) {
+  const category = expenseCategoryByName(categoryName);
+  if (!category) return ["General"];
+  return (category.subcategories || []).filter(function (subcategory) { return includeArchived || subcategory.active !== false; }).map(function (subcategory) { return subcategory.name; });
+}
+function expenseCategoryOptions(selected, includeArchived) {
+  const names = (includeArchived ? expenseCategoryConfig() : activeExpenseCategories()).map(function (category) { return category.name; });
+  if (selected && names.indexOf(selected) < 0) names.push(selected);
+  return names.map(function (name) { return '<option value="'+h(name)+'"'+(name===selected?' selected':'')+'>'+h(name)+'</option>'; }).join("");
+}
+function expenseSubcategoryOptions(categoryName, selected, includeArchived) {
+  const names = expenseSubcategoryNames(categoryName, includeArchived);
+  if (selected && names.indexOf(selected) < 0) names.push(selected);
+  return names.map(function (name) { return '<option value="'+h(name)+'"'+(name===selected?' selected':'')+'>'+h(name)+'</option>'; }).join("");
+}
+function fillExpenseCategorySelect(select, selected) {
+  const fallback = activeExpenseCategories()[0] && activeExpenseCategories()[0].name || "Other";
+  const value = selected || fallback;
+  select.innerHTML = expenseCategoryOptions(value, false);
+  select.value = value;
+}
+function fillExpenseSubcategorySelect(select, categoryName, selected) {
+  const values = expenseSubcategoryNames(categoryName, false);
+  const value = selected || values[0] || "General";
+  select.innerHTML = expenseSubcategoryOptions(categoryName, value, false);
+  select.value = value;
+}
 
 function bindNavigation() {
   all(".nav-button").forEach(function (button) {
@@ -311,6 +355,8 @@ function bindDialogs() {
   $("expenseEntryType").addEventListener("change", syncExpenseEntryType);
   $("expenseCategory").addEventListener("change", function () { populateSubcategoryOptions("expenseCategory", "expenseSubcategory", "expenseSubcategoryOptions", true); });
   $("recurringExpenseCategory").addEventListener("change", function () { populateSubcategoryOptions("recurringExpenseCategory", "recurringExpenseSubcategory", "recurringExpenseSubcategoryOptions", true); });
+  $("expenseCategoryAddForm").addEventListener("submit", addExpenseCategoryDraft);
+  $("saveExpenseCategories").addEventListener("click", saveExpenseCategories);
 }
 function openDialog(id) { const dialog = $(id); if (dialog && !dialog.open) dialog.showModal(); }
 function prepareNewDialog(id) {
@@ -324,8 +370,8 @@ function prepareNewDialog(id) {
     $(defaults[id][1]).value = "";
     if (defaults[id][2]) $(defaults[id][2]).value = todayIso();
   }
-  if (id === "expenseDialog") { $("expenseRecurringId").value = ""; $("expenseMarkPaidId").value = ""; $("expenseRecurringNote").textContent = ""; $("expenseRecurringNote").classList.add("hidden"); $("expenseEntryType").disabled = false; $("expenseEntryType").value = "REGULAR"; $("expenseCategory").value = "Home"; populateSubcategoryOptions("expenseCategory", "expenseSubcategory", "expenseSubcategoryOptions", true); $("expenseDialogTitle").textContent = "Add paid expenditure"; syncExpenseEntryType(); }
-  if (id === "recurringExpenseDialog") { $("recurringExpenseDialogTitle").textContent = "Add regular payment"; $("recurringExpenseCategory").value = "Utilities"; populateSubcategoryOptions("recurringExpenseCategory", "recurringExpenseSubcategory", "recurringExpenseSubcategoryOptions", true); $("recurringNotifyEveryone").checked = true; $("recurringRecipientChecks").classList.add("hidden"); renderRecurringRecipientChecks([]); }
+  if (id === "expenseDialog") { $("expenseRecurringId").value = ""; $("expenseMarkPaidId").value = ""; $("expenseRecurringNote").textContent = ""; $("expenseRecurringNote").classList.add("hidden"); $("expenseEntryType").disabled = false; $("expenseEntryType").value = "REGULAR"; fillExpenseCategorySelect($("expenseCategory"), activeExpenseCategories().some(function(category){return category.name==="Home";}) ? "Home" : ""); populateSubcategoryOptions("expenseCategory", "expenseSubcategory", "expenseSubcategoryOptions", true); $("expenseDialogTitle").textContent = "Add paid expenditure"; syncExpenseEntryType(); }
+  if (id === "recurringExpenseDialog") { $("recurringExpenseDialogTitle").textContent = "Add regular payment"; fillExpenseCategorySelect($("recurringExpenseCategory"), activeExpenseCategories().some(function(category){return category.name==="Utilities";}) ? "Utilities" : ""); populateSubcategoryOptions("recurringExpenseCategory", "recurringExpenseSubcategory", "recurringExpenseSubcategoryOptions", true); $("recurringNotifyEveryone").checked = true; $("recurringRecipientChecks").classList.add("hidden"); renderRecurringRecipientChecks([]); }
   if (id === "bulkExpenseDialog") $("bulkExpenseForm").reset();
   if (id === "incomeDialog") { $("incomeDialogTitle").textContent = "Add income"; fillMemberSelect($("incomeReceivedBy"), state.data.user.id); }
   if (id === "targetDialog") { $("targetForm").reset(); $("targetDueDate").value = todayIso(); fillMemberSelect($("targetOwner"), state.data.user.id, true); }
@@ -335,6 +381,7 @@ function prepareNewDialog(id) {
   if (id === "memberDialog") { $("memberDialogTitle").textContent = "Add family member"; $("memberActive").checked = true; $("memberPin").required = true; setMemberPermissions(["EXPENSES","INCOME","TARGETS","DATES","CALENDAR","PHOTOS","EXPERIENCES","DIARY"]); syncMemberAccessRole(); }
   if (id === "experienceDialog") $("experienceDialogTitle").textContent = "Add experience";
   if (id === "diaryDialog") $("diaryDialogTitle").textContent = "Write diary entry";
+  if (id === "expenseCategoryDialog") { state.categoryDraft = JSON.parse(JSON.stringify(expenseCategoryConfig())); $("newExpenseCategoryName").value = ""; renderExpenseCategoryManager(); }
 }
 
 function syncExpenseEntryType() {
@@ -346,9 +393,79 @@ function syncExpenseEntryType() {
 }
 
 function populateSubcategoryOptions(categoryId, inputId, listId, chooseFirst) {
-  const values = EXPENSE_SUBCATEGORIES[$(categoryId).value] || EXPENSE_SUBCATEGORIES.Other;
-  $(listId).innerHTML = values.map(function (value) { return '<option value="'+h(value)+'"></option>'; }).join("");
-  if (chooseFirst || !$(inputId).value) $(inputId).value = values[0] || "General";
+  const values = expenseSubcategoryNames($(categoryId).value, false);
+  const selected = chooseFirst || !$(inputId).value ? (values[0] || "General") : $(inputId).value;
+  fillExpenseSubcategorySelect($(inputId), $(categoryId).value, selected);
+}
+
+function newCategoryConfigId(prefix) { return prefix + "_" + Date.now().toString(36).toUpperCase() + "_" + Math.random().toString(36).slice(2,7).toUpperCase(); }
+function categoryDraftById(id) { return state.categoryDraft.find(function (category) { return category.id === id; }); }
+function addExpenseCategoryDraft(event) {
+  event.preventDefault();
+  const name = $("newExpenseCategoryName").value.trim();
+  if (!name) return;
+  if (state.categoryDraft.some(function (category) { return normalize(category.name) === normalize(name); })) return toast("That expenditure category already exists.", "error");
+  state.categoryDraft.push({ id: newCategoryConfigId("CAT"), name: name, active: true, subcategories: [{ id: newCategoryConfigId("SUB"), name: "General", active: true }] });
+  $("newExpenseCategoryName").value = "";
+  renderExpenseCategoryManager();
+}
+function categoryUsage(categoryName, subcategoryName) {
+  const expenses = (state.data.expenses || []).map(normalizeExpense);
+  const recurring = state.data.recurringExpenses || [];
+  return expenses.concat(recurring).filter(function (item) { return item.category === categoryName && (!subcategoryName || item.subcategory === subcategoryName); }).length;
+}
+function renderExpenseCategoryManager() {
+  const activeCount = state.categoryDraft.filter(function (category) { return category.active !== false; }).length;
+  $("expenseCategoryManagerSummary").textContent = plural(state.categoryDraft.length, "category", "categories") + " · " + activeCount + " active";
+  $("expenseCategoryManagerList").innerHTML = state.categoryDraft.map(function (category, categoryIndex) {
+    const used = categoryUsage(category.name);
+    const subcategoryRows = (category.subcategories || []).map(function (subcategory, subcategoryIndex) {
+      const subUsed = categoryUsage(category.name, subcategory.name);
+      return '<div class="subcategory-manager-row '+(subcategory.active===false?'archived':'')+'" data-category-id="'+h(category.id)+'" data-subcategory-id="'+h(subcategory.id)+'"><span class="subcategory-branch">↳</span><input class="subcategory-name-input" maxlength="60" value="'+h(subcategory.name)+'" aria-label="Subcategory name"><small>'+h(plural(subUsed,"record"))+'</small><div class="category-order-actions"><button type="button" class="tiny-button" data-action="move-subcategory-up" data-category-id="'+h(category.id)+'" data-subcategory-id="'+h(subcategory.id)+'" '+(subcategoryIndex===0?'disabled':'')+' aria-label="Move subcategory up">↑</button><button type="button" class="tiny-button" data-action="move-subcategory-down" data-category-id="'+h(category.id)+'" data-subcategory-id="'+h(subcategory.id)+'" '+(subcategoryIndex===category.subcategories.length-1?'disabled':'')+' aria-label="Move subcategory down">↓</button><button type="button" class="tiny-button '+(subcategory.active===false?'restore-button':'archive-button')+'" data-action="toggle-subcategory-active" data-category-id="'+h(category.id)+'" data-subcategory-id="'+h(subcategory.id)+'">'+(subcategory.active===false?'Restore':'Archive')+'</button></div></div>';
+    }).join("");
+    return '<article class="category-manager-card '+(category.active===false?'archived':'')+'" data-category-id="'+h(category.id)+'"><header><span class="category-drag-index">'+(categoryIndex+1)+'</span><input class="category-name-input" maxlength="60" value="'+h(category.name)+'" aria-label="Category name"><small>'+h(plural(used,"record"))+'</small><div class="category-order-actions"><button type="button" class="tiny-button" data-action="move-category-up" data-category-id="'+h(category.id)+'" '+(categoryIndex===0?'disabled':'')+' aria-label="Move category up">↑</button><button type="button" class="tiny-button" data-action="move-category-down" data-category-id="'+h(category.id)+'" '+(categoryIndex===state.categoryDraft.length-1?'disabled':'')+' aria-label="Move category down">↓</button><button type="button" class="tiny-button '+(category.active===false?'restore-button':'archive-button')+'" data-action="toggle-category-active" data-category-id="'+h(category.id)+'">'+(category.active===false?'Restore':'Archive')+'</button></div></header><div class="subcategory-manager-list">'+subcategoryRows+'</div><button type="button" class="add-subcategory-button" data-action="add-subcategory" data-category-id="'+h(category.id)+'">＋ Add subcategory</button></article>';
+  }).join("");
+}
+function moveDraftItem(items, id, direction) {
+  const index = items.findIndex(function (item) { return item.id === id; });
+  const next = index + direction;
+  if (index < 0 || next < 0 || next >= items.length) return;
+  const item = items.splice(index, 1)[0]; items.splice(next, 0, item);
+}
+function handleCategoryManagerAction(action, button) {
+  const category = categoryDraftById(button.dataset.categoryId);
+  if (!category) return;
+  if (action === "move-category-up") moveDraftItem(state.categoryDraft, category.id, -1);
+  if (action === "move-category-down") moveDraftItem(state.categoryDraft, category.id, 1);
+  if (action === "toggle-category-active") {
+    if (category.active !== false && state.categoryDraft.filter(function (item) { return item.active !== false; }).length === 1) return toast("Keep at least one active expenditure category.", "error");
+    category.active = category.active === false;
+    if (category.active && !(category.subcategories || []).some(function (item) { return item.active !== false; }) && category.subcategories[0]) category.subcategories[0].active = true;
+  }
+  if (action === "add-subcategory") {
+    category.subcategories.push({ id: newCategoryConfigId("SUB"), name: "New subcategory", active: true });
+  }
+  const subcategory = (category.subcategories || []).find(function (item) { return item.id === button.dataset.subcategoryId; });
+  if (action === "move-subcategory-up" && subcategory) moveDraftItem(category.subcategories, subcategory.id, -1);
+  if (action === "move-subcategory-down" && subcategory) moveDraftItem(category.subcategories, subcategory.id, 1);
+  if (action === "toggle-subcategory-active" && subcategory) {
+    if (subcategory.active !== false && category.active !== false && category.subcategories.filter(function (item) { return item.active !== false; }).length === 1) return toast("Keep at least one active subcategory inside an active category.", "error");
+    subcategory.active = subcategory.active === false;
+  }
+  renderExpenseCategoryManager();
+  if (action === "add-subcategory") {
+    const card = all(".category-manager-card", $("expenseCategoryManagerList")).find(function (item) { return item.dataset.categoryId === category.id; });
+    const inputs = card ? all(".subcategory-name-input", card) : [];
+    const input = inputs[inputs.length - 1]; if (input) { input.focus(); input.select(); }
+  }
+}
+async function saveExpenseCategories() {
+  const categories = state.categoryDraft.map(function (category) { return { id: category.id, name: String(category.name || "").trim(), active: category.active !== false, subcategories: (category.subcategories || []).map(function (subcategory) { return { id: subcategory.id, name: String(subcategory.name || "").trim(), active: subcategory.active !== false }; }) }; });
+  if (categories.some(function (category) { return !category.name || category.subcategories.some(function (subcategory) { return !subcategory.name; }); })) return toast("Every category and subcategory needs a name.", "error");
+  const duplicateCategory = categories.some(function (category, index) { return categories.findIndex(function (other) { return normalize(other.name) === normalize(category.name); }) !== index; });
+  const duplicateSubcategory = categories.some(function (category) { return category.subcategories.some(function (subcategory, index) { return category.subcategories.findIndex(function (other) { return normalize(other.name) === normalize(subcategory.name); }) !== index; }); });
+  if (duplicateCategory || duplicateSubcategory) return toast("Category and subcategory names must be unique.", "error");
+  await mutate("saveExpenseCategories", { categories: categories }, "Expenditure categories updated. Matching old records were renamed safely.", "expenseCategoryDialog", "Updating expenditure categories…");
 }
 
 function bindForms() {
@@ -436,6 +553,9 @@ function bindActions() {
     const action = button.dataset.action;
     const id = button.dataset.id;
     if (action === "edit-expense") editExpense(id);
+    if (action === "inline-edit-expense") startInlineExpenseEdit(id);
+    if (action === "inline-save-expense") await saveInlineExpenseRow(button);
+    if (action === "inline-cancel-expense") { state.inlineExpenseId = ""; renderExpenses(); }
     if (action === "mark-planned-paid") openPlannedPayment(id);
     if (action === "delete-expense") confirmDelete("deleteExpense", id, "Delete this expenditure entry?");
     if (action === "pay-recurring-expense") openRecurringPayment(id);
@@ -466,6 +586,24 @@ function bindActions() {
     if (action === "auto-fit-sticky") autoFitStickyNote(id);
     if (action === "open-side-sticky") openSideSticky(id);
     if (action === "close-side-sticky") closeSideSticky();
+    if (["move-category-up","move-category-down","toggle-category-active","add-subcategory","move-subcategory-up","move-subcategory-down","toggle-subcategory-active"].indexOf(action) >= 0) handleCategoryManagerAction(action, button);
+  });
+  document.addEventListener("input", function (event) {
+    const categoryCard = event.target.closest(".category-manager-card");
+    if (!categoryCard) return;
+    const category = categoryDraftById(categoryCard.dataset.categoryId); if (!category) return;
+    if (event.target.classList.contains("category-name-input")) category.name = event.target.value;
+    if (event.target.classList.contains("subcategory-name-input")) {
+      const row = event.target.closest(".subcategory-manager-row");
+      const subcategory = (category.subcategories || []).find(function (item) { return item.id === row.dataset.subcategoryId; });
+      if (subcategory) subcategory.name = event.target.value;
+    }
+  });
+  document.addEventListener("change", function (event) {
+    if (!event.target.classList.contains("inline-expense-category")) return;
+    const row = event.target.closest("tr");
+    const subcategory = row && row.querySelector(".inline-expense-subcategory");
+    if (subcategory) subcategory.innerHTML = expenseSubcategoryOptions(event.target.value, "", false);
   });
 }
 
@@ -895,19 +1033,19 @@ async function confirmDelete(action, id, message) { if (window.confirm(message))
 
 function editExpense(id) {
   const item = state.data.expenses.find(function (x) { return x.id === id; }); if (!item) return;
-  const expense = normalizeExpense(item); prepareNewDialog("expenseDialog"); $("expenseId").value = expense.id; $("expenseEntryType").value = expense.status === "PLANNED" ? "PREPLANNED" : (expense.entryType === "PREPLANNED" ? "PREPLANNED" : "REGULAR"); $("expenseDate").value = expense.date; $("expenseAmount").value = expense.amount; $("expenseCategory").value = EXPENSE_SUBCATEGORIES[expense.category] ? expense.category : "Other"; populateSubcategoryOptions("expenseCategory", "expenseSubcategory", "expenseSubcategoryOptions", false); $("expenseSubcategory").value = expense.subcategory; $("expenseSendTo").value = expense.sentTo; $("expenseFromAccount").value = expense.fromAccount; $("expenseReason").value = expense.reason; $("expenseDialogTitle").textContent = "Edit expenditure"; syncExpenseEntryType(); openDialog("expenseDialog");
+  const expense = normalizeExpense(item); prepareNewDialog("expenseDialog"); $("expenseId").value = expense.id; $("expenseEntryType").value = expense.status === "PLANNED" ? "PREPLANNED" : (expense.entryType === "PREPLANNED" ? "PREPLANNED" : "REGULAR"); $("expenseDate").value = expense.date; $("expenseAmount").value = expense.amount; fillExpenseCategorySelect($("expenseCategory"), expense.category); fillExpenseSubcategorySelect($("expenseSubcategory"), expense.category, expense.subcategory); $("expenseSendTo").value = expense.sentTo; $("expenseFromAccount").value = expense.fromAccount; $("expenseReason").value = expense.reason; $("expenseDialogTitle").textContent = "Edit expenditure"; syncExpenseEntryType(); openDialog("expenseDialog");
 }
 function openPlannedPayment(id) {
   const item = state.data.expenses.find(function (x) { return x.id === id; }); if (!item) return;
-  const expense = normalizeExpense(item); prepareNewDialog("expenseDialog"); $("expenseMarkPaidId").value = expense.id; $("expenseEntryType").value = "REGULAR"; $("expenseEntryType").disabled = true; $("expenseDate").value = todayIso(); $("expenseAmount").value = expense.amount; $("expenseCategory").value = EXPENSE_SUBCATEGORIES[expense.category] ? expense.category : "Other"; populateSubcategoryOptions("expenseCategory", "expenseSubcategory", "expenseSubcategoryOptions", false); $("expenseSubcategory").value = expense.subcategory; $("expenseSendTo").value = expense.sentTo; $("expenseFromAccount").value = expense.fromAccount; $("expenseReason").value = expense.reason; $("expenseDialogTitle").textContent = "Mark preplanned expenditure as paid"; $("expenseRecurringNote").textContent = "Planned for " + formatDate(expense.date) + ". Confirm the actual payment date and amount."; $("expenseRecurringNote").classList.remove("hidden"); syncExpenseEntryType(); openDialog("expenseDialog");
+  const expense = normalizeExpense(item); prepareNewDialog("expenseDialog"); $("expenseMarkPaidId").value = expense.id; $("expenseEntryType").value = "REGULAR"; $("expenseEntryType").disabled = true; $("expenseDate").value = todayIso(); $("expenseAmount").value = expense.amount; fillExpenseCategorySelect($("expenseCategory"), expense.category); fillExpenseSubcategorySelect($("expenseSubcategory"), expense.category, expense.subcategory); $("expenseSendTo").value = expense.sentTo; $("expenseFromAccount").value = expense.fromAccount; $("expenseReason").value = expense.reason; $("expenseDialogTitle").textContent = "Mark preplanned expenditure as paid"; $("expenseRecurringNote").textContent = "Planned for " + formatDate(expense.date) + ". Confirm the actual payment date and amount."; $("expenseRecurringNote").classList.remove("hidden"); syncExpenseEntryType(); openDialog("expenseDialog");
 }
 function openRecurringPayment(id) {
   const item = state.data.recurringExpenses.find(function (x) { return x.id === id; }); if (!item) return;
-  prepareNewDialog("expenseDialog"); $("expenseRecurringId").value = item.id; $("expenseEntryType").value = "REGULAR"; $("expenseEntryType").disabled = true; $("expenseDate").value = todayIso(); $("expenseAmount").value = Number(item.estimatedAmount || 0) || ""; $("expenseCategory").value = EXPENSE_SUBCATEGORIES[item.category] ? item.category : "Other"; populateSubcategoryOptions("expenseCategory", "expenseSubcategory", "expenseSubcategoryOptions", false); $("expenseSubcategory").value = item.subcategory || "General"; $("expenseSendTo").value = item.sentTo; $("expenseFromAccount").value = item.fromAccount; $("expenseReason").value = item.reason; $("expenseDialogTitle").textContent = "Mark “" + item.title + "” as paid"; $("expenseRecurringNote").textContent = "Due " + formatDate(item.nextDueDate) + ". You can change the actual amount or payment details before saving."; $("expenseRecurringNote").classList.remove("hidden"); syncExpenseEntryType(); openDialog("expenseDialog");
+  prepareNewDialog("expenseDialog"); $("expenseRecurringId").value = item.id; $("expenseEntryType").value = "REGULAR"; $("expenseEntryType").disabled = true; $("expenseDate").value = todayIso(); $("expenseAmount").value = Number(item.estimatedAmount || 0) || ""; fillExpenseCategorySelect($("expenseCategory"), item.category); fillExpenseSubcategorySelect($("expenseSubcategory"), item.category, item.subcategory || "General"); $("expenseSendTo").value = item.sentTo; $("expenseFromAccount").value = item.fromAccount; $("expenseReason").value = item.reason; $("expenseDialogTitle").textContent = "Mark “" + item.title + "” as paid"; $("expenseRecurringNote").textContent = "Due " + formatDate(item.nextDueDate) + ". You can change the actual amount or payment details before saving."; $("expenseRecurringNote").classList.remove("hidden"); syncExpenseEntryType(); openDialog("expenseDialog");
 }
 function editRecurringExpense(id) {
   const item = state.data.recurringExpenses.find(function (x) { return x.id === id; }); if (!item) return;
-  prepareNewDialog("recurringExpenseDialog"); $("recurringExpenseId").value = item.id; $("recurringExpenseTitle").value = item.title; $("recurringExpenseAmount").value = Number(item.estimatedAmount || 0) || ""; $("recurringExpenseFrequency").value = item.frequency; $("recurringExpenseDueDate").value = item.nextDueDate; $("recurringExpenseCategory").value = EXPENSE_SUBCATEGORIES[item.category] ? item.category : "Other"; populateSubcategoryOptions("recurringExpenseCategory", "recurringExpenseSubcategory", "recurringExpenseSubcategoryOptions", false); $("recurringExpenseSubcategory").value = item.subcategory || "General"; $("recurringExpenseSendTo").value = item.sentTo; $("recurringExpenseFromAccount").value = item.fromAccount; $("recurringExpenseReason").value = item.reason; $("recurringExpenseRemind").value = item.remindDays || "7,1,0";
+  prepareNewDialog("recurringExpenseDialog"); $("recurringExpenseId").value = item.id; $("recurringExpenseTitle").value = item.title; $("recurringExpenseAmount").value = Number(item.estimatedAmount || 0) || ""; $("recurringExpenseFrequency").value = item.frequency; $("recurringExpenseDueDate").value = item.nextDueDate; fillExpenseCategorySelect($("recurringExpenseCategory"), item.category); fillExpenseSubcategorySelect($("recurringExpenseSubcategory"), item.category, item.subcategory || "General"); $("recurringExpenseSendTo").value = item.sentTo; $("recurringExpenseFromAccount").value = item.fromAccount; $("recurringExpenseReason").value = item.reason; $("recurringExpenseRemind").value = item.remindDays || "7,1,0";
   const ids = String(item.recipientIds || "ALL").split(","); const everyone = ids.indexOf("ALL") >= 0; $("recurringNotifyEveryone").checked = everyone; $("recurringRecipientChecks").classList.toggle("hidden", everyone); renderRecurringRecipientChecks(ids); $("recurringExpenseDialogTitle").textContent = "Edit regular payment"; openDialog("recurringExpenseDialog");
 }
 function editIncome(id) {
@@ -1019,10 +1157,12 @@ function populateFilters() {
   fillMemberFilter($("incomeMemberFilter")); fillMemberFilter($("diaryWriterFilter"));
   const recipients = Array.from(new Set(state.data.expenses.map(function (x) { return normalizeExpense(x).sentTo; }).filter(Boolean))).sort();
   const accounts = Array.from(new Set(state.data.expenses.map(function (x) { return normalizeExpense(x).fromAccount; }).filter(Boolean))).sort();
-  const categories = Array.from(new Set(state.data.expenses.map(function (x) { return normalizeExpense(x).category; }).filter(Boolean))).sort();
-  const subcategories = Array.from(new Set(state.data.expenses.map(function (x) { return normalizeExpense(x).subcategory; }).filter(Boolean))).sort();
+  const categories = Array.from(new Set(activeExpenseCategories().map(function (category) { return category.name; }).concat(state.data.expenses.map(function (x) { return normalizeExpense(x).category; })).filter(Boolean)));
+  const configuredSubcategories = activeExpenseCategories().reduce(function (list, category) { return list.concat((category.subcategories || []).filter(function (subcategory) { return subcategory.active !== false; }).map(function (subcategory) { return subcategory.name; })); }, []);
+  const subcategories = Array.from(new Set(configuredSubcategories.concat(state.data.expenses.map(function (x) { return normalizeExpense(x).subcategory; })).filter(Boolean)));
   const incomeCats = Array.from(new Set(state.data.income.map(function (x) { return x.category; }))).sort();
   fillOptions($("expenseSendToFilter"), recipients, "All recipients"); fillOptions($("expenseAccountFilter"), accounts, "All accounts"); fillOptions($("expenseCategoryFilter"), categories, "All categories"); fillOptions($("expenseSubcategoryFilter"), subcategories, "All subcategories"); fillOptions($("incomeCategoryFilter"), incomeCats, "All categories");
+  fillExpenseCategorySelect($("expenseCategory"), $("expenseCategory").value); fillExpenseCategorySelect($("recurringExpenseCategory"), $("recurringExpenseCategory").value);
   fillMemberSelect($("incomeReceivedBy"), $("incomeReceivedBy").value || state.data.user.id); fillMemberSelect($("targetOwner"), $("targetOwner").value || state.data.user.id, true);
   renderRecipientChecks([]); renderRecurringRecipientChecks([]);
   const years = Array.from(new Set(state.data.experiences.map(function (x) { return String(x.experienceDate).slice(0,4); }))).filter(Boolean).sort().reverse(); const selectedYear = $("experienceYear").value; fillOptions($("experienceYear"), years, "All years"); $("experienceYear").value = years.indexOf(selectedYear) >= 0 ? selectedYear : "";
@@ -1073,7 +1213,45 @@ function renderActivity() {
 
 function normalizeExpense(item) { const entryType=String(item.entryType||"REGULAR").toUpperCase(); return Object.assign({}, item, { sentTo: item.sentTo || item.description || "", fromAccount: item.fromAccount || item.paymentMode || "", reason: item.reason || item.description || "", entryType: entryType, category: item.category || (entryType==="OLD"?"Old expenditure":entryType==="RECURRING"?"Regular payment":"Other"), subcategory: item.subcategory || "General", status: String(item.status || (entryType==="PREPLANNED"?"PLANNED":"PAID")).toUpperCase() }); }
 function filteredExpenses() { const month=$("expenseMonth").value,status=$("expenseStatusFilter").value,category=$("expenseCategoryFilter").value,subcategory=$("expenseSubcategoryFilter").value,recipient=$("expenseSendToFilter").value,account=$("expenseAccountFilter").value,q=normalize($("expenseSearch").value); return state.data.expenses.map(normalizeExpense).filter(function(x){return (!month||String(x.date).slice(0,7)===month)&&(!status||x.status===status)&&(!category||x.category===category)&&(!subcategory||x.subcategory===subcategory)&&(!recipient||x.sentTo===recipient)&&(!account||x.fromAccount===account)&&(!q||normalize([x.status,x.category,x.subcategory,x.sentTo,x.fromAccount,x.reason,x.date].join(" ")).includes(q));}); }
-function renderExpenses() { const items=filteredExpenses(),paid=items.filter(function(x){return x.status==="PAID";}),planned=items.filter(function(x){return x.status==="PLANNED";}),paidTotal=paid.reduce(function(s,x){return s+Number(x.amount||0);},0),plannedTotal=planned.reduce(function(s,x){return s+Number(x.amount||0);},0); $("expenseTotals").innerHTML='<span class="total-pill">'+plural(items.length,"entry","entries")+'</span><span class="total-pill">Paid '+h(money(paidTotal))+'</span>'+(planned.length?'<span class="total-pill planned">Preplanned '+h(money(plannedTotal))+'</span>':''); $("expenseRows").innerHTML=items.map(function(x){return '<tr class="expense-'+h(x.status.toLowerCase())+'"><td class="number"><strong>'+h(money(x.amount))+'</strong></td><td>'+h(formatDate(x.date))+'</td><td><span class="expense-status '+h(x.status.toLowerCase())+'">'+(x.status==="PLANNED"?'PREPLANNED':'PAID')+'</span></td><td><strong>'+h(x.category)+'</strong></td><td>'+h(x.subcategory)+'</td><td><strong>'+h(x.sentTo)+'</strong></td><td>'+h(x.fromAccount)+'</td><td class="expense-reason">'+h(x.reason)+'</td><td><div class="row-actions">'+(x.status==="PLANNED"?'<button class="tiny-button paid-button" data-action="mark-planned-paid" data-id="'+h(x.id)+'">✓ Paid</button>':'')+'<button class="tiny-button" data-action="edit-expense" data-id="'+h(x.id)+'">Edit</button>'+(mayDelete(x)?'<button class="danger-button" data-action="delete-expense" data-id="'+h(x.id)+'">×</button>':"")+'</div></td></tr>';}).join(""); $("expenseEmpty").classList.toggle("hidden",items.length>0); }
+function startInlineExpenseEdit(id) {
+  state.inlineExpenseId = id;
+  renderExpenses();
+  setTimeout(function () { const row = document.querySelector('tr[data-inline-expense-id="'+CSS.escape(id)+'"]'); const input = row && row.querySelector("input"); if (input) { input.focus(); input.select(); } }, 20);
+}
+function renderInlineExpenseRow(item) {
+  return '<tr class="expense-'+h(item.status.toLowerCase())+' inline-expense-row" data-inline-expense-id="'+h(item.id)+'">'+
+    '<td><input class="inline-expense-input number" data-inline-field="amount" type="number" min="0.01" step="0.01" value="'+h(item.amount)+'" aria-label="Amount"></td>'+
+    '<td><input class="inline-expense-input" data-inline-field="date" type="date" value="'+h(String(item.date).slice(0,10))+'" aria-label="Date"></td>'+
+    '<td><span class="expense-status '+h(item.status.toLowerCase())+'">'+(item.status==="PLANNED"?'PREPLANNED':'PAID')+'</span></td>'+
+    '<td><select class="inline-expense-input inline-expense-category" data-inline-field="category" aria-label="Category">'+expenseCategoryOptions(item.category,false)+'</select></td>'+
+    '<td><select class="inline-expense-input inline-expense-subcategory" data-inline-field="subcategory" aria-label="Subcategory">'+expenseSubcategoryOptions(item.category,item.subcategory,false)+'</select></td>'+
+    '<td><input class="inline-expense-input" data-inline-field="sentTo" maxlength="100" value="'+h(item.sentTo)+'" aria-label="Send to"></td>'+
+    '<td><input class="inline-expense-input" data-inline-field="fromAccount" maxlength="100" value="'+h(item.fromAccount)+'" aria-label="From account"></td>'+
+    '<td><textarea class="inline-expense-input inline-expense-reason" data-inline-field="reason" rows="2" maxlength="500" aria-label="Reason">'+h(item.reason)+'</textarea></td>'+
+    '<td><div class="inline-save-actions"><button class="tiny-button save-row-button" data-action="inline-save-expense" data-id="'+h(item.id)+'">✓ Save</button><button class="tiny-button" data-action="inline-cancel-expense" data-id="'+h(item.id)+'">Cancel</button></div></td></tr>';
+}
+function renderExpenseDisplayRow(item) {
+  return '<tr class="expense-'+h(item.status.toLowerCase())+'"><td class="number"><strong>'+h(money(item.amount))+'</strong></td><td>'+h(formatDate(item.date))+'</td><td><span class="expense-status '+h(item.status.toLowerCase())+'">'+(item.status==="PLANNED"?'PREPLANNED':'PAID')+'</span></td><td><strong>'+h(item.category)+'</strong></td><td>'+h(item.subcategory)+'</td><td><strong>'+h(item.sentTo)+'</strong></td><td>'+h(item.fromAccount)+'</td><td class="expense-reason">'+h(item.reason)+'</td><td><div class="row-actions">'+(item.status==="PLANNED"?'<button class="tiny-button paid-button" data-action="mark-planned-paid" data-id="'+h(item.id)+'">✓ Paid</button>':'')+'<button class="tiny-button direct-edit-button" data-action="inline-edit-expense" data-id="'+h(item.id)+'">✎ Edit row</button><button class="tiny-button" data-action="edit-expense" data-id="'+h(item.id)+'" title="Edit in a larger form">↗ Form</button>'+(mayDelete(item)?'<button class="danger-button" data-action="delete-expense" data-id="'+h(item.id)+'">×</button>':"")+'</div></td></tr>';
+}
+async function saveInlineExpenseRow(button) {
+  const row = button.closest("tr"), id = button.dataset.id;
+  const original = state.data.expenses.find(function (item) { return item.id === id; });
+  if (!row || !original) return;
+  const value = function (field) { const input = row.querySelector('[data-inline-field="'+field+'"]'); return input ? input.value.trim() : ""; };
+  const amount = value("amount"), date = value("date"), category = value("category"), subcategory = value("subcategory"), sentTo = value("sentTo"), fromAccount = value("fromAccount"), reason = value("reason");
+  if (!date || !category || !subcategory || !sentTo || !fromAccount || !reason || !(Number(amount) > 0)) return toast("Complete every row field and enter an amount greater than zero.", "error");
+  const normalized = normalizeExpense(original);
+  state.inlineExpenseId = "";
+  const result = await mutate("updateExpense", { id: id, date: date, amount: amount, category: category, subcategory: subcategory, sentTo: sentTo, fromAccount: fromAccount, reason: reason, entryType: normalized.status === "PLANNED" ? "PREPLANNED" : normalized.entryType, recurringId: normalized.recurringId || "" }, "Expenditure row updated.", null, "Saving expenditure row…");
+  if (!result) { state.inlineExpenseId = id; renderExpenses(); }
+}
+function renderExpenses() {
+  const items=filteredExpenses(),paid=items.filter(function(x){return x.status==="PAID";}),planned=items.filter(function(x){return x.status==="PLANNED";}),paidTotal=paid.reduce(function(s,x){return s+Number(x.amount||0);},0),plannedTotal=planned.reduce(function(s,x){return s+Number(x.amount||0);},0);
+  if (state.inlineExpenseId && !items.some(function (item) { return item.id === state.inlineExpenseId; })) state.inlineExpenseId = "";
+  $("expenseTotals").innerHTML='<span class="total-pill">'+plural(items.length,"entry","entries")+'</span><span class="total-pill">Paid '+h(money(paidTotal))+'</span>'+(planned.length?'<span class="total-pill planned">Preplanned '+h(money(plannedTotal))+'</span>':'');
+  $("expenseRows").innerHTML=items.map(function(item){return item.id===state.inlineExpenseId?renderInlineExpenseRow(item):renderExpenseDisplayRow(item);}).join("");
+  $("expenseEmpty").classList.toggle("hidden",items.length>0);
+}
 function renderRecurringExpenses() {
   const items = state.data.recurringExpenses || [];
   const overdue = items.filter(function (item) { return Number(item.daysUntil) < 0; }).length;
@@ -1159,6 +1337,7 @@ function renderAdmin() {
   $("settingMemoryPhotoLimit").value=memoryPhotoLimit();
   $("settingMemoryUploadPolicy").value=state.data.settings.memoryUploadPolicy==="MEMBERS_WITH_ACCESS"?"MEMBERS_WITH_ACCESS":"ADMIN_ONLY";
   $("settingMemoryPrintPages").value=String(memoryPrintPages());
+  const configuredCategories=expenseCategoryConfig(), activeCategories=configuredCategories.filter(function(category){return category.active!==false;}); $("adminExpenseCategorySummary").textContent=plural(configuredCategories.length,"category","categories")+" · "+activeCategories.length+" active";
   const backup=state.data.backupStatus||{}; $("automaticBackupStatus").textContent=backup.automatic?"● Monthly backup enabled":"● Monthly backup needs setup"; $("automaticBackupStatus").classList.toggle("success",!!backup.automatic); $("lastBackupText").textContent=backup.lastBackupAt?("Last backup: "+new Date(backup.lastBackupAt).toLocaleString("en-IN")+(backup.lastBackupName?" · "+backup.lastBackupName:"")):"No backup created yet."; $("backupFolderLink").classList.toggle("hidden",!backup.folderUrl); if(backup.folderUrl)$("backupFolderLink").href=backup.folderUrl;
   const labels={EXPENSES:"Exp",INCOME:"Income",TARGETS:"Targets",DATES:"Reminders",CALENDAR:"Calendar",PHOTOS:"Photos",EXPERIENCES:"Experiences",DIARY:"Diary"}; const items=state.data.adminMembers||[]; $("memberCount").textContent=plural(items.length,"person","people"); $("memberList").innerHTML=items.map(function(x){const access=x.role==="ADMIN"?"All sections":(x.permissions||[]).map(function(key){return labels[key]||key;}).join(", ")||"No sections";return '<div class="member-row"><span class="avatar">'+h(x.name.charAt(0).toUpperCase())+'</span><div><strong>'+h(x.name)+'</strong><small>@'+h(x.username)+'</small></div><div><strong>'+h(x.email||"No email")+'</strong><small>Access: '+h(access)+'</small></div><span class="role-chip">'+(x.role==="ADMIN"?"ADMIN":"MEMBER")+'</span><span class="active-chip '+(!x.active?'inactive':'')+'">'+(x.active?'● Active':'● Inactive')+'</span><div class="member-actions"><button class="tiny-button" data-action="edit-member" data-id="'+h(x.id)+'">Edit</button><button class="tiny-button" data-action="reset-pin" data-id="'+h(x.id)+'">New PIN</button></div></div>';}).join("");
 }

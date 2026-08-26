@@ -1,23 +1,23 @@
-# Family Dashboard v1.0.10
+# Family Dashboard v1.0.14
 
 A private, mobile-friendly dashboard for about 10 family members. The frontend runs on GitHub Pages. Google Apps Script supplies the protected backend, Google Sheets stores the records, Google Drive stores full photos, and Gmail sends reminders.
 
 ## What the family can use
 
-- Expenditure: use the exact `Amt (Rs.) / Date Paid / Send to / From Acct / Reason` format; add or edit one payment, bulk-paste up to 500 old records from Excel/Google Sheets, search, filter, export CSV, and view or print an inclusive From/To date-period report with its total.
-- Easier reading: expenditure and income tables use subtle alternating light-colour rows on screen; the dedicated expenditure printout uses matching light row bands.
+- Expenditure: add paid or preplanned expenditure with Category and Subcategory, then mark a planned item paid using its direct button. The original `Amt (Rs.) / Date Paid / Send to / From Acct / Reason` import remains supported for up to 500 old records. Filter by month, paid/preplanned status, category, subcategory, recipient, account or search text; export CSV; and view or print an inclusive From/To report with the same filters.
+- Easier reading: expenditure and income tables use alternating eye-soothing light-colour rows on screen, and the expenditure report prints the same row bands. Drag an Expenditure header edge to resize that dashboard column; drag report header edges in View to adjust widths before printing. Dashboard widths are remembered on that device.
 - Regular payments: add any monthly or yearly expenditure—such as electricity, maintenance, insurance, land/holding tax, subscriptions, school fees, or another item. Search schedules, receive email reminders, mark a due item as paid, and let the dashboard calculate its next due date automatically.
 - Income: add, edit, search, filter, print, and export CSV.
 - Targets: create family or personal targets and record contributions.
 - Reminders: birthdays, anniversaries, appointments, renewals, payments, or other dates; choose same-day and advance email reminders.
-- Sticky notes: open the HR-style centred Target / Reminder organiser from any page, add a note directly in its top form, choose a colour pill, and manage active cards with visible Keep open, Collapse, Edit, Completed and Delete controls. The whole organiser can minimize into its small floating launcher. Notes can still be dragged and resized. A pinned note is locked open above all other notes and dashboard fields—even after the organiser is minimized or closed. Unpin it to allow collapsing. Completed notes move to saved history and can be restored.
+- Sticky notes: unpinned notes automatically collapse into coloured side tabs when the organiser closes. Click a tab to open it temporarily; it auto-collapses again. Pin a note to keep it above other dashboard fields, drag its clearly marked **Move note** handle, resize from the bottom-right corner, or use **Auto-fit** for the best content-based size. Multiple typed lines remain visible. Floating notes include direct **Edit** and **Complete** buttons. Completed notes leave the active sheet and move to the separate **Sticky Note Diary** Sheet tab, where they can be restored or deleted.
 - Calendar: month view combining reminders, experiences, and diary entries.
 - Family Diary: daily entries with mood, writer, tags, month filter, and full-text search.
 - Photos: upload, resize, caption, search, view full-size, and store privately in Drive.
 - Experiences: preserve trips, celebrations, lessons, and memories with date, place, tags, and writer name.
 - Search: one search box across expenditure, income, targets, reminders, sticky notes, diary, photos, and experiences.
 - Administration: add about 10 members, choose exactly which sections each member can view and use, set Member/Admin roles, activate/deactivate access, reset PINs, and create or inspect private monthly Sheet backups.
-- Login convenience: optionally save the username on the current device; the PIN is never saved. The current version is shown on the login page and dashboard.
+- Login safety and convenience: optionally save only the username; the PIN and session are never permanently saved. The dashboard signs out after five inactive minutes, leaving/closing the page clears the browser session, and the backend independently rejects stale sessions. The login page includes **Repair browser cache / session**. Separate live `FE` and `BE` versions are shown on both the login page and inside the dashboard.
 - Overview visibility: shows all active family members, the total number of saved reminders, and how many fall within the next 30 days.
 
 Each active member sees only the sections enabled for them by an administrator. Access is enforced by the backend as well as hidden in the interface. Within an enabled section, members can see shared information and add or edit records. A member can delete an item they originally added; an administrator can delete any item and manage users/settings.
@@ -78,7 +78,7 @@ Running setup automatically creates all Sheet tabs, the private Drive photo fold
 
 1. In Apps Script click **Deploy → New deployment**.
 2. Click the gear beside **Select type** and choose **Web app**.
-3. Description: `Family Dashboard v1.0.10`.
+3. Description: `Family Dashboard v1.0.14`.
 4. **Execute as:** `Me`.
 5. **Who has access:** `Anyone`.
 6. Click **Deploy**, approve if asked, and copy the Web App URL ending in `/exec`.
@@ -94,13 +94,9 @@ Running setup automatically creates all Sheet tabs, the private Drive photo fold
    - `styles.css`
    - `app.js`
    - `config.js`
-3. Edit `config.js` on GitHub. Replace:
-
-   ```js
-   API_URL: "PASTE_YOUR_APPS_SCRIPT_WEB_APP_URL_HERE"
-   ```
-
-   with the `/exec` URL copied in Part 2. Keep the quotes and comma.
+3. This repaired package already has the Family Dashboard Apps Script `/exec`
+   URL in `config.js`. Upload that file unchanged. Only replace the URL if you
+   deliberately create a different Apps Script deployment later.
 4. Open the repository’s **Settings → Pages**.
 5. Under **Build and deployment**, choose **Deploy from a branch**, branch `main`, folder `/ (root)`, then click **Save**.
 6. Wait about 1–3 minutes and open the Pages address, normally:
@@ -145,7 +141,7 @@ To test email immediately, add a reminder for today with **Same day only**, then
 
 - The GitHub repository contains only interface code—no family records, PINs, or photos.
 - PINs are salted and hashed in the Sheet; the original PIN is not stored.
-- Sign-in sessions expire after 7 days and are invalidated after a PIN reset/deactivation.
+- Sign-in sessions use tab-only browser storage, automatically expire after 5 inactive minutes, and are invalidated after a PIN reset/deactivation. Leaving or closing the dashboard clears the local session and sends a best-effort server sign-out; the backend timeout remains the final safety check.
 - Repeated failed sign-in attempts are temporarily blocked.
 - Full photos remain in a private Drive folder and are returned only after session validation.
 - Only small photo previews are stored in the Sheet to make the gallery fast.
@@ -165,7 +161,7 @@ Frontend change:
 Backend change:
 
 1. Replace `Code.gs` in Apps Script.
-2. Run `setupFamilyDashboard()` once. Version 1.0.10 safely preserves existing rows, adds sticky-note storage plus any previously missing regular-payment or backup storage, appends missing columns, and treats older member/reminder rows without an `active` value as active.
+2. Run `setupFamilyDashboard()` once. Version 1.0.14 preserves existing rows, appends the new session/category/subcategory/status fields, creates the separate `StickyNoteDiary` sheet, and safely migrates earlier completed sticky notes into it.
 3. Open **Deploy → Manage deployments → Edit**.
 4. Choose **New version** and click **Deploy**. The `/exec` URL normally remains the same.
 
@@ -179,6 +175,7 @@ Backend change:
 | Email did not arrive | Confirm the member has an email, the reminder includes that member, the daily trigger exists, and check Apps Script Executions/`NotificationLog`. |
 | Photo upload fails | Try a normal JPG/PNG/WebP. The browser resizes it, but the processed full image must remain under 3 MB. |
 | Old page still appears | Use a hard refresh or test in an incognito window. |
+| Login/session still behaves like the old version | On the login page click **Repair browser cache / session**, then confirm both labels show `FE v1.0.14` and `BE v1.0.14`. |
 | Administrator PIN was lost | Run `resetFirstAdminPin()` manually in Apps Script and read the execution result/log. |
 
 ## Backup

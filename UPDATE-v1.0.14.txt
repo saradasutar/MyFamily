@@ -1,0 +1,46 @@
+FAMILY DASHBOARD v1.0.14 — UPDATE ORDER
+
+Your existing family records are preserved. Follow this order exactly.
+
+1. UPDATE THE GOOGLE APPS SCRIPT BACKEND
+
+   a. Open your existing Family Dashboard Apps Script project.
+   b. Replace all text in Code.gs with apps-script/Code.gs from this package.
+   c. Save.
+   d. Select setupFamilyDashboard and click Run once.
+      This adds the new fields and creates the separate StickyNoteDiary sheet.
+   e. Open Deploy > Manage deployments.
+   f. Click Edit (pencil), choose New version, and click Deploy.
+   g. Keep the same /exec URL.
+
+2. UPDATE THE GITHUB PAGES FRONTEND
+
+   Upload/replace these four files in the ROOT of your MyFamily repository:
+
+   - index.html
+   - styles.css
+   - app.js
+   - config.js
+
+   The supplied config.js already contains your existing Apps Script /exec URL.
+
+3. CLEAR THE OLD BROWSER SESSION
+
+   a. Open https://saradasutar.github.io/MyFamily/
+   b. On the login page click Repair browser cache / session once.
+   c. The page reloads automatically.
+   d. Confirm the login page shows FE v1.0.14 and BE v1.0.14.
+   e. Sign in again.
+
+IMPORTANT TESTS AFTER UPDATE
+
+   - Do nothing for 5 minutes: the dashboard must sign out.
+   - Close or leave the page and return: login must be required.
+   - Add a sticky note, close the organiser: the unpinned note becomes a side tab.
+   - Pin it, drag Move note, resize its bottom-right corner, and try Auto-fit.
+   - Complete it: it moves to Sticky Note Diary.
+   - Add a preplanned expenditure, filter it, then click Paid.
+   - Add a regular monthly/yearly payment with Category and Subcategory.
+
+If FE is 1.0.14 but BE is older, the Apps Script New version was not deployed.
+If BE is 1.0.14 but FE is older, replace all four GitHub frontend files and use Repair browser cache / session.

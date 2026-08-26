@@ -2,7 +2,7 @@
 
 const CONFIG = window.FAMILY_DASHBOARD_CONFIG || {};
 const PLACEHOLDER_URL = "PASTE_YOUR_APPS_SCRIPT_WEB_APP_URL_HERE";
-const FRONTEND_VERSION = "1.0.14";
+const FRONTEND_VERSION = "1.0.15";
 const SAVED_USERNAME_KEY = "familyDashboardUsername";
 const SESSION_TOKEN_KEY = "familyDashboardToken";
 const IDLE_TIMEOUT_MS = 5 * 60 * 1000;
@@ -31,7 +31,7 @@ const state = {
 const pendingRequests = new Map();
 const viewTitles = {
   home: "Family overview", expenses: "Expenditure", income: "Income", targets: "Family targets",
-  dates: "Reminders", calendar: "Family calendar", diary: "Family diary", photos: "Family photos",
+  dates: "Reminders", calendar: "Family calendar", diary: "Family diary", photos: "Family memories",
   experiences: "Family experiences", admin: "Administration"
 };
 const viewModules = { expenses: "EXPENSES", income: "INCOME", targets: "TARGETS", dates: "DATES", calendar: "CALENDAR", diary: "DIARY", photos: "PHOTOS", experiences: "EXPERIENCES" };
@@ -73,6 +73,12 @@ function memberName(id) {
 function isAdmin() { return !!(state.data && state.data.user && state.data.user.role === "ADMIN"); }
 function hasModuleAccess(module) { return isAdmin() || !!(state.data && state.data.user && (state.data.user.permissions || []).indexOf(module) >= 0); }
 function mayDelete(item) { return isAdmin() || (item && item.createdBy === state.data.user.id); }
+function memoryPhotoLimit() { return Math.max(1, Math.min(24, Number(state.data && state.data.settings && state.data.settings.memoryPhotoLimit) || 12)); }
+function memoryPrintPages() { return Number(state.data && state.data.settings && state.data.settings.memoryPrintPages) === 2 ? 2 : 1; }
+function canUploadMemories() {
+  if (isAdmin()) return true;
+  return !!(state.data && state.data.settings && state.data.settings.memoryUploadPolicy === "MEMBERS_WITH_ACCESS" && hasModuleAccess("PHOTOS"));
+}
 function formatDate(iso) {
   if (!iso) return "—";
   const parts = String(iso).slice(0, 10).split("-");
@@ -372,6 +378,7 @@ function bindFilters() {
   ["incomeMonth", "incomeCategoryFilter", "incomeMemberFilter", "incomeSearch"].forEach(function (id) { $(id).addEventListener("input", renderIncome); });
   ["dateTypeFilter", "dateSearch"].forEach(function (id) { $(id).addEventListener("input", renderDates); });
   $("photoSearch").addEventListener("input", renderPhotos);
+  $("printMemories").addEventListener("click", openMemoryPrintView);
   ["experienceYear", "experienceSearch"].forEach(function (id) { $(id).addEventListener("input", renderExperiences); });
   ["diaryMonth", "diaryWriterFilter", "diarySearch"].forEach(function (id) { $(id).addEventListener("input", renderDiary); });
   $("globalSearch").addEventListener("input", renderGlobalSearch);
@@ -858,7 +865,14 @@ async function saveMember(event) {
 }
 async function saveSettings(event) {
   event.preventDefault();
-  await mutate("saveSettings", { familyName: $("settingFamilyName").value.trim(), currency: $("settingCurrency").value, timezone: $("settingTimezone").value.trim() }, "Family settings updated.");
+  await mutate("saveSettings", {
+    familyName: $("settingFamilyName").value.trim(),
+    currency: $("settingCurrency").value,
+    timezone: $("settingTimezone").value.trim(),
+    memoryPhotoLimit: Number($("settingMemoryPhotoLimit").value),
+    memoryUploadPolicy: $("settingMemoryUploadPolicy").value,
+    memoryPrintPages: Number($("settingMemoryPrintPages").value)
+  }, "Family settings updated.");
 }
 async function createBackupNow() {
   const result = await mutate("createBackupNow", {}, "Dashboard backup created.", null, "Creating a private Drive backup…");
@@ -1083,7 +1097,45 @@ function renderTargets() { const items=state.data.targets,total=items.reduce(fun
 function renderDates() { const type=$("dateTypeFilter").value,q=normalize($("dateSearch").value); const items=state.data.importantDates.filter(function(x){return (!type||x.eventType===type)&&(!q||normalize([x.title,x.eventType,x.notes].join(" ")).includes(q));}); $("dateGrid").innerHTML=items.map(function(x){const p=dayParts(x.nextOccurrence||x.eventDate); return '<article class="date-card"><div class="date-tile"><strong>'+p.day+'</strong><span>'+p.month+'</span></div><div><h3>'+h(x.title)+'</h3><p>'+h(x.eventType)+' · '+h(formatDate(x.nextOccurrence||x.eventDate))+'</p><p>Email: '+h(reminderText(x.remindDays))+'</p>'+(x.repeatYearly?'<span class="repeat-chip">↻ Every year</span>':"")+'</div><div class="row-actions"><button class="tiny-button" data-action="edit-date" data-id="'+h(x.id)+'">Edit</button>'+(mayDelete(x)?'<button class="danger-button" data-action="delete-date" data-id="'+h(x.id)+'">×</button>':"")+'</div></article>';}).join(""); $("dateEmpty").classList.toggle("hidden",items.length>0); }
 function reminderText(days) { return String(days||"").split(",").map(function(d){return Number(d)===0?"same day":d+"d before";}).join(", "); }
 
-function renderPhotos() { const q=normalize($("photoSearch").value); const items=state.data.photos.filter(function(x){return !q||normalize([x.title,x.caption,memberName(x.uploadedBy)].join(" ")).includes(q);}); $("photoGrid").innerHTML=items.map(function(x){return '<article class="photo-card"><figure data-action="view-photo" data-id="'+h(x.id)+'"><img src="'+h(x.thumbData)+'" alt="'+h(x.title)+'" loading="lazy">'+(mayDelete({createdBy:x.uploadedBy})?'<button class="photo-delete" data-action="delete-photo" data-id="'+h(x.id)+'" aria-label="Delete photo">×</button>':"")+'</figure><figcaption><h3>'+h(x.title)+'</h3>'+(x.caption?'<p>'+h(x.caption)+'</p>':"")+'<div class="photo-meta"><span>'+h(formatDate(x.takenDate||x.createdAt))+'</span><span>by '+h(memberName(x.uploadedBy))+'</span></div></figcaption></article>';}).join(""); $("photoEmpty").classList.toggle("hidden",items.length>0); }
+function renderPhotos() {
+  const q=normalize($("photoSearch").value);
+  const allPhotos=state.data.photos||[], limit=memoryPhotoLimit(), count=allPhotos.length;
+  const items=allPhotos.filter(function(x){return !q||normalize([x.title,x.caption,memberName(x.uploadedBy)].join(" ")).includes(q);});
+  const usage=$("photoUsageText"), upload=$("sharePhotoButton"), print=$("printMemories");
+  usage.textContent=count+" of "+limit+" memory photos used"+(count>limit?" · remove "+(count-limit)+" to resume uploads":"");
+  usage.classList.toggle("limit-reached",count>=limit);
+  upload.classList.toggle("hidden",!canUploadMemories());
+  upload.disabled=count>=limit;
+  upload.textContent=count>=limit?"Memory limit reached":"＋ Add memory photo";
+  upload.title=count>=limit?"Delete a memory or ask the administrator to increase the limit.":"Add a family memory";
+  print.classList.toggle("hidden",!allPhotos.length);
+  $("photoDialogLimitText").textContent=count+" of "+limit+" memory photos are currently saved.";
+  $("photoGrid").innerHTML=items.map(function(x){return '<article class="photo-card"><figure data-action="view-photo" data-id="'+h(x.id)+'"><img src="'+h(x.thumbData)+'" alt="'+h(x.title)+'" loading="lazy">'+(mayDelete({createdBy:x.uploadedBy})?'<button class="photo-delete" data-action="delete-photo" data-id="'+h(x.id)+'" aria-label="Delete photo">×</button>':"")+'</figure><figcaption><h3>'+h(x.title)+'</h3>'+(x.caption?'<p>'+h(x.caption)+'</p>':"")+'<div class="photo-meta"><span>'+h(formatDate(x.takenDate||x.createdAt))+'</span><span>by '+h(memberName(x.uploadedBy))+'</span></div></figcaption></article>';}).join("");
+  $("photoEmpty").classList.toggle("hidden",items.length>0);
+}
+
+function openMemoryPrintView() {
+  const query=normalize($("photoSearch").value);
+  const items=(state.data.photos||[]).filter(function(x){return !query||normalize([x.title,x.caption,memberName(x.uploadedBy)].join(" ")).includes(query);});
+  if (!items.length) return toast("No family memories are available to print.","error");
+  const configuredPages=memoryPrintPages(), pageCount=Math.min(configuredPages,items.length), perPage=Math.ceil(items.length/pageCount);
+  const familyName=(state.data.settings&&state.data.settings.familyName)||"Our Family Hub";
+  const pages=[];
+  for(let pageIndex=0;pageIndex<pageCount;pageIndex++){
+    const pageItems=items.slice(pageIndex*perPage,(pageIndex+1)*perPage);
+    if(!pageItems.length)continue;
+    const columns=pageItems.length<=4?2:(pageItems.length<=9?3:4), rows=Math.ceil(pageItems.length/columns);
+    const cards=pageItems.map(function(item){return '<article class="memory-card"><img src="'+h(item.thumbData)+'" alt="'+h(item.title)+'"><div><h2>'+h(item.title)+'</h2><p>'+h(item.caption||"")+'</p><small>'+h(formatDate(item.takenDate||item.createdAt))+' · '+h(memberName(item.uploadedBy))+'</small></div></article>';}).join("");
+    pages.push('<section class="memory-print-page" style="--memory-columns:'+columns+';--memory-rows:'+rows+'"><header><span>FAMILY MEMORIES</span><h1>'+h(familyName)+'</h1><p>Selected moments worth remembering</p></header><div class="memory-print-grid">'+cards+'</div><footer><span>'+h(plural(items.length,"memory","memories"))+'</span><span>Page '+(pageIndex+1)+' of '+pageCount+'</span></footer></section>');
+  }
+  const reportWindow=window.open("","familyMemoryAlbum","width=980,height=850");
+  if(!reportWindow)return toast("Allow pop-ups for this page to view or print family memories.","error");
+  reportWindow.document.open();
+  reportWindow.document.write("<!doctype html><html><head><meta charset='utf-8'><title>"+h(familyName)+" · Family Memories</title><style>"+
+    "@page{size:A4 portrait;margin:10mm}*{box-sizing:border-box}body{margin:0;padding:62px 18px 24px;color:#25243b;background:#eceaf4;font:12px Arial,sans-serif;-webkit-print-color-adjust:exact;print-color-adjust:exact}.screen-actions{position:fixed;left:0;right:0;top:0;z-index:5;display:flex;justify-content:center;gap:10px;padding:12px;background:#2d2748}.screen-actions button{border:0;border-radius:9px;padding:10px 16px;font-weight:800;cursor:pointer}.print{color:white;background:#7258d5}.close{color:#35314e;background:white}.memory-print-page{width:190mm;height:277mm;margin:0 auto 20px;padding:9mm;display:grid;grid-template-rows:auto minmax(0,1fr) auto;gap:5mm;background:#fff;border-radius:8px;box-shadow:0 8px 30px rgba(31,27,58,.14);page-break-after:always;break-after:page;overflow:hidden}.memory-print-page:last-child{page-break-after:auto;break-after:auto}.memory-print-page header{padding:5mm;border-radius:6mm;color:white;background:linear-gradient(125deg,#5d45b8,#7c62d9 58%,#51aeb5)}header span{font-size:9px;font-weight:800;letter-spacing:2px}header h1{margin:3px 0 1px;font-size:22px}header p{margin:0;color:rgba(255,255,255,.82)}.memory-print-grid{min-height:0;display:grid;grid-template-columns:repeat(var(--memory-columns),minmax(0,1fr));grid-template-rows:repeat(var(--memory-rows),minmax(0,1fr));gap:4mm}.memory-card{min-height:0;display:grid;grid-template-rows:minmax(0,1fr) auto;border:1px solid #dedbea;border-radius:4mm;overflow:hidden;background:#faf9fe}.memory-card img{width:100%;height:100%;min-height:0;display:block;object-fit:cover}.memory-card div{padding:3mm}.memory-card h2{margin:0 0 1mm;font-size:12px}.memory-card p{margin:0 0 1mm;min-height:12px;color:#626277;font-size:9px;line-height:1.3}.memory-card small{color:#8b899c;font-size:8px}.memory-print-page footer{display:flex;justify-content:space-between;color:#807e91;font-size:9px}@media print{body{padding:0;background:white}.screen-actions{display:none}.memory-print-page{margin:0;width:190mm;height:277mm;border-radius:0;box-shadow:none}}"+
+    "</style></head><body><div class='screen-actions'><button class='close' type='button' onclick='window.close()'>Close view</button><button class='print' type='button' onclick='window.print()'>Print "+pageCount+" page"+(pageCount===1?"":"s")+"</button></div>"+pages.join("")+"</body></html>");
+  reportWindow.document.close();
+}
 async function viewPhoto(id) { const item=state.data.photos.find(function(x){return x.id===id;}); if(!item)return; $("viewerTitle").textContent=item.title; $("viewerMeta").textContent=formatDate(item.takenDate||item.createdAt)+" · by "+memberName(item.uploadedBy); $("viewerText").textContent=item.caption||""; $("viewerImage").classList.add("hidden"); $("viewerLoading").classList.remove("hidden"); openDialog("photoViewer"); try{const result=await api("getPhoto",{id:id}); $("viewerImage").src=result.dataUrl; $("viewerImage").classList.remove("hidden"); $("viewerLoading").classList.add("hidden");}catch(error){if(!handleSessionError(error))$("viewerLoading").textContent=error.message;} }
 
 function renderExperiences() { const year=$("experienceYear").value,q=normalize($("experienceSearch").value); const items=state.data.experiences.filter(function(x){return (!year||String(x.experienceDate).slice(0,4)===year)&&(!q||normalize([x.title,x.place,x.story,x.tags,memberName(x.createdBy)].join(" ")).includes(q));}); $("experienceGrid").innerHTML=items.map(function(x){const tags=String(x.tags||"").split(",").map(function(t){return t.trim();}).filter(Boolean);return '<article class="experience-card"><div class="experience-meta"><span>'+h(formatDate(x.experienceDate))+'</span>'+(x.place?'<span>⌖ '+h(x.place)+'</span>':"")+'</div><h3>'+h(x.title)+'</h3><p class="story">'+h(x.story)+'</p><div class="tag-list">'+tags.map(function(t){return '<span class="tag">'+h(t)+'</span>';}).join("")+'</div><div class="experience-footer"><span class="writer">Written by '+h(memberName(x.createdBy))+'</span><div class="row-actions"><button class="tiny-button" data-action="edit-experience" data-id="'+h(x.id)+'">Edit</button>'+(mayDelete(x)?'<button class="danger-button" data-action="delete-experience" data-id="'+h(x.id)+'">×</button>':"")+'</div></div></article>';}).join(""); $("experienceEmpty").classList.toggle("hidden",items.length>0); }
@@ -1104,6 +1156,9 @@ function renderCalendar() {
 
 function renderAdmin() {
   $("settingFamilyName").value=state.data.settings.familyName||""; $("settingCurrency").value=state.data.settings.currency||"INR"; $("settingTimezone").value=state.data.settings.timezone||"Asia/Kolkata";
+  $("settingMemoryPhotoLimit").value=memoryPhotoLimit();
+  $("settingMemoryUploadPolicy").value=state.data.settings.memoryUploadPolicy==="MEMBERS_WITH_ACCESS"?"MEMBERS_WITH_ACCESS":"ADMIN_ONLY";
+  $("settingMemoryPrintPages").value=String(memoryPrintPages());
   const backup=state.data.backupStatus||{}; $("automaticBackupStatus").textContent=backup.automatic?"● Monthly backup enabled":"● Monthly backup needs setup"; $("automaticBackupStatus").classList.toggle("success",!!backup.automatic); $("lastBackupText").textContent=backup.lastBackupAt?("Last backup: "+new Date(backup.lastBackupAt).toLocaleString("en-IN")+(backup.lastBackupName?" · "+backup.lastBackupName:"")):"No backup created yet."; $("backupFolderLink").classList.toggle("hidden",!backup.folderUrl); if(backup.folderUrl)$("backupFolderLink").href=backup.folderUrl;
   const labels={EXPENSES:"Exp",INCOME:"Income",TARGETS:"Targets",DATES:"Reminders",CALENDAR:"Calendar",PHOTOS:"Photos",EXPERIENCES:"Experiences",DIARY:"Diary"}; const items=state.data.adminMembers||[]; $("memberCount").textContent=plural(items.length,"person","people"); $("memberList").innerHTML=items.map(function(x){const access=x.role==="ADMIN"?"All sections":(x.permissions||[]).map(function(key){return labels[key]||key;}).join(", ")||"No sections";return '<div class="member-row"><span class="avatar">'+h(x.name.charAt(0).toUpperCase())+'</span><div><strong>'+h(x.name)+'</strong><small>@'+h(x.username)+'</small></div><div><strong>'+h(x.email||"No email")+'</strong><small>Access: '+h(access)+'</small></div><span class="role-chip">'+(x.role==="ADMIN"?"ADMIN":"MEMBER")+'</span><span class="active-chip '+(!x.active?'inactive':'')+'">'+(x.active?'● Active':'● Inactive')+'</span><div class="member-actions"><button class="tiny-button" data-action="edit-member" data-id="'+h(x.id)+'">Edit</button><button class="tiny-button" data-action="reset-pin" data-id="'+h(x.id)+'">New PIN</button></div></div>';}).join("");
 }

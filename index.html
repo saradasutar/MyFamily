@@ -6,7 +6,7 @@
   <meta name="theme-color" content="#5743a8">
   <meta name="description" content="Private family dashboard for expenses, goals, important dates and photos.">
   <title>Our Family Hub</title>
-  <link rel="stylesheet" href="styles.css?v=1.0.14">
+  <link rel="stylesheet" href="styles.css?v=1.0.15">
 </head>
 <body>
   <div class="ambient ambient-one"></div>
@@ -39,8 +39,8 @@
         </label>
         <div class="login-options">
           <label class="remember-row"><input id="rememberUsername" type="checkbox" checked> Save username on this device</label>
-          <span class="version-pair"><b id="loginFrontendVersion">FE v1.0.14</b><b id="loginBackendVersion">BE checking…</b></span>
-          <span id="loginVersion" class="legacy-version hidden" aria-hidden="true">Version 1.0.14</span>
+          <span class="version-pair"><b id="loginFrontendVersion">FE v1.0.15</b><b id="loginBackendVersion">BE checking…</b></span>
+          <span id="loginVersion" class="legacy-version hidden" aria-hidden="true">Version 1.0.15</span>
         </div>
         <button class="primary-button wide" type="submit">Sign in securely</button>
         <button id="repairSessionButton" class="repair-session-button" type="button">↻ Repair browser cache / session</button>
@@ -57,8 +57,8 @@
         <div class="brand-mark small">FH</div>
         <div>
           <strong id="sidebarFamilyName">Our Family Hub</strong>
-          <span class="sidebar-version-pair"><b id="sidebarFrontendVersion">FE v1.0.14</b><b id="sidebarBackendVersion">BE checking…</b></span>
-          <b id="sidebarVersion" class="legacy-version hidden" aria-hidden="true">v1.0.14</b>
+          <span class="sidebar-version-pair"><b id="sidebarFrontendVersion">FE v1.0.15</b><b id="sidebarBackendVersion">BE checking…</b></span>
+          <b id="sidebarVersion" class="legacy-version hidden" aria-hidden="true">v1.0.15</b>
         </div>
       </div>
       <nav class="main-nav" aria-label="Main navigation">
@@ -69,7 +69,7 @@
         <button class="nav-button" data-view="dates" data-module="DATES"><span>◫</span> Reminders</button>
         <button class="nav-button" data-view="calendar" data-module="CALENDAR"><span>▦</span> Calendar</button>
         <button class="nav-button" data-view="diary" data-module="DIARY"><span>☷</span> Family diary</button>
-        <button class="nav-button" data-view="photos" data-module="PHOTOS"><span>▧</span> Family photos</button>
+        <button class="nav-button" data-view="photos" data-module="PHOTOS"><span>▧</span> Family memories</button>
         <button class="nav-button" data-view="experiences" data-module="EXPERIENCES"><span>✦</span> Experiences</button>
         <button id="adminNav" class="nav-button hidden" data-view="admin"><span>⚙</span> Administration</button>
       </nav>
@@ -227,8 +227,8 @@
 
         <section id="view-photos" class="view">
           <div class="section-toolbar">
-            <div><p class="section-intro">A private family gallery. Photos stay in the owner's Google Drive.</p></div>
-            <button class="primary-button" data-open="photoDialog">＋ Share a photo</button>
+            <div><p class="section-intro">A private collection of selected family memories. Photos stay in the owner's Google Drive.</p><p id="photoUsageText" class="memory-usage">0 of 12 memory photos used</p></div>
+            <div class="memory-toolbar-actions"><button id="printMemories" class="secondary-button" type="button">▧ View &amp; print memories</button><button id="sharePhotoButton" class="primary-button" data-open="photoDialog">＋ Add memory photo</button></div>
           </div>
           <div class="filter-bar photo-filter"><label class="search-label">Search photos<input id="photoSearch" type="search" placeholder="Title, caption or member"></label></div>
           <div id="photoGrid" class="photo-grid"></div>
@@ -266,6 +266,12 @@
               <form id="settingsForm" class="stack-form compact-form">
                 <label>Family dashboard name<input id="settingFamilyName" required maxlength="60"></label>
                 <div class="two-fields"><label>Currency<select id="settingCurrency"><option value="INR">₹ INR</option><option value="USD">$ USD</option><option value="EUR">€ EUR</option><option value="GBP">£ GBP</option></select></label><label>Time zone<input id="settingTimezone" required placeholder="Asia/Kolkata"></label></div>
+                <fieldset class="memory-admin-settings"><legend>Family Memories control</legend>
+                  <label>Maximum photos<input id="settingMemoryPhotoLimit" type="number" min="1" max="24" step="1" required></label>
+                  <label>Who can add photos<select id="settingMemoryUploadPolicy"><option value="ADMIN_ONLY">Administrators only</option><option value="MEMBERS_WITH_ACCESS">Members having Photos access</option></select></label>
+                  <label>Printable album length<select id="settingMemoryPrintPages"><option value="1">Fit into 1 page</option><option value="2">Fit into 2 pages</option></select></label>
+                  <small>Changing the maximum never deletes existing memories. New uploads stop when the limit is reached.</small>
+                </fieldset>
                 <button class="secondary-button" type="submit">Save settings</button>
               </form>
             </article>
@@ -447,12 +453,12 @@
 
   <dialog id="photoDialog" class="modal">
     <form id="photoForm" method="dialog">
-      <div class="modal-head"><div><p class="eyebrow">MEMORY</p><h3>Share a family photo</h3></div><button class="modal-close" type="button" data-close>×</button></div>
+      <div class="modal-head"><div><p class="eyebrow">MEMORY</p><h3>Add a family memory</h3><small id="photoDialogLimitText">Selected memories are controlled by the administrator.</small></div><button class="modal-close" type="button" data-close>×</button></div>
       <label class="upload-drop"><input id="photoFile" type="file" accept="image/jpeg,image/png,image/webp" required><span>▧</span><strong>Choose a photo</strong><small>JPG, PNG or WebP · automatically resized for faster sharing</small></label>
       <img id="photoPreview" class="photo-preview hidden" alt="Selected photo preview">
       <label>Title<input id="photoTitle" required maxlength="80" placeholder="e.g. Sunday lunch together"></label>
       <div class="two-fields"><label>Photo date<input id="photoTakenDate" type="date"></label><label>Caption<input id="photoCaption" maxlength="180" placeholder="A short memory"></label></div>
-      <div class="modal-actions"><button type="button" class="secondary-button" data-close>Cancel</button><button type="submit" class="primary-button">Share photo</button></div>
+      <div class="modal-actions"><button type="button" class="secondary-button" data-close>Cancel</button><button type="submit" class="primary-button">Save as memory</button></div>
     </form>
   </dialog>
 
@@ -537,7 +543,7 @@
   <div id="loadingOverlay" class="loading-overlay hidden"><div class="spinner"></div><p id="loadingText">Working…</p></div>
   <div id="toastRegion" class="toast-region" aria-live="polite"></div>
 
-  <script src="config.js?v=1.0.14"></script>
-  <script src="app.js?v=1.0.14"></script>
+  <script src="config.js?v=1.0.15"></script>
+  <script src="app.js?v=1.0.15"></script>
 </body>
 </html>

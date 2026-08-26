@@ -2,11 +2,14 @@
 
 const CONFIG = window.FAMILY_DASHBOARD_CONFIG || {};
 const PLACEHOLDER_URL = "PASTE_YOUR_APPS_SCRIPT_WEB_APP_URL_HERE";
-const FRONTEND_VERSION = "1.0.13";
+const FRONTEND_VERSION = "1.0.14";
 const SAVED_USERNAME_KEY = "familyDashboardUsername";
-const EXPENSE_COLUMN_WIDTHS_KEY = "familyDashboardExpenseColumnWidths";
+const SESSION_TOKEN_KEY = "familyDashboardToken";
+const IDLE_TIMEOUT_MS = 5 * 60 * 1000;
+const KEEP_ALIVE_INTERVAL_MS = 2 * 60 * 1000;
+const EXPENSE_COLUMN_WIDTHS_KEY = "familyDashboardExpenseColumnWidthsV2";
 const state = {
-  token: localStorage.getItem("familyDashboardToken") || "",
+  token: sessionStorage.getItem(SESSION_TOKEN_KEY) || "",
   data: null,
   view: "home",
   calendarCursor: new Date(new Date().getFullYear(), new Date().getMonth(), 1),
@@ -17,7 +20,13 @@ const state = {
   stickyLayoutTimers: new Map(),
   stickyLauncherTimer: null,
   backendVersion: "Checking…",
-  expenseResize: null
+  expenseResize: null,
+  idleTimer: null,
+  lastActivityResetAt: 0,
+  lastKeepAliveAt: 0,
+  stickyResize: null,
+  stickySideOpenId: "",
+  stickySideTimer: null
 };
 const pendingRequests = new Map();
 const viewTitles = {
@@ -27,6 +36,20 @@ const viewTitles = {
 };
 const viewModules = { expenses: "EXPENSES", income: "INCOME", targets: "TARGETS", dates: "DATES", calendar: "CALENDAR", diary: "DIARY", photos: "PHOTOS", experiences: "EXPERIENCES" };
 const currencySymbols = { INR: "₹", USD: "$", EUR: "€", GBP: "£" };
+const EXPENSE_SUBCATEGORIES = {
+  "Home": ["Maintenance", "Repairs", "Rent", "Furniture", "Domestic help", "Other home"],
+  "Utilities": ["Electricity", "Water", "Gas", "Internet", "Mobile", "DTH / cable"],
+  "Food": ["Groceries", "Vegetables", "Dining out", "Milk", "Snacks"],
+  "Health": ["Doctor", "Medicine", "Tests", "Hospital", "Fitness"],
+  "Transport": ["Fuel", "Service", "Taxi", "Bus / train", "Parking", "Insurance"],
+  "Education": ["Fees", "Books", "Tuition", "Courses", "Stationery"],
+  "Family transfer": ["Monthly support", "Gift", "Loan", "Emergency support"],
+  "Tax & insurance": ["Land tax", "Holding tax", "Property tax", "Life insurance", "Health insurance", "Vehicle insurance"],
+  "Travel": ["Tickets", "Hotel", "Food", "Local travel", "Sightseeing"],
+  "Shopping": ["Clothing", "Electronics", "Household", "Personal care", "Gifts"],
+  "Entertainment": ["Movies", "Subscriptions", "Events", "Hobbies"],
+  "Other": ["General", "Donation", "Unexpected"]
+};
 
 document.addEventListener("DOMContentLoaded", init);
 window.addEventListener("message", receiveApiMessage);
@@ -87,13 +110,16 @@ function init() {
   bindActions();
   bindStickyBoard();
   bindExpenseColumnResize();
+  bindSessionSafety();
+  localStorage.removeItem(SESSION_TOKEN_KEY);
+  $("repairSessionButton").addEventListener("click", repairBrowserSession);
   const configured = CONFIG.API_URL && CONFIG.API_URL !== PLACEHOLDER_URL && /^https:\/\/script\.google\.com\//.test(CONFIG.API_URL);
   if (!configured) {
     state.backendVersion = "Not connected";
     renderVersionLabels();
     $("setupHint").classList.remove("hidden");
     state.token = "";
-    localStorage.removeItem("familyDashboardToken");
+    clearLocalSession();
     return;
   }
   loadBackendVersion();
@@ -129,8 +155,7 @@ async function restoreSession() {
     state.data = normalizeBootstrapData(await api("bootstrap", {}));
     showApp();
   } catch (error) {
-    state.token = "";
-    localStorage.removeItem("familyDashboardToken");
+    clearLocalSession();
     showLogin();
     toast(error.message || "Please sign in again.", "error");
   } finally { hideLoading(); }
@@ -141,8 +166,10 @@ function showApp() {
   $("appShell").classList.remove("hidden");
   renderVersionLabels();
   renderAll();
+  resetIdleTimer();
 }
 function showLogin() {
+  stopIdleTimer();
   clearTimeout(state.stickyLauncherTimer);
   $("stickyBoard").classList.add("hidden");
   $("stickyBoardShade").classList.add("hidden");
@@ -151,6 +178,86 @@ function showLogin() {
   $("appShell").classList.add("hidden");
   $("loginScreen").classList.remove("hidden");
   loadSavedUsername();
+}
+
+function bindSessionSafety() {
+  ["pointerdown", "pointermove", "keydown", "touchstart", "scroll"].forEach(function (eventName) {
+    window.addEventListener(eventName, recordActivity, { passive: true });
+  });
+  window.addEventListener("pagehide", leaveDashboard);
+  window.addEventListener("beforeunload", leaveDashboard);
+  window.addEventListener("pageshow", function (event) { if (event.persisted && !state.token) showLogin(); });
+}
+
+function recordActivity() {
+  if (!state.token || !state.data) return;
+  const now = Date.now();
+  if (now - state.lastActivityResetAt >= 1000) { state.lastActivityResetAt = now; resetIdleTimer(); }
+  if (now - state.lastKeepAliveAt >= KEEP_ALIVE_INTERVAL_MS) {
+    state.lastKeepAliveAt = now;
+    api("keepAlive", {}).catch(handleSessionError);
+  }
+}
+
+function resetIdleTimer() {
+  stopIdleTimer();
+  if (!state.token || !state.data) return;
+  state.idleTimer = setTimeout(function () { endSession("Signed out after 5 minutes of inactivity.", true); }, IDLE_TIMEOUT_MS);
+}
+
+function stopIdleTimer() { if (state.idleTimer) clearTimeout(state.idleTimer); state.idleTimer = null; }
+
+function clearLocalSession() {
+  stopIdleTimer();
+  clearTimeout(state.stickySideTimer);
+  state.token = ""; state.data = null; state.stickyView = "active"; state.stickySideOpenId = ""; state.lastKeepAliveAt = 0;
+  state.lastActivityResetAt = 0;
+  sessionStorage.removeItem(SESSION_TOKEN_KEY);
+  localStorage.removeItem(SESSION_TOKEN_KEY);
+}
+
+function sendLogoutBeacon(token) {
+  if (!token || !navigator.sendBeacon || !CONFIG.API_URL || CONFIG.API_URL === PLACEHOLDER_URL) return;
+  try {
+    const data = new FormData();
+    data.append("action", "logout"); data.append("requestId", "leave_" + Date.now()); data.append("payload", JSON.stringify({ token: token }));
+    navigator.sendBeacon(CONFIG.API_URL, data);
+  } catch (error) { /* server idle expiry remains the safety net */ }
+}
+
+function leaveDashboard() {
+  const token = state.token;
+  clearLocalSession();
+  showLogin();
+  sendLogoutBeacon(token);
+}
+
+async function endSession(message, notifyServer) {
+  const token = state.token;
+  clearLocalSession();
+  showLogin();
+  if (notifyServer) sendLogoutBeacon(token);
+  if (message) toast(message, "error");
+}
+
+function handleSessionError(error) {
+  const message = (error && error.message) || "";
+  if (/session has expired|sign in again|account is inactive/i.test(message)) {
+    endSession(message || "Please sign in again.", false);
+    return true;
+  }
+  return false;
+}
+
+async function repairBrowserSession() {
+  const username = $("loginUsername").value.trim();
+  clearLocalSession();
+  if (username && $("rememberUsername").checked) localStorage.setItem(SAVED_USERNAME_KEY, username);
+  try {
+    if (window.caches) { const keys = await caches.keys(); await Promise.all(keys.map(function (key) { return caches.delete(key); })); }
+    if (navigator.serviceWorker) { const registrations = await navigator.serviceWorker.getRegistrations(); await Promise.all(registrations.map(function (registration) { return registration.unregister(); })); }
+  } catch (error) { /* refresh below still repairs the page assets */ }
+  const url = new URL(window.location.href); url.searchParams.set("fresh", String(Date.now())); window.location.replace(url.toString());
 }
 function loadSavedUsername() { const saved = localStorage.getItem(SAVED_USERNAME_KEY) || ""; $("loginUsername").value = saved; $("rememberUsername").checked = !!saved || $("rememberUsername").checked; }
 function normalizeBootstrapData(data) { const result = data || {}; ["members","expenses","recurringExpenses","income","targets","importantDates","photos","experiences","diary","stickyNotes"].forEach(function (key) { if (!Array.isArray(result[key])) result[key] = []; }); if (!result.settings) result.settings = {}; return result; }
@@ -195,6 +302,9 @@ function bindDialogs() {
   $("notifyEveryone").addEventListener("change", function () { $("recipientChecks").classList.toggle("hidden", $("notifyEveryone").checked); });
   $("recurringNotifyEveryone").addEventListener("change", function () { $("recurringRecipientChecks").classList.toggle("hidden", $("recurringNotifyEveryone").checked); });
   $("photoFile").addEventListener("change", previewPhoto);
+  $("expenseEntryType").addEventListener("change", syncExpenseEntryType);
+  $("expenseCategory").addEventListener("change", function () { populateSubcategoryOptions("expenseCategory", "expenseSubcategory", "expenseSubcategoryOptions", true); });
+  $("recurringExpenseCategory").addEventListener("change", function () { populateSubcategoryOptions("recurringExpenseCategory", "recurringExpenseSubcategory", "recurringExpenseSubcategoryOptions", true); });
 }
 function openDialog(id) { const dialog = $(id); if (dialog && !dialog.open) dialog.showModal(); }
 function prepareNewDialog(id) {
@@ -208,8 +318,8 @@ function prepareNewDialog(id) {
     $(defaults[id][1]).value = "";
     if (defaults[id][2]) $(defaults[id][2]).value = todayIso();
   }
-  if (id === "expenseDialog") { $("expenseRecurringId").value = ""; $("expenseRecurringNote").textContent = ""; $("expenseRecurringNote").classList.add("hidden"); $("expenseDialogTitle").textContent = "Add expenditure"; }
-  if (id === "recurringExpenseDialog") { $("recurringExpenseDialogTitle").textContent = "Add regular payment"; $("recurringNotifyEveryone").checked = true; $("recurringRecipientChecks").classList.add("hidden"); renderRecurringRecipientChecks([]); }
+  if (id === "expenseDialog") { $("expenseRecurringId").value = ""; $("expenseMarkPaidId").value = ""; $("expenseRecurringNote").textContent = ""; $("expenseRecurringNote").classList.add("hidden"); $("expenseEntryType").disabled = false; $("expenseEntryType").value = "REGULAR"; $("expenseCategory").value = "Home"; populateSubcategoryOptions("expenseCategory", "expenseSubcategory", "expenseSubcategoryOptions", true); $("expenseDialogTitle").textContent = "Add paid expenditure"; syncExpenseEntryType(); }
+  if (id === "recurringExpenseDialog") { $("recurringExpenseDialogTitle").textContent = "Add regular payment"; $("recurringExpenseCategory").value = "Utilities"; populateSubcategoryOptions("recurringExpenseCategory", "recurringExpenseSubcategory", "recurringExpenseSubcategoryOptions", true); $("recurringNotifyEveryone").checked = true; $("recurringRecipientChecks").classList.add("hidden"); renderRecurringRecipientChecks([]); }
   if (id === "bulkExpenseDialog") $("bulkExpenseForm").reset();
   if (id === "incomeDialog") { $("incomeDialogTitle").textContent = "Add income"; fillMemberSelect($("incomeReceivedBy"), state.data.user.id); }
   if (id === "targetDialog") { $("targetForm").reset(); $("targetDueDate").value = todayIso(); fillMemberSelect($("targetOwner"), state.data.user.id, true); }
@@ -219,6 +329,20 @@ function prepareNewDialog(id) {
   if (id === "memberDialog") { $("memberDialogTitle").textContent = "Add family member"; $("memberActive").checked = true; $("memberPin").required = true; setMemberPermissions(["EXPENSES","INCOME","TARGETS","DATES","CALENDAR","PHOTOS","EXPERIENCES","DIARY"]); syncMemberAccessRole(); }
   if (id === "experienceDialog") $("experienceDialogTitle").textContent = "Add experience";
   if (id === "diaryDialog") $("diaryDialogTitle").textContent = "Write diary entry";
+}
+
+function syncExpenseEntryType() {
+  const planned = $("expenseEntryType").value === "PREPLANNED";
+  const specialPayment = !!($("expenseRecurringId").value || $("expenseMarkPaidId").value);
+  const label = $("expenseDateLabel");
+  if (label && label.firstChild) label.firstChild.nodeValue = planned ? "Planned date" : "Date paid";
+  if (!specialPayment) $("expenseDialogTitle").textContent = planned ? ($("expenseId").value ? "Edit preplanned expenditure" : "Add preplanned expenditure") : ($("expenseId").value ? "Edit expenditure" : "Add paid expenditure");
+}
+
+function populateSubcategoryOptions(categoryId, inputId, listId, chooseFirst) {
+  const values = EXPENSE_SUBCATEGORIES[$(categoryId).value] || EXPENSE_SUBCATEGORIES.Other;
+  $(listId).innerHTML = values.map(function (value) { return '<option value="'+h(value)+'"></option>'; }).join("");
+  if (chooseFirst || !$(inputId).value) $(inputId).value = values[0] || "General";
 }
 
 function bindForms() {
@@ -244,25 +368,26 @@ function bindForms() {
 }
 
 function bindFilters() {
-  ["expenseMonth", "expenseSendToFilter", "expenseAccountFilter", "expenseSearch"].forEach(function (id) { $(id).addEventListener("input", renderExpenses); });
+  ["expenseMonth", "expenseStatusFilter", "expenseCategoryFilter", "expenseSubcategoryFilter", "expenseSendToFilter", "expenseAccountFilter", "expenseSearch"].forEach(function (id) { $(id).addEventListener("input", renderExpenses); });
   ["incomeMonth", "incomeCategoryFilter", "incomeMemberFilter", "incomeSearch"].forEach(function (id) { $(id).addEventListener("input", renderIncome); });
   ["dateTypeFilter", "dateSearch"].forEach(function (id) { $(id).addEventListener("input", renderDates); });
   $("photoSearch").addEventListener("input", renderPhotos);
   ["experienceYear", "experienceSearch"].forEach(function (id) { $(id).addEventListener("input", renderExperiences); });
   ["diaryMonth", "diaryWriterFilter", "diarySearch"].forEach(function (id) { $(id).addEventListener("input", renderDiary); });
   $("globalSearch").addEventListener("input", renderGlobalSearch);
-  $("exportExpenses").addEventListener("click", function () { exportCsv("family-expenditure.csv", filteredExpenses(), ["amount", "date", "sentTo", "fromAccount", "reason"], ["Amt (Rs.)", "Date Paid", "Send to", "From Acct", "Reason"]); });
+  $("exportExpenses").addEventListener("click", function () { exportCsv("family-expenditure.csv", filteredExpenses(), ["amount", "date", "status", "category", "subcategory", "sentTo", "fromAccount", "reason"], ["Amt (Rs.)", "Date", "Status", "Category", "Subcategory", "Send to", "From Acct", "Reason"]); });
   $("exportIncome").addEventListener("click", function () { exportCsv("family-income.csv", filteredIncome(), ["date", "source", "category", "receivedByName", "receivingMode", "amount"]); });
   $("printExpenses").addEventListener("click", function () { prepareExpensePrintDialog(); openDialog("expensePrintDialog"); });
   $("printIncome").addEventListener("click", function () { window.print(); });
+  $("addPreplannedExpense").addEventListener("click", function () { prepareNewDialog("expenseDialog"); $("expenseEntryType").value = "PREPLANNED"; $("expenseDialogTitle").textContent = "Add preplanned expenditure"; syncExpenseEntryType(); openDialog("expenseDialog"); });
 }
 
 function bindExpenseColumnResize() {
-  const table = $("expenseTable"), columns = all("col", table), defaults = [140,140,190,190,360,90];
+  const table = $("expenseTable"), columns = all("col", table), defaults = [125,115,105,145,145,170,170,300,120];
   if (!table || !columns.length) return;
   let saved = [];
   try { saved = JSON.parse(localStorage.getItem(EXPENSE_COLUMN_WIDTHS_KEY) || "[]"); } catch (error) { saved = []; }
-  columns.forEach(function (column,index) { column.style.width = Math.max(70,Math.min(620,Number(saved[index] || defaults[index]))) + "px"; });
+  columns.forEach(function (column,index) { column.style.width = Math.max(50,Math.min(620,Number(saved[index] || defaults[index]))) + "px"; });
   syncExpenseTableWidth();
   all(".column-resizer",table).forEach(function (handle) {
     handle.addEventListener("pointerdown",function (event) {
@@ -289,7 +414,7 @@ function bindExpenseColumnResize() {
 
 function setExpenseColumnWidth(index,width,save) {
   const columns=all("col",$("expenseTable")); if(!columns[index]) return;
-  columns[index].style.width=Math.max(70,Math.min(620,Math.round(width)))+"px";
+  columns[index].style.width=Math.max(50,Math.min(620,Math.round(width)))+"px";
   syncExpenseTableWidth();
   if(save!==false) saveExpenseColumnWidths();
 }
@@ -304,6 +429,7 @@ function bindActions() {
     const action = button.dataset.action;
     const id = button.dataset.id;
     if (action === "edit-expense") editExpense(id);
+    if (action === "mark-planned-paid") openPlannedPayment(id);
     if (action === "delete-expense") confirmDelete("deleteExpense", id, "Delete this expenditure entry?");
     if (action === "pay-recurring-expense") openRecurringPayment(id);
     if (action === "edit-recurring-expense") editRecurringExpense(id);
@@ -330,6 +456,9 @@ function bindActions() {
     if (action === "pin-sticky") changeStickyLayout(id, "pin");
     if (action === "grow-sticky") changeStickyLayout(id, "grow");
     if (action === "shrink-sticky") changeStickyLayout(id, "shrink");
+    if (action === "auto-fit-sticky") autoFitStickyNote(id);
+    if (action === "open-side-sticky") openSideSticky(id);
+    if (action === "close-side-sticky") closeSideSticky();
   });
 }
 
@@ -345,11 +474,16 @@ function bindStickyBoard() {
   all("[data-sticky-close]").forEach(function (button) { button.addEventListener("click", closeStickyBoard); });
   $("stickyTabActive").addEventListener("click", function () { state.stickyView = "active"; renderStickyNotes(); });
   $("stickyTabCompleted").addEventListener("click", function () { state.stickyView = "completed"; renderStickyNotes(); });
+  $("stickyCanvas").addEventListener("pointerdown", startStickyResize);
+  $("stickyPinnedCanvas").addEventListener("pointerdown", startStickyResize);
   $("stickyCanvas").addEventListener("pointerdown", startStickyDrag);
   $("stickyPinnedCanvas").addEventListener("pointerdown", startStickyDrag);
   window.addEventListener("pointermove", moveStickyDrag);
+  window.addEventListener("pointermove", moveStickyResize);
   window.addEventListener("pointerup", endStickyDrag);
+  window.addEventListener("pointerup", endStickyResize);
   window.addEventListener("pointercancel", endStickyDrag);
+  window.addEventListener("pointercancel", endStickyResize);
 }
 
 function openStickyBoard(view) {
@@ -359,6 +493,7 @@ function openStickyBoard(view) {
   $("stickyBoard").classList.remove("hidden");
   $("stickyBoardShade").classList.remove("hidden");
   $("stickyPinnedLayer").classList.add("hidden");
+  clearTimeout(state.stickySideTimer); state.stickySideOpenId = "";
   $("stickyLauncher").classList.add("hidden");
   $("stickyLauncher").setAttribute("aria-expanded", "true");
   renderStickyNotes();
@@ -408,26 +543,31 @@ async function login(event) {
     if ($("rememberUsername").checked) localStorage.setItem(SAVED_USERNAME_KEY, username); else localStorage.removeItem(SAVED_USERNAME_KEY);
     state.token = result.token;
     state.data = normalizeBootstrapData(result.bootstrap);
-    localStorage.setItem("familyDashboardToken", state.token);
+    sessionStorage.setItem(SESSION_TOKEN_KEY, state.token);
+    localStorage.removeItem(SESSION_TOKEN_KEY);
+    state.lastKeepAliveAt = Date.now();
     $("loginForm").reset();
     showApp();
   } catch (error) { toast(error.message, "error"); }
   finally { hideLoading(); }
 }
 async function logout() {
-  try { if (state.token) await api("logout", {}); } catch (e) { /* local logout still succeeds */ }
-  state.token = ""; state.data = null; state.stickyView = "active"; localStorage.removeItem("familyDashboardToken"); showLogin();
+  const token = state.token;
+  clearLocalSession(); showLogin();
+  try { if (token) sendLogoutBeacon(token); } catch (e) { /* local logout still succeeds */ }
 }
 
 async function saveExpense(event) {
   event.preventDefault();
   const recurringId = $("expenseRecurringId").value;
-  const action = recurringId ? "markRecurringExpensePaid" : $("expenseId").value ? "updateExpense" : "createExpense";
+  const plannedId = $("expenseMarkPaidId").value;
+  const action = recurringId ? "markRecurringExpensePaid" : plannedId ? "markPlannedExpensePaid" : $("expenseId").value ? "updateExpense" : "createExpense";
   await mutate(action, {
-    id: recurringId || $("expenseId").value, date: $("expenseDate").value, amount: $("expenseAmount").value,
+    id: recurringId || plannedId || $("expenseId").value, date: $("expenseDate").value, amount: $("expenseAmount").value,
+    category: $("expenseCategory").value, subcategory: $("expenseSubcategory").value.trim(),
     sentTo: $("expenseSendTo").value.trim(), fromAccount: $("expenseFromAccount").value.trim(),
-    reason: $("expenseReason").value.trim(), entryType: recurringId ? "RECURRING" : "REGULAR"
-  }, recurringId ? "Payment recorded and the next due date was calculated." : "Expenditure saved.", "expenseDialog");
+    reason: $("expenseReason").value.trim(), entryType: recurringId ? "RECURRING" : $("expenseEntryType").value
+  }, recurringId ? "Payment recorded and the next due date was calculated." : plannedId ? "Preplanned expenditure marked as paid." : "Expenditure saved.", "expenseDialog");
 }
 
 async function saveRecurringExpense(event) {
@@ -439,6 +579,7 @@ async function saveRecurringExpense(event) {
   await mutate(id ? "updateRecurringExpense" : "createRecurringExpense", {
     id: id, title: $("recurringExpenseTitle").value.trim(), estimatedAmount: $("recurringExpenseAmount").value,
     frequency: $("recurringExpenseFrequency").value, nextDueDate: $("recurringExpenseDueDate").value,
+    category: $("recurringExpenseCategory").value, subcategory: $("recurringExpenseSubcategory").value.trim(),
     sentTo: $("recurringExpenseSendTo").value.trim(), fromAccount: $("recurringExpenseFromAccount").value.trim(),
     reason: $("recurringExpenseReason").value.trim(), remindDays: $("recurringExpenseRemind").value,
     recipientIds: recipients.join(",")
@@ -468,8 +609,15 @@ function prepareExpensePrintDialog() {
   }
   const recipients = Array.from(new Set(state.data.expenses.map(function (item) { return normalizeExpense(item).sentTo; }).filter(Boolean))).sort();
   const accounts = Array.from(new Set(state.data.expenses.map(function (item) { return normalizeExpense(item).fromAccount; }).filter(Boolean))).sort();
+  const categories = Array.from(new Set(state.data.expenses.map(function (item) { return normalizeExpense(item).category; }).filter(Boolean))).sort();
+  const subcategories = Array.from(new Set(state.data.expenses.map(function (item) { return normalizeExpense(item).subcategory; }).filter(Boolean))).sort();
   $("expensePrintSendTo").innerHTML = '<option value="">All recipients</option>' + recipients.map(function (value) { return '<option value="'+h(value)+'">'+h(value)+'</option>'; }).join("");
   $("expensePrintAccount").innerHTML = '<option value="">All accounts</option>' + accounts.map(function (value) { return '<option value="'+h(value)+'">'+h(value)+'</option>'; }).join("");
+  $("expensePrintCategory").innerHTML = '<option value="">All categories</option>' + categories.map(function (value) { return '<option value="'+h(value)+'">'+h(value)+'</option>'; }).join("");
+  $("expensePrintSubcategory").innerHTML = '<option value="">All subcategories</option>' + subcategories.map(function (value) { return '<option value="'+h(value)+'">'+h(value)+'</option>'; }).join("");
+  $("expensePrintStatus").value = $("expenseStatusFilter").value || "";
+  $("expensePrintCategory").value = $("expenseCategoryFilter").value || "";
+  $("expensePrintSubcategory").value = $("expenseSubcategoryFilter").value || "";
   $("expensePrintSendTo").value = $("expenseSendToFilter").value || "";
   $("expensePrintAccount").value = $("expenseAccountFilter").value || "";
   $("expensePrintSearch").value = $("expenseSearch").value || "";
@@ -480,32 +628,34 @@ function printExpenseRange(event) { event.preventDefault(); openExpenseRangeOutp
 
 function openExpenseRangeOutput(autoPrint) {
   const from = $("expensePrintFrom").value, to = $("expensePrintTo").value;
+  const status = $("expensePrintStatus").value, category = $("expensePrintCategory").value, subcategory = $("expensePrintSubcategory").value;
   const recipient = $("expensePrintSendTo").value, account = $("expensePrintAccount").value, query = normalize($("expensePrintSearch").value);
   const density = ["comfortable","compact","minimum"].indexOf($("expensePrintDensity").value) >= 0 ? $("expensePrintDensity").value : "comfortable";
   if (!from || !to) return toast("Choose both From date and To date.", "error");
   if (from > to) return toast("From date cannot be later than To date.", "error");
   const items = state.data.expenses.map(normalizeExpense).filter(function (item) {
     const date = String(item.date || "").slice(0,10);
-    return date >= from && date <= to && (!recipient || item.sentTo === recipient) && (!account || item.fromAccount === account) && (!query || normalize([item.sentTo,item.fromAccount,item.reason,item.date].join(" ")).includes(query));
+    return date >= from && date <= to && (!status || item.status === status) && (!category || item.category === category) && (!subcategory || item.subcategory === subcategory) && (!recipient || item.sentTo === recipient) && (!account || item.fromAccount === account) && (!query || normalize([item.status,item.category,item.subcategory,item.sentTo,item.fromAccount,item.reason,item.date].join(" ")).includes(query));
   }).sort(function (a,b) { return String(a.date).localeCompare(String(b.date)); });
   if (!items.length) return toast("No expenditure was found in the selected period.", "error");
 
-  const total = items.reduce(function (sum,item) { return sum + Number(item.amount || 0); }, 0);
+  const paidTotal = items.filter(function(item){return item.status==="PAID";}).reduce(function (sum,item) { return sum + Number(item.amount || 0); }, 0);
+  const plannedTotal = items.filter(function(item){return item.status==="PLANNED";}).reduce(function (sum,item) { return sum + Number(item.amount || 0); }, 0);
   const familyName = (state.data.settings && state.data.settings.familyName) || "Our Family Hub";
-  const appliedFilters = [recipient ? "Send to: " + recipient : "", account ? "From account: " + account : "", query ? "Search: " + $("expensePrintSearch").value.trim() : ""].filter(Boolean);
+  const appliedFilters = [status ? "Status: " + (status==="PLANNED"?"Preplanned":"Paid") : "", category ? "Category: " + category : "", subcategory ? "Subcategory: " + subcategory : "", recipient ? "Send to: " + recipient : "", account ? "From account: " + account : "", query ? "Search: " + $("expensePrintSearch").value.trim() : ""].filter(Boolean);
   const filterLine = appliedFilters.length ? '<p class="filters">'+h(appliedFilters.join(" · "))+'</p>' : "";
   const densityOptions = '<option value="density-comfortable"'+(density==="comfortable"?' selected':'')+'>Comfortable</option><option value="density-compact"'+(density==="compact"?' selected':'')+'>Compact</option><option value="density-minimum"'+(density==="minimum"?' selected':'')+'>Minimum width</option>';
-  const reportResizeScript = "<script>(function(){var table=document.getElementById('expenseReportTable'),cols=Array.from(table.querySelectorAll('col')),drag=null,presets={comfortable:[55,135,135,190,190,395],compact:[45,115,110,165,165,360],minimum:[38,95,92,140,140,310]};function applyWidths(widths){var total=0;cols.forEach(function(col,i){var width=Math.max(38,Math.min(620,Number(widths[i])||100));col.style.width=width+'px';total+=width;});table.style.width=total+'px';}window.setReportDensity=function(value){var name=String(value).replace('density-','');document.body.className='density-'+name;applyWidths(presets[name]||presets.comfortable);};document.addEventListener('pointerdown',function(event){var handle=event.target.closest('.report-resizer');if(!handle)return;event.preventDefault();var index=Number(handle.dataset.col);drag={index:index,startX:event.clientX,startWidth:parseFloat(cols[index].style.width)||100,handle:handle};handle.classList.add('dragging');});document.addEventListener('pointermove',function(event){if(!drag)return;event.preventDefault();var widths=cols.map(function(col){return parseFloat(col.style.width)||100;});widths[drag.index]=drag.startWidth+event.clientX-drag.startX;applyWidths(widths);});document.addEventListener('pointerup',function(){if(!drag)return;drag.handle.classList.remove('dragging');drag=null;});window.setReportDensity('density-"+density+"');})();<\/script>";
+  const reportResizeScript = "<script>(function(){var table=document.getElementById('expenseReportTable'),cols=Array.from(table.querySelectorAll('col')),drag=null,presets={comfortable:[45,120,110,100,135,135,165,165,300],compact:[38,100,92,85,115,115,145,145,250],minimum:[32,82,78,72,95,95,120,120,205]};function applyWidths(widths){var total=0;cols.forEach(function(col,i){var width=Math.max(32,Math.min(620,Number(widths[i])||100));col.style.width=width+'px';total+=width;});table.style.width=total+'px';}window.setReportDensity=function(value){var name=String(value).replace('density-','');document.body.className='density-'+name;applyWidths(presets[name]||presets.comfortable);};document.addEventListener('pointerdown',function(event){var handle=event.target.closest('.report-resizer');if(!handle)return;event.preventDefault();var index=Number(handle.dataset.col);drag={index:index,startX:event.clientX,startWidth:parseFloat(cols[index].style.width)||100,handle:handle};handle.classList.add('dragging');});document.addEventListener('pointermove',function(event){if(!drag)return;event.preventDefault();var widths=cols.map(function(col){return parseFloat(col.style.width)||100;});widths[drag.index]=drag.startWidth+event.clientX-drag.startX;applyWidths(widths);});document.addEventListener('pointerup',function(){if(!drag)return;drag.handle.classList.remove('dragging');drag=null;});window.setReportDensity('density-"+density+"');})();<\/script>";
   const rows = items.map(function (item,index) {
-    return "<tr><td class='serial'>"+(index+1)+"</td><td class='number'>"+h(money(item.amount))+"</td><td>"+h(formatDate(item.date))+"</td><td><strong>"+h(item.sentTo)+"</strong></td><td>"+h(item.fromAccount)+"</td><td class='reason'>"+h(item.reason)+"</td></tr>";
+    return "<tr class='"+h(item.status.toLowerCase())+"'><td class='serial'>"+(index+1)+"</td><td class='number'>"+h(money(item.amount))+"</td><td>"+h(formatDate(item.date))+"</td><td>"+h(item.status==="PLANNED"?"Preplanned":"Paid")+"</td><td>"+h(item.category)+"</td><td>"+h(item.subcategory)+"</td><td><strong>"+h(item.sentTo)+"</strong></td><td>"+h(item.fromAccount)+"</td><td class='reason'>"+h(item.reason)+"</td></tr>";
   }).join("");
   const reportWindow = window.open("", "familyExpenseReport", "width=1150,height=820");
   if (!reportWindow) return toast("Allow pop-ups for this page to view or print the selected expenditure.", "error");
   const autoPrintScript = autoPrint ? "<script>window.onload=function(){window.focus();setTimeout(function(){window.print();},200)};<\/script>" : "";
   reportWindow.document.open();
   reportWindow.document.write("<!doctype html><html><head><meta charset='utf-8'><title>Expenditure "+h(from)+" to "+h(to)+"</title><style>"+
-    "@page{size:A4 landscape;margin:12mm}*{box-sizing:border-box}body{margin:0;color:#25243b;background:#f5f3fb;font:13px Arial,sans-serif}.report{max-width:1200px;margin:0 auto;padding:28px;background:white;min-height:100vh;overflow:auto}.screen-actions{position:sticky;top:0;z-index:5;display:flex;align-items:center;justify-content:flex-end;gap:8px;margin:-12px -12px 18px;padding:10px;background:rgba(255,255,255,.94);border-bottom:1px solid #e5e2ee}.screen-actions label{display:flex;align-items:center;gap:6px;color:#55566d;font-size:11px;font-weight:700}.screen-actions select,.screen-actions button{border:0;border-radius:9px;padding:9px 12px;font-weight:700}.screen-actions select{background:#f1eff7}.screen-actions button{cursor:pointer}.screen-actions .print{color:white;background:#6752c7}.screen-actions .close{color:#4d4e67;background:#efedf5}h1{margin:0 0 5px;font-size:24px}.family{color:#6752c7;font-size:12px;font-weight:700;letter-spacing:1px;text-transform:uppercase}.period{margin:0;color:#66687d}.filters{margin:5px 0 0;color:#5f537f;font-size:11px;font-weight:700}.summary{display:flex;gap:14px;margin:16px 0;padding:11px 14px;border:1px solid #dedbe9;border-radius:10px;background:#f7f5ff;font-weight:700}.summary strong{color:#4b389e}table{border-collapse:collapse;table-layout:fixed}th,td{padding:9px 8px;border:1px solid #dddce7;text-align:left;vertical-align:top;overflow-wrap:anywhere}th{position:relative;color:#3e3a62;background:#e9e4fb;font-size:11px;text-transform:uppercase}tbody tr:nth-child(odd){background:#fff}tbody tr:nth-child(even){background:#edf6ff}.serial{text-align:center}.number{text-align:right;font-variant-numeric:tabular-nums}.reason{line-height:1.45}.report-resizer{position:absolute;right:-5px;top:0;width:11px;height:100%;z-index:2;cursor:col-resize;touch-action:none}.report-resizer:after{content:'';position:absolute;left:5px;top:20%;width:2px;height:60%;background:#b7afd0;border-radius:2px}.report-resizer:hover:after,.report-resizer.dragging:after{background:#6752c7}.density-compact{font-size:11px}.density-compact th,.density-compact td{padding:6px 5px}.density-minimum{font-size:9px}.density-minimum th,.density-minimum td{padding:3px 4px;line-height:1.2}.density-minimum th{font-size:9px}.foot{margin-top:12px;color:#858699;font-size:10px;text-align:right}@media print{body{background:white;-webkit-print-color-adjust:exact;print-color-adjust:exact}.report{max-width:none;padding:0;overflow:visible}.screen-actions{display:none}.report-resizer{display:none}}"+
-    "</style></head><body class='density-"+h(density)+"'><main class='report'><div class='screen-actions'><label>Column width <select onchange=\"setReportDensity(this.value)\">"+densityOptions+"</select></label><button class='close' type='button' onclick='window.close()'>Close view</button><button class='print' type='button' onclick='window.print()'>Print this report</button></div><div class='family'>"+h(familyName)+"</div><h1>Expenditure statement</h1><p class='period'>From "+h(formatDate(from))+" to "+h(formatDate(to))+"</p>"+filterLine+"<div class='summary'><span>"+h(plural(items.length,"entry","entries"))+"</span><span>Total: <strong>"+h(money(total))+"</strong></span></div><table id='expenseReportTable'><colgroup><col><col><col><col><col><col></colgroup><thead><tr><th class='serial'>Sl.<span class='report-resizer' data-col='0'></span></th><th class='number'>Amt (Rs.)<span class='report-resizer' data-col='1'></span></th><th>Date Paid<span class='report-resizer' data-col='2'></span></th><th>Send to<span class='report-resizer' data-col='3'></span></th><th>From Acct<span class='report-resizer' data-col='4'></span></th><th class='reason'>Reason<span class='report-resizer' data-col='5'></span></th></tr></thead><tbody>"+rows+"</tbody></table><p class='foot'>Prepared "+h(new Date().toLocaleString("en-IN"))+" · FE v"+h(FRONTEND_VERSION)+" · BE v"+h(state.data.backendVersion||state.backendVersion||"—")+"</p></main>"+reportResizeScript+autoPrintScript+"</body></html>");
+    "@page{size:A4 landscape;margin:9mm}*{box-sizing:border-box}body{margin:0;color:#25243b;background:#f5f3fb;font:12px Arial,sans-serif}.report{max-width:1400px;margin:0 auto;padding:24px;background:white;min-height:100vh;overflow:auto}.screen-actions{position:sticky;top:0;z-index:5;display:flex;align-items:center;justify-content:flex-end;gap:8px;margin:-12px -12px 18px;padding:10px;background:rgba(255,255,255,.94);border-bottom:1px solid #e5e2ee}.screen-actions label{display:flex;align-items:center;gap:6px;color:#55566d;font-size:11px;font-weight:700}.screen-actions select,.screen-actions button{border:0;border-radius:9px;padding:9px 12px;font-weight:700}.screen-actions select{background:#f1eff7}.screen-actions button{cursor:pointer}.screen-actions .print{color:white;background:#6752c7}.screen-actions .close{color:#4d4e67;background:#efedf5}h1{margin:0 0 5px;font-size:24px}.family{color:#6752c7;font-size:12px;font-weight:700;letter-spacing:1px;text-transform:uppercase}.period{margin:0;color:#66687d}.filters{margin:5px 0 0;color:#5f537f;font-size:11px;font-weight:700}.summary{display:flex;gap:14px;margin:16px 0;padding:11px 14px;border:1px solid #dedbe9;border-radius:10px;background:#f7f5ff;font-weight:700}.summary strong{color:#4b389e}table{border-collapse:collapse;table-layout:fixed}th,td{padding:8px 7px;border:1px solid #dddce7;text-align:left;vertical-align:top;overflow-wrap:anywhere}th{position:relative;color:#3e3a62;background:#e9e4fb;font-size:10px;text-transform:uppercase}tbody tr:nth-child(odd){background:#fff}tbody tr:nth-child(even){background:#edf6ff}tbody tr.planned{background:#fff8dc}.serial{text-align:center}.number{text-align:right;font-variant-numeric:tabular-nums}.reason{line-height:1.4}.report-resizer{position:absolute;right:-5px;top:0;width:11px;height:100%;z-index:2;cursor:col-resize;touch-action:none}.report-resizer:after{content:'';position:absolute;left:5px;top:20%;width:2px;height:60%;background:#b7afd0;border-radius:2px}.report-resizer:hover:after,.report-resizer.dragging:after{background:#6752c7}.density-compact{font-size:10px}.density-compact th,.density-compact td{padding:5px 4px}.density-minimum{font-size:8px}.density-minimum th,.density-minimum td{padding:3px;line-height:1.15}.density-minimum th{font-size:8px}.foot{margin-top:12px;color:#858699;font-size:10px;text-align:right}@media print{body{background:white;-webkit-print-color-adjust:exact;print-color-adjust:exact}.report{max-width:none;padding:0;overflow:visible}.screen-actions{display:none}.report-resizer{display:none}}"+
+    "</style></head><body class='density-"+h(density)+"'><main class='report'><div class='screen-actions'><label>Column width <select onchange=\"setReportDensity(this.value)\">"+densityOptions+"</select></label><button class='close' type='button' onclick='window.close()'>Close view</button><button class='print' type='button' onclick='window.print()'>Print this report</button></div><div class='family'>"+h(familyName)+"</div><h1>Expenditure statement</h1><p class='period'>From "+h(formatDate(from))+" to "+h(formatDate(to))+"</p>"+filterLine+"<div class='summary'><span>"+h(plural(items.length,"entry","entries"))+"</span><span>Paid: <strong>"+h(money(paidTotal))+"</strong></span>"+(plannedTotal?"<span>Preplanned: <strong>"+h(money(plannedTotal))+"</strong></span>":"")+"</div><table id='expenseReportTable'><colgroup>"+Array(9).fill("<col>").join("")+"</colgroup><thead><tr>"+["Sl.","Amt (Rs.)","Date","Status","Category","Subcategory","Send to","From Acct","Reason"].map(function(label,index){return "<th>"+h(label)+"<span class='report-resizer' data-col='"+index+"'></span></th>";}).join("")+"</tr></thead><tbody>"+rows+"</tbody></table><p class='foot'>Prepared "+h(new Date().toLocaleString("en-IN"))+" · FE v"+h(FRONTEND_VERSION)+" · BE v"+h(state.data.backendVersion||state.backendVersion||"—")+"</p></main>"+reportResizeScript+autoPrintScript+"</body></html>");
   reportWindow.document.close();
   $("expensePrintDialog").close();
 }
@@ -723,7 +873,7 @@ async function mutate(action, payload, successMessage, closeId, loadingMessage) 
     await refreshData();
     toast(successMessage || (result && result.message) || "Saved.", "success");
     return result;
-  } catch (error) { toast(friendlyApiError(error), "error"); return null; }
+  } catch (error) { if (!handleSessionError(error)) toast(friendlyApiError(error), "error"); return null; }
   finally { hideLoading(); }
 }
 async function refreshData() { state.data = normalizeBootstrapData(await api("bootstrap", {})); renderVersionLabels(); renderAll(); }
@@ -731,15 +881,19 @@ async function confirmDelete(action, id, message) { if (window.confirm(message))
 
 function editExpense(id) {
   const item = state.data.expenses.find(function (x) { return x.id === id; }); if (!item) return;
-  const expense = normalizeExpense(item); prepareNewDialog("expenseDialog"); $("expenseId").value = expense.id; $("expenseDate").value = expense.date; $("expenseAmount").value = expense.amount; $("expenseSendTo").value = expense.sentTo; $("expenseFromAccount").value = expense.fromAccount; $("expenseReason").value = expense.reason; $("expenseDialogTitle").textContent = "Edit expenditure"; openDialog("expenseDialog");
+  const expense = normalizeExpense(item); prepareNewDialog("expenseDialog"); $("expenseId").value = expense.id; $("expenseEntryType").value = expense.status === "PLANNED" ? "PREPLANNED" : (expense.entryType === "PREPLANNED" ? "PREPLANNED" : "REGULAR"); $("expenseDate").value = expense.date; $("expenseAmount").value = expense.amount; $("expenseCategory").value = EXPENSE_SUBCATEGORIES[expense.category] ? expense.category : "Other"; populateSubcategoryOptions("expenseCategory", "expenseSubcategory", "expenseSubcategoryOptions", false); $("expenseSubcategory").value = expense.subcategory; $("expenseSendTo").value = expense.sentTo; $("expenseFromAccount").value = expense.fromAccount; $("expenseReason").value = expense.reason; $("expenseDialogTitle").textContent = "Edit expenditure"; syncExpenseEntryType(); openDialog("expenseDialog");
+}
+function openPlannedPayment(id) {
+  const item = state.data.expenses.find(function (x) { return x.id === id; }); if (!item) return;
+  const expense = normalizeExpense(item); prepareNewDialog("expenseDialog"); $("expenseMarkPaidId").value = expense.id; $("expenseEntryType").value = "REGULAR"; $("expenseEntryType").disabled = true; $("expenseDate").value = todayIso(); $("expenseAmount").value = expense.amount; $("expenseCategory").value = EXPENSE_SUBCATEGORIES[expense.category] ? expense.category : "Other"; populateSubcategoryOptions("expenseCategory", "expenseSubcategory", "expenseSubcategoryOptions", false); $("expenseSubcategory").value = expense.subcategory; $("expenseSendTo").value = expense.sentTo; $("expenseFromAccount").value = expense.fromAccount; $("expenseReason").value = expense.reason; $("expenseDialogTitle").textContent = "Mark preplanned expenditure as paid"; $("expenseRecurringNote").textContent = "Planned for " + formatDate(expense.date) + ". Confirm the actual payment date and amount."; $("expenseRecurringNote").classList.remove("hidden"); syncExpenseEntryType(); openDialog("expenseDialog");
 }
 function openRecurringPayment(id) {
   const item = state.data.recurringExpenses.find(function (x) { return x.id === id; }); if (!item) return;
-  prepareNewDialog("expenseDialog"); $("expenseRecurringId").value = item.id; $("expenseDate").value = todayIso(); $("expenseAmount").value = Number(item.estimatedAmount || 0) || ""; $("expenseSendTo").value = item.sentTo; $("expenseFromAccount").value = item.fromAccount; $("expenseReason").value = item.reason; $("expenseDialogTitle").textContent = "Mark “" + item.title + "” as paid"; $("expenseRecurringNote").textContent = "Due " + formatDate(item.nextDueDate) + ". You can change the actual amount or payment details before saving."; $("expenseRecurringNote").classList.remove("hidden"); openDialog("expenseDialog");
+  prepareNewDialog("expenseDialog"); $("expenseRecurringId").value = item.id; $("expenseEntryType").value = "REGULAR"; $("expenseEntryType").disabled = true; $("expenseDate").value = todayIso(); $("expenseAmount").value = Number(item.estimatedAmount || 0) || ""; $("expenseCategory").value = EXPENSE_SUBCATEGORIES[item.category] ? item.category : "Other"; populateSubcategoryOptions("expenseCategory", "expenseSubcategory", "expenseSubcategoryOptions", false); $("expenseSubcategory").value = item.subcategory || "General"; $("expenseSendTo").value = item.sentTo; $("expenseFromAccount").value = item.fromAccount; $("expenseReason").value = item.reason; $("expenseDialogTitle").textContent = "Mark “" + item.title + "” as paid"; $("expenseRecurringNote").textContent = "Due " + formatDate(item.nextDueDate) + ". You can change the actual amount or payment details before saving."; $("expenseRecurringNote").classList.remove("hidden"); syncExpenseEntryType(); openDialog("expenseDialog");
 }
 function editRecurringExpense(id) {
   const item = state.data.recurringExpenses.find(function (x) { return x.id === id; }); if (!item) return;
-  prepareNewDialog("recurringExpenseDialog"); $("recurringExpenseId").value = item.id; $("recurringExpenseTitle").value = item.title; $("recurringExpenseAmount").value = Number(item.estimatedAmount || 0) || ""; $("recurringExpenseFrequency").value = item.frequency; $("recurringExpenseDueDate").value = item.nextDueDate; $("recurringExpenseSendTo").value = item.sentTo; $("recurringExpenseFromAccount").value = item.fromAccount; $("recurringExpenseReason").value = item.reason; $("recurringExpenseRemind").value = item.remindDays || "7,1,0";
+  prepareNewDialog("recurringExpenseDialog"); $("recurringExpenseId").value = item.id; $("recurringExpenseTitle").value = item.title; $("recurringExpenseAmount").value = Number(item.estimatedAmount || 0) || ""; $("recurringExpenseFrequency").value = item.frequency; $("recurringExpenseDueDate").value = item.nextDueDate; $("recurringExpenseCategory").value = EXPENSE_SUBCATEGORIES[item.category] ? item.category : "Other"; populateSubcategoryOptions("recurringExpenseCategory", "recurringExpenseSubcategory", "recurringExpenseSubcategoryOptions", false); $("recurringExpenseSubcategory").value = item.subcategory || "General"; $("recurringExpenseSendTo").value = item.sentTo; $("recurringExpenseFromAccount").value = item.fromAccount; $("recurringExpenseReason").value = item.reason; $("recurringExpenseRemind").value = item.remindDays || "7,1,0";
   const ids = String(item.recipientIds || "ALL").split(","); const everyone = ids.indexOf("ALL") >= 0; $("recurringNotifyEveryone").checked = everyone; $("recurringRecipientChecks").classList.toggle("hidden", everyone); renderRecurringRecipientChecks(ids); $("recurringExpenseDialogTitle").textContent = "Edit regular payment"; openDialog("recurringExpenseDialog");
 }
 function editIncome(id) {
@@ -759,19 +913,43 @@ function editStickyNote(id) {
   $("stickyNoteDialogTitle").textContent = "Edit " + (item.noteType === "REMINDER" ? "reminder" : "target") + " note"; openDialog("stickyNoteDialog");
 }
 async function completeStickyNote(id) {
-  if (!window.confirm("Mark this sticky note complete? It will move to the saved Completed list.")) return;
-  await mutate("completeStickyNote", { id: id }, "Completed and saved in the sticky-note archive.");
+  if (!window.confirm("Mark this sticky note complete? It will move to the separate Sticky Note Diary sheet.")) return;
+  state.stickySideOpenId = "";
+  await mutate("completeStickyNote", { id: id }, "Completed and moved to the Sticky Note Diary sheet.");
 }
 function changeStickyLayout(id, change) {
   const note = state.data.stickyNotes.find(function (item) { return item.id === id; }); if (!note) return;
   if (change === "collapse" && note.pinned) return toast("This note is pinned open. Unpin it before collapsing.", "error");
   if (change === "collapse") note.collapsed = !note.collapsed;
-  if (change === "pin") { note.pinned = !note.pinned; if (note.pinned) note.collapsed = false; }
+  if (change === "pin") { note.pinned = !note.pinned; note.collapsed = false; state.stickySideOpenId = note.pinned ? "" : note.id; }
   if (change === "grow") { note.width = Math.min(520, Number(note.width || 280) + 40); note.height = Math.min(500, Number(note.height || 220) + 35); }
   if (change === "shrink") { note.width = Math.max(220, Number(note.width || 280) - 40); note.height = Math.max(160, Number(note.height || 220) - 35); }
   renderStickyNotes();
   queueStickyLayoutSave(note);
-  if (change === "pin") toast(note.pinned ? "Pinned open above the dashboard." : "Note unpinned; it can now be collapsed.", "success");
+  if (change === "pin") { toast(note.pinned ? "Pinned open above the dashboard. Drag Move note to reposition it." : "Unpinned and moved to its collapsible side tab.", "success"); if (!note.pinned) scheduleSideStickyCollapse(); }
+}
+
+function openSideSticky(id) {
+  state.stickySideOpenId = id;
+  renderStickyPinnedLayer();
+  scheduleSideStickyCollapse();
+}
+
+function closeSideSticky() {
+  clearTimeout(state.stickySideTimer); state.stickySideOpenId = ""; renderStickyPinnedLayer();
+}
+
+function scheduleSideStickyCollapse(delay) {
+  clearTimeout(state.stickySideTimer);
+  state.stickySideTimer = setTimeout(function () { state.stickySideOpenId = ""; renderStickyPinnedLayer(); }, Number(delay) || 8000);
+}
+
+function autoFitStickyNote(id) {
+  const note = state.data.stickyNotes.find(function (item) { return item.id === id; }); if (!note) return;
+  const lines = String(note.body || "").split(/\n/); const longest = Math.max(String(note.title || "").length, 20, lines.reduce(function(max,line){return Math.max(max,line.length);},0));
+  note.width = Math.max(250, Math.min(520, 150 + longest * 6));
+  note.height = Math.max(180, Math.min(500, 150 + lines.length * 18 + Math.ceil(String(note.body||"").length / Math.max(24, Math.floor((note.width-45)/7))) * 15));
+  note.collapsed = false; renderStickyNotes(); queueStickyLayoutSave(note); toast("Sticky note auto-fitted to its content.", "success");
 }
 function queueStickyLayoutSave(note) {
   const oldTimer = state.stickyLayoutTimers.get(note.id); if (oldTimer) clearTimeout(oldTimer);
@@ -779,7 +957,7 @@ function queueStickyLayoutSave(note) {
     state.stickyLayoutTimers.delete(note.id);
     try {
       await api("updateStickyLayout", { id: note.id, positionX: note.positionX, positionY: note.positionY, width: note.width, height: note.height, collapsed: !!note.collapsed, pinned: !!note.pinned });
-    } catch (error) { toast(friendlyApiError(error), "error"); }
+    } catch (error) { if (!handleSessionError(error)) toast(friendlyApiError(error), "error"); }
   }, 220));
 }
 function editExperience(id) {
@@ -800,7 +978,7 @@ async function resetMemberPin(id) {
   if (!window.confirm("Generate a new 6-digit PIN for this member? Their old PIN will stop working.")) return;
   showLoading("Generating a new PIN…");
   try { const result = await api("resetMemberPin", { id: id }); await refreshData(); window.alert("New PIN: " + result.newPin + "\n\nPlease give this PIN privately to the family member."); }
-  catch (error) { toast(error.message, "error"); } finally { hideLoading(); }
+  catch (error) { if (!handleSessionError(error)) toast(error.message, "error"); } finally { hideLoading(); }
 }
 
 function renderAll() {
@@ -827,8 +1005,10 @@ function populateFilters() {
   fillMemberFilter($("incomeMemberFilter")); fillMemberFilter($("diaryWriterFilter"));
   const recipients = Array.from(new Set(state.data.expenses.map(function (x) { return normalizeExpense(x).sentTo; }).filter(Boolean))).sort();
   const accounts = Array.from(new Set(state.data.expenses.map(function (x) { return normalizeExpense(x).fromAccount; }).filter(Boolean))).sort();
+  const categories = Array.from(new Set(state.data.expenses.map(function (x) { return normalizeExpense(x).category; }).filter(Boolean))).sort();
+  const subcategories = Array.from(new Set(state.data.expenses.map(function (x) { return normalizeExpense(x).subcategory; }).filter(Boolean))).sort();
   const incomeCats = Array.from(new Set(state.data.income.map(function (x) { return x.category; }))).sort();
-  fillOptions($("expenseSendToFilter"), recipients, "All recipients"); fillOptions($("expenseAccountFilter"), accounts, "All accounts"); fillOptions($("incomeCategoryFilter"), incomeCats, "All categories");
+  fillOptions($("expenseSendToFilter"), recipients, "All recipients"); fillOptions($("expenseAccountFilter"), accounts, "All accounts"); fillOptions($("expenseCategoryFilter"), categories, "All categories"); fillOptions($("expenseSubcategoryFilter"), subcategories, "All subcategories"); fillOptions($("incomeCategoryFilter"), incomeCats, "All categories");
   fillMemberSelect($("incomeReceivedBy"), $("incomeReceivedBy").value || state.data.user.id); fillMemberSelect($("targetOwner"), $("targetOwner").value || state.data.user.id, true);
   renderRecipientChecks([]); renderRecurringRecipientChecks([]);
   const years = Array.from(new Set(state.data.experiences.map(function (x) { return String(x.experienceDate).slice(0,4); }))).filter(Boolean).sort().reverse(); const selectedYear = $("experienceYear").value; fillOptions($("experienceYear"), years, "All years"); $("experienceYear").value = years.indexOf(selectedYear) >= 0 ? selectedYear : "";
@@ -841,7 +1021,7 @@ function renderRecurringRecipientChecks(selected) { if (!state.data) return; $("
 
 function renderHome() {
   const prefix = currentMonth();
-  const monthExpenses = state.data.expenses.filter(function (x) { return String(x.date).slice(0,7) === prefix; });
+  const monthExpenses = state.data.expenses.map(normalizeExpense).filter(function (x) { return String(x.date).slice(0,7) === prefix && x.status === "PAID"; });
   const monthIncome = state.data.income.filter(function (x) { return String(x.date).slice(0,7) === prefix; });
   const expenseTotal = monthExpenses.reduce(function (sum,x) { return sum + Number(x.amount || 0); }, 0);
   const incomeTotal = monthIncome.reduce(function (sum,x) { return sum + Number(x.amount || 0); }, 0);
@@ -859,7 +1039,7 @@ function renderHome() {
 }
 function renderFamilyMembers() { const members=state.data.members||[]; $("homeMemberCount").textContent=plural(members.length,"member"); $("homeMemberList").innerHTML=members.map(function(member){return '<span class="family-chip"><i>'+h(String(member.name||"?").charAt(0).toUpperCase())+'</i>'+h(member.name||"Family member")+'</span>';}).join(""); }
 function renderCategoryBars(items) {
-  const totals = {}; items.forEach(function (x) { const label = normalizeExpense(x).sentTo || x.category || "Other"; totals[label] = (totals[label] || 0) + Number(x.amount || 0); });
+  const totals = {}; items.forEach(function (x) { const expense = normalizeExpense(x); if (expense.status !== "PAID") return; const label = expense.category || "Other"; totals[label] = (totals[label] || 0) + Number(x.amount || 0); });
   const rows = Object.keys(totals).map(function (key) { return [key, totals[key]]; }).sort(function (a,b) { return b[1] - a[1]; }).slice(0,6); const max = rows.length ? rows[0][1] : 1;
   $("categoryBars").classList.toggle("empty-block", !rows.length); $("categoryBars").innerHTML = rows.length ? rows.map(function (row) { return '<div class="category-row"><span>' + h(row[0]) + '</span><div class="bar-track"><div class="bar-fill" style="width:' + Math.max(4,row[1]/max*100) + '%"></div></div><strong>' + h(money(row[1])) + "</strong></div>"; }).join("") : "No expenditure added this month.";
 }
@@ -869,7 +1049,7 @@ function renderUpcoming(items) {
 }
 function renderActivity() {
   let items = [];
-  state.data.expenses.slice(0,4).forEach(function (x) { const expense=normalizeExpense(x); items.push({date:x.createdAt,icon:"₹",title:expense.reason||expense.sentTo,meta:money(x.amount)+" sent to "+expense.sentTo+" · "+memberName(x.createdBy)}); });
+  state.data.expenses.slice(0,4).forEach(function (x) { const expense=normalizeExpense(x); items.push({date:x.createdAt,icon:expense.status==="PLANNED"?"◷":"₹",title:expense.reason||expense.sentTo,meta:(expense.status==="PLANNED"?"Preplanned ":"")+money(x.amount)+" · "+expense.category+" · "+memberName(x.createdBy)}); });
   state.data.income.slice(0,3).forEach(function (x) { items.push({date:x.createdAt,icon:"↗",title:x.source,meta:money(x.amount)+" income · "+memberName(x.createdBy)}); });
   state.data.photos.slice(0,3).forEach(function (x) { items.push({date:x.createdAt,icon:"▧",title:x.title,meta:"Photo shared by "+memberName(x.uploadedBy)}); });
   state.data.diary.slice(0,3).forEach(function (x) { items.push({date:x.createdAt,icon:"☷",title:x.title,meta:"Diary by "+memberName(x.createdBy)}); });
@@ -877,9 +1057,9 @@ function renderActivity() {
   $("activityList").classList.toggle("empty-block", !items.length); $("activityList").innerHTML = items.length ? items.map(function(x){return '<div class="activity-item"><span class="activity-icon">'+h(x.icon)+'</span><p><strong>'+h(x.title)+'</strong><br><small>'+h(x.meta)+'</small></p></div>';}).join("") : "Your family's latest additions will appear here.";
 }
 
-function normalizeExpense(item) { return Object.assign({}, item, { sentTo: item.sentTo || item.description || "", fromAccount: item.fromAccount || item.paymentMode || "", reason: item.reason || item.description || "" }); }
-function filteredExpenses() { const month=$("expenseMonth").value,recipient=$("expenseSendToFilter").value,account=$("expenseAccountFilter").value,q=normalize($("expenseSearch").value); return state.data.expenses.map(normalizeExpense).filter(function(x){return (!month||String(x.date).slice(0,7)===month)&&(!recipient||x.sentTo===recipient)&&(!account||x.fromAccount===account)&&(!q||normalize([x.sentTo,x.fromAccount,x.reason,x.date].join(" ")).includes(q));}); }
-function renderExpenses() { const items=filteredExpenses(),total=items.reduce(function(s,x){return s+Number(x.amount||0);},0); $("expenseTotals").innerHTML='<span class="total-pill">'+plural(items.length,"entry","entries")+'</span><span class="total-pill">Total '+h(money(total))+'</span>'; $("expenseRows").innerHTML=items.map(function(x){return '<tr><td class="number"><strong>'+h(money(x.amount))+'</strong></td><td>'+h(formatDate(x.date))+'</td><td><strong>'+h(x.sentTo)+'</strong></td><td>'+h(x.fromAccount)+'</td><td class="expense-reason">'+h(x.reason)+'</td><td><div class="row-actions"><button class="tiny-button" data-action="edit-expense" data-id="'+h(x.id)+'">Edit</button>'+(mayDelete(x)?'<button class="danger-button" data-action="delete-expense" data-id="'+h(x.id)+'">×</button>':"")+'</div></td></tr>';}).join(""); $("expenseEmpty").classList.toggle("hidden",items.length>0); }
+function normalizeExpense(item) { const entryType=String(item.entryType||"REGULAR").toUpperCase(); return Object.assign({}, item, { sentTo: item.sentTo || item.description || "", fromAccount: item.fromAccount || item.paymentMode || "", reason: item.reason || item.description || "", entryType: entryType, category: item.category || (entryType==="OLD"?"Old expenditure":entryType==="RECURRING"?"Regular payment":"Other"), subcategory: item.subcategory || "General", status: String(item.status || (entryType==="PREPLANNED"?"PLANNED":"PAID")).toUpperCase() }); }
+function filteredExpenses() { const month=$("expenseMonth").value,status=$("expenseStatusFilter").value,category=$("expenseCategoryFilter").value,subcategory=$("expenseSubcategoryFilter").value,recipient=$("expenseSendToFilter").value,account=$("expenseAccountFilter").value,q=normalize($("expenseSearch").value); return state.data.expenses.map(normalizeExpense).filter(function(x){return (!month||String(x.date).slice(0,7)===month)&&(!status||x.status===status)&&(!category||x.category===category)&&(!subcategory||x.subcategory===subcategory)&&(!recipient||x.sentTo===recipient)&&(!account||x.fromAccount===account)&&(!q||normalize([x.status,x.category,x.subcategory,x.sentTo,x.fromAccount,x.reason,x.date].join(" ")).includes(q));}); }
+function renderExpenses() { const items=filteredExpenses(),paid=items.filter(function(x){return x.status==="PAID";}),planned=items.filter(function(x){return x.status==="PLANNED";}),paidTotal=paid.reduce(function(s,x){return s+Number(x.amount||0);},0),plannedTotal=planned.reduce(function(s,x){return s+Number(x.amount||0);},0); $("expenseTotals").innerHTML='<span class="total-pill">'+plural(items.length,"entry","entries")+'</span><span class="total-pill">Paid '+h(money(paidTotal))+'</span>'+(planned.length?'<span class="total-pill planned">Preplanned '+h(money(plannedTotal))+'</span>':''); $("expenseRows").innerHTML=items.map(function(x){return '<tr class="expense-'+h(x.status.toLowerCase())+'"><td class="number"><strong>'+h(money(x.amount))+'</strong></td><td>'+h(formatDate(x.date))+'</td><td><span class="expense-status '+h(x.status.toLowerCase())+'">'+(x.status==="PLANNED"?'PREPLANNED':'PAID')+'</span></td><td><strong>'+h(x.category)+'</strong></td><td>'+h(x.subcategory)+'</td><td><strong>'+h(x.sentTo)+'</strong></td><td>'+h(x.fromAccount)+'</td><td class="expense-reason">'+h(x.reason)+'</td><td><div class="row-actions">'+(x.status==="PLANNED"?'<button class="tiny-button paid-button" data-action="mark-planned-paid" data-id="'+h(x.id)+'">✓ Paid</button>':'')+'<button class="tiny-button" data-action="edit-expense" data-id="'+h(x.id)+'">Edit</button>'+(mayDelete(x)?'<button class="danger-button" data-action="delete-expense" data-id="'+h(x.id)+'">×</button>':"")+'</div></td></tr>';}).join(""); $("expenseEmpty").classList.toggle("hidden",items.length>0); }
 function renderRecurringExpenses() {
   const items = state.data.recurringExpenses || [];
   const overdue = items.filter(function (item) { return Number(item.daysUntil) < 0; }).length;
@@ -891,7 +1071,7 @@ function renderRecurringExpenses() {
     else if (days === 1) { statusClass = "soon"; statusText = "Due tomorrow"; }
     else if (days <= 7) { statusClass = "soon"; statusText = "Due in " + days + " days"; }
     const amount = Number(item.estimatedAmount || 0) > 0 ? money(item.estimatedAmount) : "Enter amount when paid";
-    return '<div class="recurring-card '+statusClass+'"><div class="recurring-card-top"><div><span class="frequency-chip">↻ '+h(item.frequency === "YEARLY" ? "Yearly" : "Monthly")+'</span><h4>'+h(item.title)+'</h4></div><span class="due-chip">'+h(statusText)+'</span></div><strong class="recurring-amount">'+h(amount)+'</strong><p>'+h(item.sentTo)+' · '+h(item.fromAccount)+'</p><small>'+h(item.reason)+'</small>'+(item.lastPaidDate?'<em>Last paid '+h(formatDate(item.lastPaidDate))+'</em>':'')+'<div class="recurring-actions"><button class="primary-button" data-action="pay-recurring-expense" data-id="'+h(item.id)+'">✓ Mark as paid</button><button class="tiny-button" data-action="edit-recurring-expense" data-id="'+h(item.id)+'">Edit</button>'+(mayDelete(item)?'<button class="danger-button" data-action="delete-recurring-expense" data-id="'+h(item.id)+'">Remove</button>':'')+'</div></div>';
+    return '<div class="recurring-card '+statusClass+'"><div class="recurring-card-top"><div><span class="frequency-chip">↻ '+h(item.frequency === "YEARLY" ? "Yearly" : "Monthly")+'</span><h4>'+h(item.title)+'</h4></div><span class="due-chip">'+h(statusText)+'</span></div><strong class="recurring-amount">'+h(amount)+'</strong><p><span class="expense-category-chip">'+h(item.category||"Other")+' · '+h(item.subcategory||"General")+'</span><br>'+h(item.sentTo)+' · '+h(item.fromAccount)+'</p><small>'+h(item.reason)+'</small>'+(item.lastPaidDate?'<em>Last paid '+h(formatDate(item.lastPaidDate))+'</em>':'')+'<div class="recurring-actions"><button class="primary-button" data-action="pay-recurring-expense" data-id="'+h(item.id)+'">✓ Mark as paid</button><button class="tiny-button" data-action="edit-recurring-expense" data-id="'+h(item.id)+'">Edit</button>'+(mayDelete(item)?'<button class="danger-button" data-action="delete-recurring-expense" data-id="'+h(item.id)+'">Remove</button>':'')+'</div></div>';
   }).join("");
   $("recurringExpenseEmpty").innerHTML = "No regular payment added. Choose <strong>Add regular payment</strong> to add one now or later.";
   $("recurringExpenseEmpty").classList.toggle("hidden", items.length > 0);
@@ -904,7 +1084,7 @@ function renderDates() { const type=$("dateTypeFilter").value,q=normalize($("dat
 function reminderText(days) { return String(days||"").split(",").map(function(d){return Number(d)===0?"same day":d+"d before";}).join(", "); }
 
 function renderPhotos() { const q=normalize($("photoSearch").value); const items=state.data.photos.filter(function(x){return !q||normalize([x.title,x.caption,memberName(x.uploadedBy)].join(" ")).includes(q);}); $("photoGrid").innerHTML=items.map(function(x){return '<article class="photo-card"><figure data-action="view-photo" data-id="'+h(x.id)+'"><img src="'+h(x.thumbData)+'" alt="'+h(x.title)+'" loading="lazy">'+(mayDelete({createdBy:x.uploadedBy})?'<button class="photo-delete" data-action="delete-photo" data-id="'+h(x.id)+'" aria-label="Delete photo">×</button>':"")+'</figure><figcaption><h3>'+h(x.title)+'</h3>'+(x.caption?'<p>'+h(x.caption)+'</p>':"")+'<div class="photo-meta"><span>'+h(formatDate(x.takenDate||x.createdAt))+'</span><span>by '+h(memberName(x.uploadedBy))+'</span></div></figcaption></article>';}).join(""); $("photoEmpty").classList.toggle("hidden",items.length>0); }
-async function viewPhoto(id) { const item=state.data.photos.find(function(x){return x.id===id;}); if(!item)return; $("viewerTitle").textContent=item.title; $("viewerMeta").textContent=formatDate(item.takenDate||item.createdAt)+" · by "+memberName(item.uploadedBy); $("viewerText").textContent=item.caption||""; $("viewerImage").classList.add("hidden"); $("viewerLoading").classList.remove("hidden"); openDialog("photoViewer"); try{const result=await api("getPhoto",{id:id}); $("viewerImage").src=result.dataUrl; $("viewerImage").classList.remove("hidden"); $("viewerLoading").classList.add("hidden");}catch(error){$("viewerLoading").textContent=error.message;} }
+async function viewPhoto(id) { const item=state.data.photos.find(function(x){return x.id===id;}); if(!item)return; $("viewerTitle").textContent=item.title; $("viewerMeta").textContent=formatDate(item.takenDate||item.createdAt)+" · by "+memberName(item.uploadedBy); $("viewerText").textContent=item.caption||""; $("viewerImage").classList.add("hidden"); $("viewerLoading").classList.remove("hidden"); openDialog("photoViewer"); try{const result=await api("getPhoto",{id:id}); $("viewerImage").src=result.dataUrl; $("viewerImage").classList.remove("hidden"); $("viewerLoading").classList.add("hidden");}catch(error){if(!handleSessionError(error))$("viewerLoading").textContent=error.message;} }
 
 function renderExperiences() { const year=$("experienceYear").value,q=normalize($("experienceSearch").value); const items=state.data.experiences.filter(function(x){return (!year||String(x.experienceDate).slice(0,4)===year)&&(!q||normalize([x.title,x.place,x.story,x.tags,memberName(x.createdBy)].join(" ")).includes(q));}); $("experienceGrid").innerHTML=items.map(function(x){const tags=String(x.tags||"").split(",").map(function(t){return t.trim();}).filter(Boolean);return '<article class="experience-card"><div class="experience-meta"><span>'+h(formatDate(x.experienceDate))+'</span>'+(x.place?'<span>⌖ '+h(x.place)+'</span>':"")+'</div><h3>'+h(x.title)+'</h3><p class="story">'+h(x.story)+'</p><div class="tag-list">'+tags.map(function(t){return '<span class="tag">'+h(t)+'</span>';}).join("")+'</div><div class="experience-footer"><span class="writer">Written by '+h(memberName(x.createdBy))+'</span><div class="row-actions"><button class="tiny-button" data-action="edit-experience" data-id="'+h(x.id)+'">Edit</button>'+(mayDelete(x)?'<button class="danger-button" data-action="delete-experience" data-id="'+h(x.id)+'">×</button>':"")+'</div></div></article>';}).join(""); $("experienceEmpty").classList.toggle("hidden",items.length>0); }
 function renderDiary() { const month=$("diaryMonth").value,writer=$("diaryWriterFilter").value,q=normalize($("diarySearch").value); const items=state.data.diary.filter(function(x){return (!month||String(x.diaryDate).slice(0,7)===month)&&(!writer||x.createdBy===writer)&&(!q||normalize([x.title,x.body,x.mood,x.tags,memberName(x.createdBy)].join(" ")).includes(q));}); $("diaryTimeline").innerHTML=items.map(function(x){const p=dayParts(x.diaryDate),tags=String(x.tags||"").split(",").map(function(t){return t.trim();}).filter(Boolean);return '<article class="diary-entry"><div class="diary-date-badge"><strong>'+p.day+'</strong><span>'+p.month+'</span></div><div class="diary-entry-top"><div><h3>'+h(x.title)+'</h3><span class="writer">Written by '+h(memberName(x.createdBy))+'</span></div><span class="diary-mood">'+h(x.mood)+'</span></div><p class="diary-body">'+h(x.body)+'</p><div class="diary-entry-footer"><div class="tag-list">'+tags.map(function(t){return '<span class="tag">'+h(t)+'</span>';}).join("")+'</div><div class="row-actions"><button class="tiny-button" data-action="edit-diary" data-id="'+h(x.id)+'">Edit</button>'+(mayDelete(x)?'<button class="danger-button" data-action="delete-diary" data-id="'+h(x.id)+'">×</button>':"")+'</div></div></article>';}).join(""); $("diaryEmpty").classList.toggle("hidden",items.length>0); }
@@ -916,6 +1096,7 @@ function renderCalendar() {
   for(let i=0;i<42;i++){const d=new Date(start);d.setDate(start.getDate()+i);const iso=[d.getFullYear(),String(d.getMonth()+1).padStart(2,"0"),String(d.getDate()).padStart(2,"0")].join("-");const events=[];
     state.data.importantDates.forEach(function(x){let eventIso=x.eventDate;if(x.repeatYearly)eventIso=String(d.getFullYear())+String(x.eventDate).slice(4,10);if(eventIso===iso)events.push({type:"reminder",title:x.title});});
     state.data.recurringExpenses.forEach(function(x){if(x.nextDueDate===iso)events.push({type:"recurring",title:"Payment: "+x.title});});
+    state.data.expenses.map(normalizeExpense).forEach(function(x){if(x.status==="PLANNED"&&x.date===iso)events.push({type:"recurring",title:"Preplanned: "+(x.reason||x.category)});});
     state.data.experiences.forEach(function(x){if(x.experienceDate===iso)events.push({type:"experience",title:x.title});}); state.data.diary.forEach(function(x){if(x.diaryDate===iso)events.push({type:"diary",title:x.title});});
     cells.push('<div class="calendar-cell '+(d.getMonth()!==month?'other-month ':'')+(iso===today?'today':'')+'"><span class="calendar-day">'+d.getDate()+'</span><div class="calendar-events">'+events.slice(0,4).map(function(e){return '<button class="calendar-event '+e.type+'" title="'+h(e.title)+'">'+h(e.title)+'</button>';}).join("")+(events.length>4?'<span class="calendar-event">+'+(events.length-4)+' more</span>':"")+'</div></div>');
   } $("calendarGrid").innerHTML=cells.join("");
@@ -933,7 +1114,7 @@ function renderStickyNotes() {
   const active = notes.filter(function (note) { return note.status !== "COMPLETED"; });
   const completed = notes.filter(function (note) { return note.status === "COMPLETED"; });
   $("stickyActiveCount").textContent = active.length;
-  $("stickySectionTitle").textContent = state.stickyView === "active" ? "Active" : "Completed history";
+  $("stickySectionTitle").textContent = state.stickyView === "active" ? "Active" : "Sticky Note Diary";
   $("stickyBoardSummary").textContent = state.stickyView === "active" ? plural(active.length, "active note") : plural(completed.length, "completed note");
   $("stickyTabActive").classList.toggle("active", state.stickyView === "active");
   $("stickyTabCompleted").classList.toggle("active", state.stickyView === "completed");
@@ -950,11 +1131,11 @@ function renderStickyNotes() {
   const empty = state.stickyView === "active" ? !active.length : !completed.length;
   $("stickyEmpty").classList.toggle("hidden", !empty);
   $("stickyEmpty").querySelector("strong").textContent = state.stickyView === "active" ? "No active sticky notes" : "No completed sticky notes";
-  $("stickyEmpty").querySelector("p").textContent = state.stickyView === "active" ? "Add a target or reminder. You can move, resize, pin and collapse it." : "Completed notes are saved here and can be restored.";
+  $("stickyEmpty").querySelector("p").textContent = state.stickyView === "active" ? "Add a target or reminder. Unpinned notes become side tabs; pinned notes can move and resize." : "Completed notes are stored in the separate Sticky Note Diary sheet and can be restored.";
   renderStickyPinnedLayer(active);
 }
 
-function stickyNoteMarkup(note, index, pinnedOverlay) {
+function stickyNoteMarkup(note, index, pinnedOverlay, sideOpen) {
   const width = Math.max(220, Math.min(520, Number(note.width || 280)));
   const height = Math.max(160, Math.min(500, Number(note.height || 220)));
   let x = Math.max(0, Math.min(2000, Number(note.positionX || 20)));
@@ -962,31 +1143,38 @@ function stickyNoteMarkup(note, index, pinnedOverlay) {
   if (pinnedOverlay && window.matchMedia("(max-width: 640px)").matches) { x = 0; y = 8 + index * 30; }
   const dueClass = note.dueDate && note.dueDate < todayIso() ? " overdue" : "";
   const dueText = note.dueDate ? ((dueClass ? "Overdue · " : "Due · ") + formatDate(note.dueDate)) : "No due date";
-  const z = note.pinned ? 5000 + index : 20 + index;
-  const collapseControl = note.pinned ? '<button class="sticky-locked-open" type="button" disabled title="Pinned notes stay open">🔒</button>' : '<button type="button" data-action="collapse-sticky" data-id="'+h(note.id)+'" title="'+(note.collapsed?'Open note':'Collapse note')+'">'+(note.collapsed?'▾':'▴')+'</button>';
+  const z = note.pinned ? 5000 + index : sideOpen ? 4800 : 20 + index;
+  const collapseControl = note.pinned ? '<button class="sticky-locked-open" type="button" disabled title="Pinned notes stay open">🔒</button>' : sideOpen ? '<button type="button" data-action="close-side-sticky" title="Collapse to side tab">›</button>' : '<button type="button" data-action="collapse-sticky" data-id="'+h(note.id)+'" title="'+(note.collapsed?'Open note':'Collapse note')+'">'+(note.collapsed?'▾':'▴')+'</button>';
   const titleControl = note.pinned ? '<strong class="sticky-note-title" title="This pinned note stays open">'+h(note.title)+'</strong>' : '<button class="sticky-note-title" type="button" data-action="collapse-sticky" data-id="'+h(note.id)+'" title="Open or collapse this note">'+h(note.title)+'</button>';
   const footerCollapse = note.pinned
     ? '<button class="collapse-action locked" type="button" disabled title="Unpin this note before collapsing it">🔒 Stays open</button>'
-    : '<button class="collapse-action" type="button" data-action="collapse-sticky" data-id="'+h(note.id)+'">▴ Collapse</button>';
-  return '<article class="sticky-note sticky-'+h(note.color||"yellow")+(!note.pinned&&note.collapsed?' collapsed':'')+(note.pinned?' pinned':'')+(pinnedOverlay?' pinned-overlay-note':'')+'" data-sticky-id="'+h(note.id)+'" style="left:'+x+'px;top:'+y+'px;--overlay-top:'+y+'px;width:'+width+'px;height:'+height+'px;z-index:'+z+'">'+
-    '<header class="sticky-note-head sticky-drag-handle"><span class="sticky-type">'+(note.noteType==="REMINDER"?'REMINDER':'TARGET')+'</span>'+titleControl+'<div class="sticky-head-actions">'+collapseControl+'</div></header>'+
+    : sideOpen ? '<button class="collapse-action" type="button" data-action="close-side-sticky">› Side tab</button>' : '<button class="collapse-action" type="button" data-action="collapse-sticky" data-id="'+h(note.id)+'">▴ Collapse</button>';
+  return '<article class="sticky-note sticky-'+h(note.color||"yellow")+(!note.pinned&&note.collapsed&&!sideOpen?' collapsed':'')+(note.pinned?' pinned':'')+(pinnedOverlay?' pinned-overlay-note':'')+(sideOpen?' side-open-note':'')+'" data-sticky-id="'+h(note.id)+'" style="left:'+x+'px;top:'+y+'px;--overlay-top:'+y+'px;width:'+width+'px;height:'+height+'px;z-index:'+z+'">'+
+    '<header class="sticky-note-head sticky-drag-handle"><span class="sticky-move-label">⠿ Move note</span><span class="sticky-type">'+(note.noteType==="REMINDER"?'REMINDER':'TARGET')+'</span>'+titleControl+'<div class="sticky-head-actions">'+collapseControl+'</div></header>'+
     '<div class="sticky-note-content"><span class="sticky-pinned-label '+(note.pinned?'':'hidden')+'">📌 PINNED OPEN</span><p>'+h(note.body)+'</p><small class="sticky-due'+dueClass+'">'+h(dueText)+'</small><small>Added by '+h(memberName(note.createdBy))+'</small></div>'+
-    '<footer class="sticky-note-actions"><button class="pin-action" type="button" data-action="pin-sticky" data-id="'+h(note.id)+'">'+(note.pinned?'📌 Unpin':'📌 Keep open')+'</button>'+footerCollapse+'<button type="button" data-action="edit-sticky" data-id="'+h(note.id)+'">Edit</button><button class="complete" type="button" data-action="complete-sticky" data-id="'+h(note.id)+'">✓ Completed</button>'+(mayDelete(note)?'<button class="delete" type="button" data-action="delete-sticky" data-id="'+h(note.id)+'">Delete</button>':'')+'<span class="sticky-size-actions"><button type="button" data-action="shrink-sticky" data-id="'+h(note.id)+'" title="Decrease note size">−</button><button type="button" data-action="grow-sticky" data-id="'+h(note.id)+'" title="Increase note size">＋</button></span></footer></article>';
+    '<footer class="sticky-note-actions"><button class="pin-action" type="button" data-action="pin-sticky" data-id="'+h(note.id)+'">'+(note.pinned?'📌 Unpin':'📌 Pin open')+'</button>'+footerCollapse+'<button type="button" data-action="edit-sticky" data-id="'+h(note.id)+'">Edit</button><button class="complete" type="button" data-action="complete-sticky" data-id="'+h(note.id)+'">✓ Complete</button>'+(mayDelete(note)?'<button class="delete" type="button" data-action="delete-sticky" data-id="'+h(note.id)+'">Delete</button>':'')+'<span class="sticky-size-actions"><button type="button" data-action="auto-fit-sticky" data-id="'+h(note.id)+'" title="Fit the note to its content">Auto-fit</button><button type="button" data-action="shrink-sticky" data-id="'+h(note.id)+'" title="Decrease note size">−</button><button type="button" data-action="grow-sticky" data-id="'+h(note.id)+'" title="Increase note size">＋</button></span></footer><span class="sticky-resize-handle" title="Drag to resize" aria-label="Resize sticky note"></span></article>';
 }
 
 function renderStickyPinnedLayer(activeNotes) {
   if (!state.data || !canUseStickyNotes()) { $("stickyPinnedLayer").classList.add("hidden"); return; }
   const notes = activeNotes || (state.data.stickyNotes || []).filter(function (note) { return note.status !== "COMPLETED"; });
   const pinned = notes.filter(function (note) { return note.pinned; });
+  const unpinned = notes.filter(function (note) { return !note.pinned; });
+  const sideNote = unpinned.find(function (note) { return note.id === state.stickySideOpenId; });
   const boardOpen = !$("stickyBoard").classList.contains("hidden");
-  $("stickyPinnedCanvas").innerHTML = pinned.map(function (note, index) { return stickyNoteMarkup(note, index, true); }).join("");
-  $("stickyPinnedLayer").classList.toggle("hidden", boardOpen || !pinned.length);
+  $("stickyPinnedCanvas").innerHTML = pinned.map(function (note, index) { return stickyNoteMarkup(note, index, true, false); }).join("") +
+    '<div class="sticky-side-tabs">'+unpinned.map(function(note,index){return '<button class="sticky-side-tab sticky-'+h(note.color||"yellow")+(sideNote&&sideNote.id===note.id?' active':'')+'" type="button" data-action="open-side-sticky" data-id="'+h(note.id)+'" style="--tab-index:'+index+'" title="Open '+h(note.title)+'"><span>'+(note.noteType==="REMINDER"?'◫':'◎')+'</span><b>'+h(note.title)+'</b></button>';}).join("")+'</div>'+
+    (sideNote ? stickyNoteMarkup(sideNote, pinned.length, true, true) : "");
+  const sideElement = sideNote ? all(".side-open-note", $("stickyPinnedCanvas")).find(function(element){return element.dataset.stickyId===sideNote.id;}) : null;
+  if (sideElement) { sideElement.addEventListener("pointerenter", function(){clearTimeout(state.stickySideTimer);}); sideElement.addEventListener("pointerleave", function(){scheduleSideStickyCollapse(3000);}); }
+  $("stickyPinnedLayer").classList.toggle("hidden", boardOpen || (!pinned.length && !unpinned.length));
 }
 
 function startStickyDrag(event) {
   if (window.matchMedia("(max-width: 640px)").matches || event.button !== 0 || event.target.closest("button")) return;
   const handle = event.target.closest(".sticky-drag-handle"); if (!handle) return;
   const element = handle.closest(".sticky-note"), note = state.data.stickyNotes.find(function (item) { return item.id === element.dataset.stickyId; }); if (!note) return;
+  if (element.classList.contains("side-open-note")) return;
   event.preventDefault();
   state.stickyHighestZ += 1; element.style.zIndex = note.pinned ? 3000 + state.stickyHighestZ : 300 + state.stickyHighestZ;
   element.classList.add("dragging");
@@ -1006,9 +1194,31 @@ function endStickyDrag() {
   state.stickyDrag = null; queueStickyLayoutSave(drag.note);
 }
 
+function startStickyResize(event) {
+  const handle = event.target.closest(".sticky-resize-handle"); if (!handle || event.button !== 0) return;
+  const element = handle.closest(".sticky-note"), note = state.data.stickyNotes.find(function(item){return item.id===element.dataset.stickyId;}); if (!note) return;
+  event.preventDefault(); event.stopPropagation();
+  handle.setPointerCapture(event.pointerId); element.classList.add("resizing");
+  state.stickyResize = { element: element, note: note, startX: event.clientX, startY: event.clientY, startWidth: element.offsetWidth, startHeight: element.offsetHeight };
+}
+
+function moveStickyResize(event) {
+  const resize = state.stickyResize; if (!resize) return;
+  event.preventDefault();
+  const width = Math.max(220, Math.min(520, resize.startWidth + event.clientX - resize.startX));
+  const height = Math.max(160, Math.min(500, resize.startHeight + event.clientY - resize.startY));
+  resize.element.style.width = Math.round(width) + "px"; resize.element.style.height = Math.round(height) + "px";
+}
+
+function endStickyResize() {
+  const resize = state.stickyResize; if (!resize) return;
+  resize.element.classList.remove("resizing"); resize.note.width = Math.round(resize.element.offsetWidth); resize.note.height = Math.round(resize.element.offsetHeight);
+  state.stickyResize = null; queueStickyLayoutSave(resize.note);
+}
+
 function renderGlobalSearch() {
   const q=normalize($("globalSearch").value); if(q.length<2){$("globalSearchResults").innerHTML='<p class="muted">Type at least 2 characters to search all family records.</p>';return;} let results=[];
-  state.data.expenses.forEach(function(x){const expense=normalizeExpense(x);if(normalize([expense.sentTo,expense.fromAccount,expense.reason].join(" ")).includes(q))results.push({view:"expenses",icon:"₹",title:expense.reason||expense.sentTo,meta:money(x.amount)+" · "+formatDate(x.date)});});
+  state.data.expenses.forEach(function(x){const expense=normalizeExpense(x);if(normalize([expense.status,expense.category,expense.subcategory,expense.sentTo,expense.fromAccount,expense.reason].join(" ")).includes(q))results.push({view:"expenses",icon:expense.status==="PLANNED"?"◷":"₹",title:expense.reason||expense.sentTo,meta:(expense.status==="PLANNED"?"Preplanned · ":"")+expense.category+" · "+money(x.amount)+" · "+formatDate(x.date)});});
   state.data.recurringExpenses.forEach(function(x){if(normalize([x.title,x.sentTo,x.fromAccount,x.reason,x.frequency].join(" ")).includes(q))results.push({view:"expenses",icon:"↻",title:x.title,meta:(x.frequency==="YEARLY"?"Yearly":"Monthly")+" payment · due "+formatDate(x.nextDueDate)});});
   state.data.income.forEach(function(x){if(normalize([x.source,x.category,memberName(x.receivedBy)].join(" ")).includes(q))results.push({view:"income",icon:"↗",title:x.source,meta:money(x.amount)+" · "+formatDate(x.date)});});
   state.data.targets.forEach(function(x){if(normalize([x.title,x.category,x.notes].join(" ")).includes(q))results.push({view:"targets",icon:"◎",title:x.title,meta:"Target · "+money(x.targetAmount)});});

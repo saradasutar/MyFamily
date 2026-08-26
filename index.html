@@ -6,7 +6,7 @@
   <meta name="theme-color" content="#5743a8">
   <meta name="description" content="Private family dashboard for expenses, goals, important dates and photos.">
   <title>Our Family Hub</title>
-  <link rel="stylesheet" href="styles.css?v=1.0.13">
+  <link rel="stylesheet" href="styles.css?v=1.0.14">
 </head>
 <body>
   <div class="ambient ambient-one"></div>
@@ -39,11 +39,13 @@
         </label>
         <div class="login-options">
           <label class="remember-row"><input id="rememberUsername" type="checkbox" checked> Save username on this device</label>
-          <span class="version-pair"><b id="loginFrontendVersion">FE v1.0.13</b><b id="loginBackendVersion">BE checking…</b></span>
-          <span id="loginVersion" class="legacy-version hidden" aria-hidden="true">Version 1.0.13</span>
+          <span class="version-pair"><b id="loginFrontendVersion">FE v1.0.14</b><b id="loginBackendVersion">BE checking…</b></span>
+          <span id="loginVersion" class="legacy-version hidden" aria-hidden="true">Version 1.0.14</span>
         </div>
         <button class="primary-button wide" type="submit">Sign in securely</button>
+        <button id="repairSessionButton" class="repair-session-button" type="button">↻ Repair browser cache / session</button>
       </form>
+      <p class="session-safety-note">For privacy, the dashboard signs out after 5 inactive minutes and after this page is closed or left.</p>
       <p id="setupHint" class="setup-hint hidden">Open <strong>config.js</strong> and paste your Apps Script Web App URL first.</p>
       <p class="login-footnote">Your Google Sheet and Drive folder remain under the dashboard owner's Google account.</p>
     </div>
@@ -55,8 +57,8 @@
         <div class="brand-mark small">FH</div>
         <div>
           <strong id="sidebarFamilyName">Our Family Hub</strong>
-          <span class="sidebar-version-pair"><b id="sidebarFrontendVersion">FE v1.0.13</b><b id="sidebarBackendVersion">BE checking…</b></span>
-          <b id="sidebarVersion" class="legacy-version hidden" aria-hidden="true">v1.0.13</b>
+          <span class="sidebar-version-pair"><b id="sidebarFrontendVersion">FE v1.0.14</b><b id="sidebarBackendVersion">BE checking…</b></span>
+          <b id="sidebarVersion" class="legacy-version hidden" aria-hidden="true">v1.0.14</b>
         </div>
       </div>
       <nav class="main-nav" aria-label="Main navigation">
@@ -160,8 +162,8 @@
 
         <section id="view-expenses" class="view">
           <div class="section-toolbar">
-            <div><p class="section-intro">Record old and new payments using your family's expenditure format.</p></div>
-            <div class="toolbar-actions"><button id="exportExpenses" class="secondary-button">⇩ Export CSV</button><button id="printExpenses" class="secondary-button">⌑ Print</button><button class="secondary-button" data-open="bulkExpenseDialog">⇧ Import old records</button><button class="secondary-button" data-open="recurringExpenseDialog">↻ Add regular payment</button><button class="primary-button" data-open="expenseDialog">＋ Add expenditure</button></div>
+            <div><p class="section-intro">Record paid, preplanned and regular expenditure with category and subcategory.</p></div>
+            <div class="toolbar-actions"><button id="exportExpenses" class="secondary-button">⇩ Export CSV</button><button id="printExpenses" class="secondary-button">⌑ Print</button><button class="secondary-button" data-open="bulkExpenseDialog">⇧ Import old records</button><button class="secondary-button" data-open="recurringExpenseDialog">↻ Add regular payment</button><button id="addPreplannedExpense" class="secondary-button">◷ Add preplanned</button><button class="primary-button" data-open="expenseDialog">＋ Add paid expenditure</button></div>
           </div>
           <article class="panel recurring-panel">
             <div class="panel-heading"><div><p class="eyebrow">MONTHLY &amp; YEARLY</p><h3>Regular payments</h3><p class="recurring-intro">Electricity, maintenance, insurance, land/holding tax and any other repeating expenditure.</p></div><span id="recurringExpenseCount" class="count-badge">0 payments</span></div>
@@ -170,15 +172,18 @@
           </article>
           <div class="filter-bar">
             <label>Month<input id="expenseMonth" type="month"></label>
+            <label>Status<select id="expenseStatusFilter"><option value="">Paid &amp; planned</option><option value="PAID">Paid only</option><option value="PLANNED">Preplanned only</option></select></label>
+            <label>Category<select id="expenseCategoryFilter"><option value="">All categories</option></select></label>
+            <label>Subcategory<select id="expenseSubcategoryFilter"><option value="">All subcategories</option></select></label>
             <label>Send to<select id="expenseSendToFilter"><option value="">All recipients</option></select></label>
             <label>From account<select id="expenseAccountFilter"><option value="">All accounts</option></select></label>
-            <label class="search-label">Search<input id="expenseSearch" type="search" placeholder="Recipient, account or reason"></label>
+            <label class="search-label">Search<input id="expenseSearch" type="search" placeholder="Category, subcategory, recipient, account or reason"></label>
           </div>
           <div id="expenseTotals" class="inline-totals"></div>
           <div class="table-wrap">
             <table id="expenseTable" class="expense-table">
-              <colgroup><col><col><col><col><col><col></colgroup>
-              <thead><tr><th class="number">Amt (Rs.)<span class="column-resizer" data-expense-column="0" tabindex="0" role="separator" aria-label="Resize amount column"></span></th><th>Date Paid<span class="column-resizer" data-expense-column="1" tabindex="0" role="separator" aria-label="Resize date column"></span></th><th>Send to<span class="column-resizer" data-expense-column="2" tabindex="0" role="separator" aria-label="Resize recipient column"></span></th><th>From Acct<span class="column-resizer" data-expense-column="3" tabindex="0" role="separator" aria-label="Resize account column"></span></th><th>Reason<span class="column-resizer" data-expense-column="4" tabindex="0" role="separator" aria-label="Resize reason column"></span></th><th>Actions<span class="column-resizer" data-expense-column="5" tabindex="0" role="separator" aria-label="Resize actions column"></span></th></tr></thead>
+              <colgroup><col><col><col><col><col><col><col><col><col></colgroup>
+              <thead><tr><th class="number">Amt (Rs.)<span class="column-resizer" data-expense-column="0" tabindex="0" role="separator" aria-label="Resize amount column"></span></th><th>Date<span class="column-resizer" data-expense-column="1" tabindex="0" role="separator" aria-label="Resize date column"></span></th><th>Status<span class="column-resizer" data-expense-column="2" tabindex="0" role="separator" aria-label="Resize status column"></span></th><th>Category<span class="column-resizer" data-expense-column="3" tabindex="0" role="separator" aria-label="Resize category column"></span></th><th>Subcategory<span class="column-resizer" data-expense-column="4" tabindex="0" role="separator" aria-label="Resize subcategory column"></span></th><th>Send to<span class="column-resizer" data-expense-column="5" tabindex="0" role="separator" aria-label="Resize recipient column"></span></th><th>From Acct<span class="column-resizer" data-expense-column="6" tabindex="0" role="separator" aria-label="Resize account column"></span></th><th>Reason<span class="column-resizer" data-expense-column="7" tabindex="0" role="separator" aria-label="Resize reason column"></span></th><th>Actions<span class="column-resizer" data-expense-column="8" tabindex="0" role="separator" aria-label="Resize actions column"></span></th></tr></thead>
               <tbody id="expenseRows"></tbody>
             </table>
             <div id="expenseEmpty" class="table-empty hidden">No expenditure matches these filters.</div>
@@ -291,10 +296,10 @@
     <div id="stickyBoardShade" class="sticky-board-shade hidden"></div>
     <section id="stickyBoard" class="sticky-board hidden" aria-label="Target and reminder sticky notes">
       <header class="sticky-board-head">
-        <div class="sticky-board-title"><div><span>FAMILY ORGANISER</span><strong>Targets &amp; Reminders</strong><small>Active notes stay visible here; completed notes move safely into history.</small></div></div>
+        <div class="sticky-board-title"><div><span>FAMILY ORGANISER</span><strong>Targets &amp; Reminders</strong><small>Unpinned notes collapse to side tabs; completed notes move into the separate Sticky Note Diary sheet.</small></div></div>
         <div class="sticky-board-controls">
           <button id="stickyTabActive" class="sticky-tab active" type="button">Active</button>
-          <button id="stickyTabCompleted" class="sticky-tab" type="button">History</button>
+          <button id="stickyTabCompleted" class="sticky-tab" type="button">Sticky Note Diary</button>
           <button id="stickyMinimize" class="sticky-minimize" type="button" aria-label="Minimize sticky-note organiser" title="Minimize">—</button>
           <button id="stickyClose" class="sticky-close" type="button" aria-label="Close sticky-note organiser" title="Close">×</button>
         </div>
@@ -337,8 +342,11 @@
       <div class="modal-head"><div><p class="eyebrow">EXPENDITURE</p><h3 id="expenseDialogTitle">Add expenditure</h3></div><button class="modal-close" type="button" data-close>×</button></div>
       <input id="expenseId" type="hidden">
       <input id="expenseRecurringId" type="hidden">
+      <input id="expenseMarkPaidId" type="hidden">
       <p id="expenseRecurringNote" class="recurring-pay-note hidden"></p>
-      <div class="two-fields"><label>Amt (Rs.)<input id="expenseAmount" type="number" min="0.01" step="0.01" required placeholder="12000"></label><label>Date Paid<input id="expenseDate" type="date" required></label></div>
+      <div class="two-fields"><label>Entry type<select id="expenseEntryType" required><option value="REGULAR">Paid expenditure</option><option value="PREPLANNED">Preplanned expenditure</option></select></label><label id="expenseDateLabel">Date Paid<input id="expenseDate" type="date" required></label></div>
+      <div class="two-fields"><label>Amt (Rs.)<input id="expenseAmount" type="number" min="0.01" step="0.01" required placeholder="12000"></label><label>Category<select id="expenseCategory" required><option>Home</option><option>Utilities</option><option>Food</option><option>Health</option><option>Transport</option><option>Education</option><option>Family transfer</option><option>Tax &amp; insurance</option><option>Travel</option><option>Shopping</option><option>Entertainment</option><option>Other</option></select></label></div>
+      <div class="two-fields"><label>Subcategory<input id="expenseSubcategory" list="expenseSubcategoryOptions" required maxlength="80" placeholder="Choose or type a subcategory"><datalist id="expenseSubcategoryOptions"></datalist></label><span class="category-help">Subcategories change with the selected category, and you may type another one.</span></div>
       <div class="two-fields"><label>Send to<input id="expenseSendTo" required maxlength="100" placeholder="e.g. Mani SBI"></label><label>From Acct<input id="expenseFromAccount" required maxlength="100" placeholder="e.g. Family SBI"></label></div>
       <label>Reason<textarea id="expenseReason" rows="3" required maxlength="500" placeholder="e.g. Monthly 12k sent to Mani SBI on 05th &amp; 20th of each month"></textarea></label>
       <div class="modal-actions"><button type="button" class="secondary-button" data-close>Cancel</button><button type="submit" class="primary-button">Save expenditure</button></div>
@@ -351,6 +359,7 @@
       <input id="recurringExpenseId" type="hidden">
       <div class="two-fields"><label>Payment name<input id="recurringExpenseTitle" required maxlength="100" placeholder="e.g. Electricity bill"></label><label>Estimated amount (optional)<input id="recurringExpenseAmount" type="number" min="0" step="0.01" placeholder="Amount can be changed when paid"></label></div>
       <div class="two-fields"><label>Repeat<select id="recurringExpenseFrequency" required><option value="MONTHLY">Every month</option><option value="YEARLY">Every year</option></select></label><label>Next due date<input id="recurringExpenseDueDate" type="date" required></label></div>
+      <div class="two-fields"><label>Category<select id="recurringExpenseCategory" required><option>Home</option><option>Utilities</option><option>Food</option><option>Health</option><option>Transport</option><option>Education</option><option>Family transfer</option><option>Tax &amp; insurance</option><option>Travel</option><option>Shopping</option><option>Entertainment</option><option>Other</option></select></label><label>Subcategory<input id="recurringExpenseSubcategory" list="recurringExpenseSubcategoryOptions" required maxlength="80" placeholder="Choose or type"><datalist id="recurringExpenseSubcategoryOptions"></datalist></label></div>
       <div class="two-fields"><label>Send to<input id="recurringExpenseSendTo" required maxlength="100" placeholder="e.g. BESCOM"></label><label>From Acct<input id="recurringExpenseFromAccount" required maxlength="100" placeholder="e.g. Family SBI"></label></div>
       <label>Reason<textarea id="recurringExpenseReason" rows="3" required maxlength="500" placeholder="e.g. Monthly home electricity bill"></textarea></label>
       <label>Send email reminder<select id="recurringExpenseRemind"><option value="7,1,0">7 days, 1 day and same day</option><option value="3,1,0">3 days, 1 day and same day</option><option value="1,0">1 day and same day</option><option value="0">Same day only</option><option value="14,7,1,0">14 days, 7 days, 1 day and same day</option></select></label>
@@ -377,9 +386,12 @@
       <div class="report-filter-grid">
         <label>From date<input id="expensePrintFrom" type="date" required></label>
         <label>To date<input id="expensePrintTo" type="date" required></label>
+        <label>Status<select id="expensePrintStatus"><option value="">Paid &amp; planned</option><option value="PAID">Paid only</option><option value="PLANNED">Preplanned only</option></select></label>
+        <label>Category<select id="expensePrintCategory"><option value="">All categories</option></select></label>
+        <label>Subcategory<select id="expensePrintSubcategory"><option value="">All subcategories</option></select></label>
         <label>Send to<select id="expensePrintSendTo"><option value="">All recipients</option></select></label>
         <label>From account<select id="expensePrintAccount"><option value="">All accounts</option></select></label>
-        <label>Search<input id="expensePrintSearch" type="search" placeholder="Recipient, account or reason"></label>
+        <label>Search<input id="expensePrintSearch" type="search" placeholder="Category, recipient, account or reason"></label>
         <label>Column width<select id="expensePrintDensity"><option value="comfortable">Comfortable</option><option value="compact">Compact</option><option value="minimum">Minimum width</option></select></label>
       </div>
       <div class="modal-actions"><button type="button" class="secondary-button" data-close>Cancel</button><button id="viewExpenseReport" type="button" class="secondary-button">◉ View selected period</button><button type="submit" class="primary-button">⌑ Print selected period</button></div>
@@ -525,7 +537,7 @@
   <div id="loadingOverlay" class="loading-overlay hidden"><div class="spinner"></div><p id="loadingText">Working…</p></div>
   <div id="toastRegion" class="toast-region" aria-live="polite"></div>
 
-  <script src="config.js?v=1.0.13"></script>
-  <script src="app.js?v=1.0.13"></script>
+  <script src="config.js?v=1.0.14"></script>
+  <script src="app.js?v=1.0.14"></script>
 </body>
 </html>

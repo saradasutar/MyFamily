@@ -2,12 +2,12 @@
 
 const CONFIG = window.FAMILY_DASHBOARD_CONFIG || {};
 const PLACEHOLDER_URL = "PASTE_YOUR_APPS_SCRIPT_WEB_APP_URL_HERE";
-const FRONTEND_VERSION = "1.0.16";
+const FRONTEND_VERSION = "1.0.18";
 const SAVED_USERNAME_KEY = "familyDashboardUsername";
 const SESSION_TOKEN_KEY = "familyDashboardToken";
 const IDLE_TIMEOUT_MS = 5 * 60 * 1000;
 const KEEP_ALIVE_INTERVAL_MS = 2 * 60 * 1000;
-const EXPENSE_COLUMN_WIDTHS_KEY = "familyDashboardExpenseColumnWidthsV2";
+const EXPENSE_COLUMN_WIDTHS_KEY = "familyDashboardExpenseColumnWidthsV3";
 const state = {
   token: sessionStorage.getItem(SESSION_TOKEN_KEY) || "",
   data: null,
@@ -28,7 +28,9 @@ const state = {
   stickySideOpenId: "",
   stickySideTimer: null,
   inlineExpenseId: "",
-  categoryDraft: []
+  categoryDraft: [],
+  categoryEditIds: new Set(),
+  subcategoryEditIds: new Set()
 };
 const pendingRequests = new Map();
 const viewTitles = {
@@ -190,6 +192,7 @@ function showApp() {
 function showLogin() {
   stopIdleTimer();
   clearTimeout(state.stickyLauncherTimer);
+  document.body.classList.remove("sticky-drawer-open");
   $("stickyBoard").classList.add("hidden");
   $("stickyBoardShade").classList.add("hidden");
   $("stickyLauncher").classList.add("hidden");
@@ -381,7 +384,7 @@ function prepareNewDialog(id) {
   if (id === "memberDialog") { $("memberDialogTitle").textContent = "Add family member"; $("memberActive").checked = true; $("memberPin").required = true; setMemberPermissions(["EXPENSES","INCOME","TARGETS","DATES","CALENDAR","PHOTOS","EXPERIENCES","DIARY"]); syncMemberAccessRole(); }
   if (id === "experienceDialog") $("experienceDialogTitle").textContent = "Add experience";
   if (id === "diaryDialog") $("diaryDialogTitle").textContent = "Write diary entry";
-  if (id === "expenseCategoryDialog") { state.categoryDraft = JSON.parse(JSON.stringify(expenseCategoryConfig())); $("newExpenseCategoryName").value = ""; renderExpenseCategoryManager(); }
+  if (id === "expenseCategoryDialog") { state.categoryDraft = JSON.parse(JSON.stringify(expenseCategoryConfig())); state.categoryEditIds.clear(); state.subcategoryEditIds.clear(); $("newExpenseCategoryName").value = ""; renderExpenseCategoryManager(); }
 }
 
 function syncExpenseEntryType() {
@@ -408,6 +411,7 @@ function addExpenseCategoryDraft(event) {
   state.categoryDraft.push({ id: newCategoryConfigId("CAT"), name: name, active: true, subcategories: [{ id: newCategoryConfigId("SUB"), name: "General", active: true }] });
   $("newExpenseCategoryName").value = "";
   renderExpenseCategoryManager();
+  toast("Category created. Choose Save category changes to publish it.", "success");
 }
 function categoryUsage(categoryName, subcategoryName) {
   const expenses = (state.data.expenses || []).map(normalizeExpense);
@@ -421,9 +425,12 @@ function renderExpenseCategoryManager() {
     const used = categoryUsage(category.name);
     const subcategoryRows = (category.subcategories || []).map(function (subcategory, subcategoryIndex) {
       const subUsed = categoryUsage(category.name, subcategory.name);
-      return '<div class="subcategory-manager-row '+(subcategory.active===false?'archived':'')+'" data-category-id="'+h(category.id)+'" data-subcategory-id="'+h(subcategory.id)+'"><span class="subcategory-branch">↳</span><input class="subcategory-name-input" maxlength="60" value="'+h(subcategory.name)+'" aria-label="Subcategory name"><small>'+h(plural(subUsed,"record"))+'</small><div class="category-order-actions"><button type="button" class="tiny-button" data-action="move-subcategory-up" data-category-id="'+h(category.id)+'" data-subcategory-id="'+h(subcategory.id)+'" '+(subcategoryIndex===0?'disabled':'')+' aria-label="Move subcategory up">↑</button><button type="button" class="tiny-button" data-action="move-subcategory-down" data-category-id="'+h(category.id)+'" data-subcategory-id="'+h(subcategory.id)+'" '+(subcategoryIndex===category.subcategories.length-1?'disabled':'')+' aria-label="Move subcategory down">↓</button><button type="button" class="tiny-button '+(subcategory.active===false?'restore-button':'archive-button')+'" data-action="toggle-subcategory-active" data-category-id="'+h(category.id)+'" data-subcategory-id="'+h(subcategory.id)+'">'+(subcategory.active===false?'Restore':'Archive')+'</button></div></div>';
+      const editKey = category.id + "::" + subcategory.id;
+      const editing = state.subcategoryEditIds.has(editKey);
+      return '<div class="subcategory-manager-row '+(subcategory.active===false?'archived':'')+' '+(editing?'editing':'')+'" data-category-id="'+h(category.id)+'" data-subcategory-id="'+h(subcategory.id)+'"><span class="subcategory-branch">↳</span><input class="subcategory-name-input" maxlength="60" value="'+h(subcategory.name)+'" aria-label="Subcategory name" '+(editing?'':'readonly')+'><small>'+h(plural(subUsed,"record"))+'</small><div class="category-order-actions"><button type="button" class="tiny-button edit-name-button" data-action="'+(editing?'finish-edit-subcategory':'edit-subcategory')+'" data-category-id="'+h(category.id)+'" data-subcategory-id="'+h(subcategory.id)+'">'+(editing?'✓ Done':'✎ Edit')+'</button><button type="button" class="tiny-button" data-action="move-subcategory-up" data-category-id="'+h(category.id)+'" data-subcategory-id="'+h(subcategory.id)+'" '+(subcategoryIndex===0?'disabled':'')+' aria-label="Move subcategory up">↑</button><button type="button" class="tiny-button" data-action="move-subcategory-down" data-category-id="'+h(category.id)+'" data-subcategory-id="'+h(subcategory.id)+'" '+(subcategoryIndex===category.subcategories.length-1?'disabled':'')+' aria-label="Move subcategory down">↓</button><button type="button" class="tiny-button '+(subcategory.active===false?'restore-button':'archive-button')+'" data-action="toggle-subcategory-active" data-category-id="'+h(category.id)+'" data-subcategory-id="'+h(subcategory.id)+'">'+(subcategory.active===false?'Restore':'Archive')+'</button><button type="button" class="tiny-button delete-choice-button" data-action="delete-subcategory" data-category-id="'+h(category.id)+'" data-subcategory-id="'+h(subcategory.id)+'">Delete</button></div></div>';
     }).join("");
-    return '<article class="category-manager-card '+(category.active===false?'archived':'')+'" data-category-id="'+h(category.id)+'"><header><span class="category-drag-index">'+(categoryIndex+1)+'</span><input class="category-name-input" maxlength="60" value="'+h(category.name)+'" aria-label="Category name"><small>'+h(plural(used,"record"))+'</small><div class="category-order-actions"><button type="button" class="tiny-button" data-action="move-category-up" data-category-id="'+h(category.id)+'" '+(categoryIndex===0?'disabled':'')+' aria-label="Move category up">↑</button><button type="button" class="tiny-button" data-action="move-category-down" data-category-id="'+h(category.id)+'" '+(categoryIndex===state.categoryDraft.length-1?'disabled':'')+' aria-label="Move category down">↓</button><button type="button" class="tiny-button '+(category.active===false?'restore-button':'archive-button')+'" data-action="toggle-category-active" data-category-id="'+h(category.id)+'">'+(category.active===false?'Restore':'Archive')+'</button></div></header><div class="subcategory-manager-list">'+subcategoryRows+'</div><button type="button" class="add-subcategory-button" data-action="add-subcategory" data-category-id="'+h(category.id)+'">＋ Add subcategory</button></article>';
+    const editing = state.categoryEditIds.has(category.id);
+    return '<article class="category-manager-card '+(category.active===false?'archived':'')+' '+(editing?'editing':'')+'" data-category-id="'+h(category.id)+'"><header><span class="category-drag-index">'+(categoryIndex+1)+'</span><input class="category-name-input" maxlength="60" value="'+h(category.name)+'" aria-label="Category name" '+(editing?'':'readonly')+'><small>'+h(plural(used,"record"))+'</small><div class="category-order-actions"><button type="button" class="tiny-button edit-name-button" data-action="'+(editing?'finish-edit-category':'edit-category')+'" data-category-id="'+h(category.id)+'">'+(editing?'✓ Done':'✎ Edit')+'</button><button type="button" class="tiny-button" data-action="move-category-up" data-category-id="'+h(category.id)+'" '+(categoryIndex===0?'disabled':'')+' aria-label="Move category up">↑</button><button type="button" class="tiny-button" data-action="move-category-down" data-category-id="'+h(category.id)+'" '+(categoryIndex===state.categoryDraft.length-1?'disabled':'')+' aria-label="Move category down">↓</button><button type="button" class="tiny-button '+(category.active===false?'restore-button':'archive-button')+'" data-action="toggle-category-active" data-category-id="'+h(category.id)+'">'+(category.active===false?'Restore':'Archive')+'</button><button type="button" class="tiny-button delete-choice-button" data-action="delete-category" data-category-id="'+h(category.id)+'">Delete</button></div></header><div class="subcategory-manager-list">'+subcategoryRows+'</div><button type="button" class="add-subcategory-button" data-action="add-subcategory" data-category-id="'+h(category.id)+'">＋ Create subcategory</button></article>';
   }).join("");
 }
 function moveDraftItem(items, id, direction) {
@@ -435,28 +442,60 @@ function moveDraftItem(items, id, direction) {
 function handleCategoryManagerAction(action, button) {
   const category = categoryDraftById(button.dataset.categoryId);
   if (!category) return;
+  if (action === "edit-category") state.categoryEditIds.add(category.id);
+  if (action === "finish-edit-category") state.categoryEditIds.delete(category.id);
   if (action === "move-category-up") moveDraftItem(state.categoryDraft, category.id, -1);
   if (action === "move-category-down") moveDraftItem(state.categoryDraft, category.id, 1);
+  if (action === "delete-category") {
+    const remainingActive = state.categoryDraft.filter(function (item) { return item.id !== category.id && item.active !== false; }).length;
+    if (category.active !== false && !remainingActive) return toast("Keep at least one active expenditure category.", "error");
+    const usage = categoryUsage(category.name);
+    const message = "Delete category “" + category.name + "” from future choices?" + (usage ? " Its " + plural(usage, "historical record") + " will remain unchanged, searchable and printable." : "");
+    if (!window.confirm(message)) return;
+    state.categoryDraft = state.categoryDraft.filter(function (item) { return item.id !== category.id; });
+    state.categoryEditIds.delete(category.id);
+    Array.from(state.subcategoryEditIds).forEach(function (key) { if (key.indexOf(category.id + "::") === 0) state.subcategoryEditIds.delete(key); });
+    renderExpenseCategoryManager();
+    return;
+  }
   if (action === "toggle-category-active") {
     if (category.active !== false && state.categoryDraft.filter(function (item) { return item.active !== false; }).length === 1) return toast("Keep at least one active expenditure category.", "error");
     category.active = category.active === false;
     if (category.active && !(category.subcategories || []).some(function (item) { return item.active !== false; }) && category.subcategories[0]) category.subcategories[0].active = true;
   }
   if (action === "add-subcategory") {
-    category.subcategories.push({ id: newCategoryConfigId("SUB"), name: "New subcategory", active: true });
+    const created = { id: newCategoryConfigId("SUB"), name: "New subcategory", active: true };
+    category.subcategories.push(created);
+    state.subcategoryEditIds.add(category.id + "::" + created.id);
   }
   const subcategory = (category.subcategories || []).find(function (item) { return item.id === button.dataset.subcategoryId; });
+  const editKey = subcategory ? category.id + "::" + subcategory.id : "";
+  if (action === "edit-subcategory" && subcategory) state.subcategoryEditIds.add(editKey);
+  if (action === "finish-edit-subcategory" && subcategory) state.subcategoryEditIds.delete(editKey);
   if (action === "move-subcategory-up" && subcategory) moveDraftItem(category.subcategories, subcategory.id, -1);
   if (action === "move-subcategory-down" && subcategory) moveDraftItem(category.subcategories, subcategory.id, 1);
+  if (action === "delete-subcategory" && subcategory) {
+    if (category.subcategories.length === 1) return toast("Every category must keep at least one subcategory.", "error");
+    const remainingActive = category.subcategories.filter(function (item) { return item.id !== subcategory.id && item.active !== false; }).length;
+    if (category.active !== false && subcategory.active !== false && !remainingActive) return toast("Keep at least one active subcategory inside an active category.", "error");
+    const usage = categoryUsage(category.name, subcategory.name);
+    const message = "Delete subcategory “" + subcategory.name + "” from future choices?" + (usage ? " Its " + plural(usage, "historical record") + " will remain unchanged, searchable and printable." : "");
+    if (!window.confirm(message)) return;
+    category.subcategories = category.subcategories.filter(function (item) { return item.id !== subcategory.id; });
+    state.subcategoryEditIds.delete(editKey);
+  }
   if (action === "toggle-subcategory-active" && subcategory) {
     if (subcategory.active !== false && category.active !== false && category.subcategories.filter(function (item) { return item.active !== false; }).length === 1) return toast("Keep at least one active subcategory inside an active category.", "error");
     subcategory.active = subcategory.active === false;
   }
   renderExpenseCategoryManager();
-  if (action === "add-subcategory") {
+  if (["add-subcategory","edit-category","edit-subcategory"].indexOf(action) >= 0) {
     const card = all(".category-manager-card", $("expenseCategoryManagerList")).find(function (item) { return item.dataset.categoryId === category.id; });
-    const inputs = card ? all(".subcategory-name-input", card) : [];
-    const input = inputs[inputs.length - 1]; if (input) { input.focus(); input.select(); }
+    let input = null;
+    if (card && action === "edit-category") input = card.querySelector(".category-name-input");
+    if (card && action === "edit-subcategory") input = card.querySelector('.subcategory-manager-row[data-subcategory-id="'+CSS.escape(subcategory.id)+'"] .subcategory-name-input');
+    if (card && action === "add-subcategory") { const inputs = all(".subcategory-name-input", card); input = inputs[inputs.length - 1]; }
+    if (input) { input.focus(); input.select(); }
   }
 }
 async function saveExpenseCategories() {
@@ -507,7 +546,7 @@ function bindFilters() {
 }
 
 function bindExpenseColumnResize() {
-  const table = $("expenseTable"), columns = all("col", table), defaults = [125,115,105,145,145,170,170,300,120];
+  const table = $("expenseTable"), columns = all("col", table), defaults = [98,125,115,105,145,145,170,170,300,180];
   if (!table || !columns.length) return;
   let saved = [];
   try { saved = JSON.parse(localStorage.getItem(EXPENSE_COLUMN_WIDTHS_KEY) || "[]"); } catch (error) { saved = []; }
@@ -586,7 +625,7 @@ function bindActions() {
     if (action === "auto-fit-sticky") autoFitStickyNote(id);
     if (action === "open-side-sticky") openSideSticky(id);
     if (action === "close-side-sticky") closeSideSticky();
-    if (["move-category-up","move-category-down","toggle-category-active","add-subcategory","move-subcategory-up","move-subcategory-down","toggle-subcategory-active"].indexOf(action) >= 0) handleCategoryManagerAction(action, button);
+    if (["edit-category","finish-edit-category","delete-category","move-category-up","move-category-down","toggle-category-active","add-subcategory","edit-subcategory","finish-edit-subcategory","delete-subcategory","move-subcategory-up","move-subcategory-down","toggle-subcategory-active"].indexOf(action) >= 0) handleCategoryManagerAction(action, button);
   });
   document.addEventListener("input", function (event) {
     const categoryCard = event.target.closest(".category-manager-card");
@@ -629,12 +668,16 @@ function bindStickyBoard() {
   window.addEventListener("pointerup", endStickyResize);
   window.addEventListener("pointercancel", endStickyDrag);
   window.addEventListener("pointercancel", endStickyResize);
+  window.addEventListener("keydown", function (event) {
+    if (event.key === "Escape" && !$("stickyBoard").classList.contains("hidden") && !document.querySelector("dialog[open]")) closeStickyBoard();
+  });
 }
 
 function openStickyBoard(view) {
   if (!canUseStickyNotes()) return;
   clearTimeout(state.stickyLauncherTimer);
   if (view) state.stickyView = view;
+  document.body.classList.add("sticky-drawer-open");
   $("stickyBoard").classList.remove("hidden");
   $("stickyBoardShade").classList.remove("hidden");
   $("stickyPinnedLayer").classList.add("hidden");
@@ -645,6 +688,7 @@ function openStickyBoard(view) {
 }
 
 function closeStickyBoard() {
+  document.body.classList.remove("sticky-drawer-open");
   $("stickyBoard").classList.add("hidden");
   $("stickyBoardShade").classList.add("hidden");
   $("stickyLauncher").classList.toggle("hidden", !canUseStickyNotes());
@@ -661,13 +705,7 @@ function expandStickyLauncher() {
 function scheduleStickyLauncherCollapse(delay) {
   clearTimeout(state.stickyLauncherTimer);
   const launcher = $("stickyLauncher");
-  if (launcher.classList.contains("hidden") || !$("stickyBoard").classList.contains("hidden")) return;
   launcher.classList.remove("compact");
-  state.stickyLauncherTimer = setTimeout(function () {
-    if (!launcher.classList.contains("hidden") && $("stickyBoard").classList.contains("hidden") && !launcher.matches(":hover") && document.activeElement !== launcher) {
-      launcher.classList.add("compact");
-    }
-  }, Number(delay) || 4200);
 }
 
 function minimizeStickyBoard() {
@@ -951,7 +989,8 @@ async function saveQuickStickyNote(event) {
   if (result) {
     $("quickStickyTitle").value = ""; $("quickStickyBody").value = ""; $("quickStickyDueDate").value = "";
     const yellow = document.querySelector("input[name='quickStickyColor'][value='yellow']"); if (yellow) yellow.checked = true;
-    state.stickyView = "active"; renderStickyNotes(); $("quickStickyTitle").focus();
+    state.stickyView = "active"; renderStickyNotes();
+    const addPanel = $("stickyQuickForm").closest("details"); if (addPanel) addPanel.open = false;
   }
 }
 
@@ -1073,12 +1112,12 @@ function changeStickyLayout(id, change) {
   const note = state.data.stickyNotes.find(function (item) { return item.id === id; }); if (!note) return;
   if (change === "collapse" && note.pinned) return toast("This note is pinned open. Unpin it before collapsing.", "error");
   if (change === "collapse") note.collapsed = !note.collapsed;
-  if (change === "pin") { note.pinned = !note.pinned; note.collapsed = false; state.stickySideOpenId = note.pinned ? "" : note.id; }
+  if (change === "pin") { note.pinned = !note.pinned; note.collapsed = false; state.stickySideOpenId = ""; }
   if (change === "grow") { note.width = Math.min(520, Number(note.width || 280) + 40); note.height = Math.min(500, Number(note.height || 220) + 35); }
   if (change === "shrink") { note.width = Math.max(220, Number(note.width || 280) - 40); note.height = Math.max(160, Number(note.height || 220) - 35); }
   renderStickyNotes();
   queueStickyLayoutSave(note);
-  if (change === "pin") { toast(note.pinned ? "Pinned open above the dashboard. Drag Move note to reposition it." : "Unpinned and moved to its collapsible side tab.", "success"); if (!note.pinned) scheduleSideStickyCollapse(); }
+  if (change === "pin") { toast(note.pinned ? "Pinned open above the dashboard. Close the panel, then drag Move note to reposition it." : "Unpinned and returned to the right-side sticky panel.", "success"); }
 }
 
 function openSideSticky(id) {
@@ -1142,6 +1181,7 @@ function renderAll() {
   $("userRole").textContent = state.data.user.role === "ADMIN" ? "Administrator" : "Family member";
   $("userAvatar").textContent = state.data.user.name.charAt(0).toUpperCase();
   $("adminNav").classList.toggle("hidden", !isAdmin());
+  $("manageExpenseCategoriesQuick").classList.toggle("hidden", !isAdmin());
   if (!isAdmin() && state.view === "admin") goTo("home");
   applyAccessUI();
   populateFilters(); renderHome(); renderExpenses(); renderRecurringExpenses(); renderIncome(); renderTargets(); renderDates(); renderPhotos(); renderExperiences(); renderDiary(); renderCalendar(); renderStickyNotes(); if (isAdmin()) renderAdmin();
@@ -1220,6 +1260,7 @@ function startInlineExpenseEdit(id) {
 }
 function renderInlineExpenseRow(item) {
   return '<tr class="expense-'+h(item.status.toLowerCase())+' inline-expense-row" data-inline-expense-id="'+h(item.id)+'">'+
+    '<td class="row-edit-cell"><div class="inline-save-actions"><button class="tiny-button save-row-button" data-action="inline-save-expense" data-id="'+h(item.id)+'">✓ Save</button><button class="tiny-button" data-action="inline-cancel-expense" data-id="'+h(item.id)+'">Cancel</button></div></td>'+
     '<td><input class="inline-expense-input number" data-inline-field="amount" type="number" min="0.01" step="0.01" value="'+h(item.amount)+'" aria-label="Amount"></td>'+
     '<td><input class="inline-expense-input" data-inline-field="date" type="date" value="'+h(String(item.date).slice(0,10))+'" aria-label="Date"></td>'+
     '<td><span class="expense-status '+h(item.status.toLowerCase())+'">'+(item.status==="PLANNED"?'PREPLANNED':'PAID')+'</span></td>'+
@@ -1228,10 +1269,10 @@ function renderInlineExpenseRow(item) {
     '<td><input class="inline-expense-input" data-inline-field="sentTo" maxlength="100" value="'+h(item.sentTo)+'" aria-label="Send to"></td>'+
     '<td><input class="inline-expense-input" data-inline-field="fromAccount" maxlength="100" value="'+h(item.fromAccount)+'" aria-label="From account"></td>'+
     '<td><textarea class="inline-expense-input inline-expense-reason" data-inline-field="reason" rows="2" maxlength="500" aria-label="Reason">'+h(item.reason)+'</textarea></td>'+
-    '<td><div class="inline-save-actions"><button class="tiny-button save-row-button" data-action="inline-save-expense" data-id="'+h(item.id)+'">✓ Save</button><button class="tiny-button" data-action="inline-cancel-expense" data-id="'+h(item.id)+'">Cancel</button></div></td></tr>';
+    '<td><span class="editing-row-label">Editing in row</span></td></tr>';
 }
 function renderExpenseDisplayRow(item) {
-  return '<tr class="expense-'+h(item.status.toLowerCase())+'"><td class="number"><strong>'+h(money(item.amount))+'</strong></td><td>'+h(formatDate(item.date))+'</td><td><span class="expense-status '+h(item.status.toLowerCase())+'">'+(item.status==="PLANNED"?'PREPLANNED':'PAID')+'</span></td><td><strong>'+h(item.category)+'</strong></td><td>'+h(item.subcategory)+'</td><td><strong>'+h(item.sentTo)+'</strong></td><td>'+h(item.fromAccount)+'</td><td class="expense-reason">'+h(item.reason)+'</td><td><div class="row-actions">'+(item.status==="PLANNED"?'<button class="tiny-button paid-button" data-action="mark-planned-paid" data-id="'+h(item.id)+'">✓ Paid</button>':'')+'<button class="tiny-button direct-edit-button" data-action="inline-edit-expense" data-id="'+h(item.id)+'">✎ Edit row</button><button class="tiny-button" data-action="edit-expense" data-id="'+h(item.id)+'" title="Edit in a larger form">↗ Form</button>'+(mayDelete(item)?'<button class="danger-button" data-action="delete-expense" data-id="'+h(item.id)+'">×</button>':"")+'</div></td></tr>';
+  return '<tr class="expense-'+h(item.status.toLowerCase())+'"><td class="row-edit-cell"><button class="row-edit-primary" data-action="inline-edit-expense" data-id="'+h(item.id)+'">✎ Edit</button></td><td class="number"><strong>'+h(money(item.amount))+'</strong></td><td>'+h(formatDate(item.date))+'</td><td><span class="expense-status '+h(item.status.toLowerCase())+'">'+(item.status==="PLANNED"?'PREPLANNED':'PAID')+'</span></td><td><strong>'+h(item.category)+'</strong></td><td>'+h(item.subcategory)+'</td><td><strong>'+h(item.sentTo)+'</strong></td><td>'+h(item.fromAccount)+'</td><td class="expense-reason">'+h(item.reason)+'</td><td><div class="row-actions">'+(item.status==="PLANNED"?'<button class="tiny-button paid-button" data-action="mark-planned-paid" data-id="'+h(item.id)+'">✓ Paid</button>':'')+'<button class="tiny-button" data-action="edit-expense" data-id="'+h(item.id)+'" title="Edit in a larger form">↗ Form</button>'+(mayDelete(item)?'<button class="danger-button" data-action="delete-expense" data-id="'+h(item.id)+'">×</button>':"")+'</div></td></tr>';
 }
 async function saveInlineExpenseRow(button) {
   const row = button.closest("tr"), id = button.dataset.id;
@@ -1348,10 +1389,13 @@ function renderStickyNotes() {
   const active = notes.filter(function (note) { return note.status !== "COMPLETED"; });
   const completed = notes.filter(function (note) { return note.status === "COMPLETED"; });
   $("stickyActiveCount").textContent = active.length;
-  $("stickySectionTitle").textContent = state.stickyView === "active" ? "Active" : "Sticky Note Diary";
+  $("stickyLauncher").setAttribute("aria-label", "Open sticky-note side panel · " + plural(active.length, "active note"));
+  $("stickySectionTitle").textContent = state.stickyView === "active" ? "Targets & reminders" : "Completed history";
   $("stickyBoardSummary").textContent = state.stickyView === "active" ? plural(active.length, "active note") : plural(completed.length, "completed note");
   $("stickyTabActive").classList.toggle("active", state.stickyView === "active");
   $("stickyTabCompleted").classList.toggle("active", state.stickyView === "completed");
+  $("stickyTabActive").setAttribute("aria-selected", state.stickyView === "active" ? "true" : "false");
+  $("stickyTabCompleted").setAttribute("aria-selected", state.stickyView === "completed" ? "true" : "false");
   $("stickyCanvas").classList.toggle("hidden", state.stickyView !== "active");
   $("stickyCompletedList").classList.toggle("hidden", state.stickyView !== "completed");
 
@@ -1365,7 +1409,7 @@ function renderStickyNotes() {
   const empty = state.stickyView === "active" ? !active.length : !completed.length;
   $("stickyEmpty").classList.toggle("hidden", !empty);
   $("stickyEmpty").querySelector("strong").textContent = state.stickyView === "active" ? "No active sticky notes" : "No completed sticky notes";
-  $("stickyEmpty").querySelector("p").textContent = state.stickyView === "active" ? "Add a target or reminder. Unpinned notes become side tabs; pinned notes can move and resize." : "Completed notes are stored in the separate Sticky Note Diary sheet and can be restored.";
+  $("stickyEmpty").querySelector("p").textContent = state.stickyView === "active" ? "Add a target or reminder here. Pin a note to keep it floating above the dashboard." : "Completed notes are stored in the separate Sticky Note Diary sheet and can be restored.";
   renderStickyPinnedLayer(active);
 }
 
@@ -1393,22 +1437,16 @@ function renderStickyPinnedLayer(activeNotes) {
   if (!state.data || !canUseStickyNotes()) { $("stickyPinnedLayer").classList.add("hidden"); return; }
   const notes = activeNotes || (state.data.stickyNotes || []).filter(function (note) { return note.status !== "COMPLETED"; });
   const pinned = notes.filter(function (note) { return note.pinned; });
-  const unpinned = notes.filter(function (note) { return !note.pinned; });
-  const sideNote = unpinned.find(function (note) { return note.id === state.stickySideOpenId; });
   const boardOpen = !$("stickyBoard").classList.contains("hidden");
-  $("stickyPinnedCanvas").innerHTML = pinned.map(function (note, index) { return stickyNoteMarkup(note, index, true, false); }).join("") +
-    '<div class="sticky-side-tabs">'+unpinned.map(function(note,index){return '<button class="sticky-side-tab sticky-'+h(note.color||"yellow")+(sideNote&&sideNote.id===note.id?' active':'')+'" type="button" data-action="open-side-sticky" data-id="'+h(note.id)+'" style="--tab-index:'+index+'" title="Open '+h(note.title)+'"><span>'+(note.noteType==="REMINDER"?'◫':'◎')+'</span><b>'+h(note.title)+'</b></button>';}).join("")+'</div>'+
-    (sideNote ? stickyNoteMarkup(sideNote, pinned.length, true, true) : "");
-  const sideElement = sideNote ? all(".side-open-note", $("stickyPinnedCanvas")).find(function(element){return element.dataset.stickyId===sideNote.id;}) : null;
-  if (sideElement) { sideElement.addEventListener("pointerenter", function(){clearTimeout(state.stickySideTimer);}); sideElement.addEventListener("pointerleave", function(){scheduleSideStickyCollapse(3000);}); }
-  $("stickyPinnedLayer").classList.toggle("hidden", boardOpen || (!pinned.length && !unpinned.length));
+  $("stickyPinnedCanvas").innerHTML = pinned.map(function (note, index) { return stickyNoteMarkup(note, index, true, false); }).join("");
+  $("stickyPinnedLayer").classList.toggle("hidden", boardOpen || !pinned.length);
 }
 
 function startStickyDrag(event) {
   if (window.matchMedia("(max-width: 640px)").matches || event.button !== 0 || event.target.closest("button")) return;
   const handle = event.target.closest(".sticky-drag-handle"); if (!handle) return;
   const element = handle.closest(".sticky-note"), note = state.data.stickyNotes.find(function (item) { return item.id === element.dataset.stickyId; }); if (!note) return;
-  if (element.classList.contains("side-open-note")) return;
+  if (element.classList.contains("side-open-note") || element.closest("#stickyBoard")) return;
   event.preventDefault();
   state.stickyHighestZ += 1; element.style.zIndex = note.pinned ? 3000 + state.stickyHighestZ : 300 + state.stickyHighestZ;
   element.classList.add("dragging");

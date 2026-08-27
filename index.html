@@ -6,7 +6,7 @@
   <meta name="theme-color" content="#5743a8">
   <meta name="description" content="Private family dashboard for expenses, goals, important dates and photos.">
   <title>Our Family Hub</title>
-  <link rel="stylesheet" href="styles.css?v=1.0.16">
+  <link rel="stylesheet" href="styles.css?v=1.0.18">
 </head>
 <body>
   <div class="ambient ambient-one"></div>
@@ -39,8 +39,8 @@
         </label>
         <div class="login-options">
           <label class="remember-row"><input id="rememberUsername" type="checkbox" checked> Save username on this device</label>
-          <span class="version-pair"><b id="loginFrontendVersion">FE v1.0.16</b><b id="loginBackendVersion">BE checking…</b></span>
-          <span id="loginVersion" class="legacy-version hidden" aria-hidden="true">Version 1.0.16</span>
+          <span class="version-pair"><b id="loginFrontendVersion">FE v1.0.18</b><b id="loginBackendVersion">BE checking…</b></span>
+          <span id="loginVersion" class="legacy-version hidden" aria-hidden="true">Version 1.0.18</span>
         </div>
         <button class="primary-button wide" type="submit">Sign in securely</button>
         <button id="repairSessionButton" class="repair-session-button" type="button">↻ Repair browser cache / session</button>
@@ -57,8 +57,8 @@
         <div class="brand-mark small">FH</div>
         <div>
           <strong id="sidebarFamilyName">Our Family Hub</strong>
-          <span class="sidebar-version-pair"><b id="sidebarFrontendVersion">FE v1.0.16</b><b id="sidebarBackendVersion">BE checking…</b></span>
-          <b id="sidebarVersion" class="legacy-version hidden" aria-hidden="true">v1.0.16</b>
+          <span class="sidebar-version-pair"><b id="sidebarFrontendVersion">FE v1.0.18</b><b id="sidebarBackendVersion">BE checking…</b></span>
+          <b id="sidebarVersion" class="legacy-version hidden" aria-hidden="true">v1.0.18</b>
         </div>
       </div>
       <nav class="main-nav" aria-label="Main navigation">
@@ -163,7 +163,7 @@
         <section id="view-expenses" class="view">
           <div class="section-toolbar">
             <div><p class="section-intro">Record paid, preplanned and regular expenditure with category and subcategory.</p></div>
-            <div class="toolbar-actions"><button id="exportExpenses" class="secondary-button">⇩ Export CSV</button><button id="printExpenses" class="secondary-button">⌑ Print</button><button class="secondary-button" data-open="bulkExpenseDialog">⇧ Import old records</button><button class="secondary-button" data-open="recurringExpenseDialog">↻ Add regular payment</button><button id="addPreplannedExpense" class="secondary-button">◷ Add preplanned</button><button class="primary-button" data-open="expenseDialog">＋ Add paid expenditure</button></div>
+            <div class="toolbar-actions"><button id="manageExpenseCategoriesQuick" class="secondary-button category-quick-button hidden" data-open="expenseCategoryDialog">⚙ Categories &amp; subcategories</button><button id="exportExpenses" class="secondary-button">⇩ Export CSV</button><button id="printExpenses" class="secondary-button">⌑ Print</button><button class="secondary-button" data-open="bulkExpenseDialog">⇧ Import old records</button><button class="secondary-button" data-open="recurringExpenseDialog">↻ Add regular payment</button><button id="addPreplannedExpense" class="secondary-button">◷ Add preplanned</button><button class="primary-button" data-open="expenseDialog">＋ Add paid expenditure</button></div>
           </div>
           <article class="panel recurring-panel">
             <div class="panel-heading"><div><p class="eyebrow">MONTHLY &amp; YEARLY</p><h3>Regular payments</h3><p class="recurring-intro">Electricity, maintenance, insurance, land/holding tax and any other repeating expenditure.</p></div><span id="recurringExpenseCount" class="count-badge">0 payments</span></div>
@@ -182,8 +182,8 @@
           <div id="expenseTotals" class="inline-totals"></div>
           <div class="table-wrap">
             <table id="expenseTable" class="expense-table">
-              <colgroup><col><col><col><col><col><col><col><col><col></colgroup>
-              <thead><tr><th class="number">Amt (Rs.)<span class="column-resizer" data-expense-column="0" tabindex="0" role="separator" aria-label="Resize amount column"></span></th><th>Date<span class="column-resizer" data-expense-column="1" tabindex="0" role="separator" aria-label="Resize date column"></span></th><th>Status<span class="column-resizer" data-expense-column="2" tabindex="0" role="separator" aria-label="Resize status column"></span></th><th>Category<span class="column-resizer" data-expense-column="3" tabindex="0" role="separator" aria-label="Resize category column"></span></th><th>Subcategory<span class="column-resizer" data-expense-column="4" tabindex="0" role="separator" aria-label="Resize subcategory column"></span></th><th>Send to<span class="column-resizer" data-expense-column="5" tabindex="0" role="separator" aria-label="Resize recipient column"></span></th><th>From Acct<span class="column-resizer" data-expense-column="6" tabindex="0" role="separator" aria-label="Resize account column"></span></th><th>Reason<span class="column-resizer" data-expense-column="7" tabindex="0" role="separator" aria-label="Resize reason column"></span></th><th>Actions<span class="column-resizer" data-expense-column="8" tabindex="0" role="separator" aria-label="Resize actions column"></span></th></tr></thead>
+              <colgroup><col><col><col><col><col><col><col><col><col><col></colgroup>
+              <thead><tr><th class="row-edit-heading">Edit<span class="column-resizer" data-expense-column="0" tabindex="0" role="separator" aria-label="Resize row edit column"></span></th><th class="number">Amt (Rs.)<span class="column-resizer" data-expense-column="1" tabindex="0" role="separator" aria-label="Resize amount column"></span></th><th>Date<span class="column-resizer" data-expense-column="2" tabindex="0" role="separator" aria-label="Resize date column"></span></th><th>Status<span class="column-resizer" data-expense-column="3" tabindex="0" role="separator" aria-label="Resize status column"></span></th><th>Category<span class="column-resizer" data-expense-column="4" tabindex="0" role="separator" aria-label="Resize category column"></span></th><th>Subcategory<span class="column-resizer" data-expense-column="5" tabindex="0" role="separator" aria-label="Resize subcategory column"></span></th><th>Send to<span class="column-resizer" data-expense-column="6" tabindex="0" role="separator" aria-label="Resize recipient column"></span></th><th>From Acct<span class="column-resizer" data-expense-column="7" tabindex="0" role="separator" aria-label="Resize account column"></span></th><th>Reason<span class="column-resizer" data-expense-column="8" tabindex="0" role="separator" aria-label="Resize reason column"></span></th><th>Other actions<span class="column-resizer" data-expense-column="9" tabindex="0" role="separator" aria-label="Resize actions column"></span></th></tr></thead>
               <tbody id="expenseRows"></tbody>
             </table>
             <div id="expenseEmpty" class="table-empty hidden">No expenditure matches these filters.</div>
@@ -289,9 +289,9 @@
             </article>
             <article class="panel category-admin-panel">
               <div class="panel-heading"><div><p class="eyebrow">EXPENDITURE</p><h3>Categories &amp; subcategories</h3></div></div>
-              <p>Add, rename, reorder or archive the choices used by paid, preplanned and regular expenditure.</p>
+              <p>Create, edit, delete, reorder, archive or restore the choices used by paid, preplanned and regular expenditure.</p>
               <span id="adminExpenseCategorySummary" class="status-badge">12 categories</span>
-              <button class="secondary-button" type="button" data-open="expenseCategoryDialog">Manage categories</button>
+              <button class="secondary-button" type="button" data-open="expenseCategoryDialog">Open category controls</button>
             </article>
           </div>
           <article class="panel members-panel">
@@ -302,39 +302,44 @@
       </div>
     </main>
 
-    <button id="stickyLauncher" class="sticky-launcher hidden" type="button" aria-controls="stickyBoard" aria-expanded="false" aria-label="Open Target and Reminder organiser" title="Open Target / Reminder">
-      <span aria-hidden="true">🗒</span><strong>Target / Reminder</strong><b id="stickyActiveCount">0</b>
+    <button id="stickyLauncher" class="sticky-launcher hidden" type="button" aria-controls="stickyBoard" aria-expanded="false" aria-label="Open sticky-note side panel" title="Open sticky notes">
+      <span aria-hidden="true">✦</span><strong>Sticky notes</strong><b id="stickyActiveCount">0</b>
     </button>
     <div id="stickyBoardShade" class="sticky-board-shade hidden"></div>
     <section id="stickyBoard" class="sticky-board hidden" aria-label="Target and reminder sticky notes">
       <header class="sticky-board-head">
-        <div class="sticky-board-title"><div><span>FAMILY ORGANISER</span><strong>Targets &amp; Reminders</strong><small>Unpinned notes collapse to side tabs; completed notes move into the separate Sticky Note Diary sheet.</small></div></div>
+        <div class="sticky-board-title"><div><span>RIGHT UTILITY PANEL</span><strong>Sticky Notes</strong><small>Targets and reminders without occupying dashboard space. Pinned notes remain above the dashboard.</small></div></div>
         <div class="sticky-board-controls">
-          <button id="stickyTabActive" class="sticky-tab active" type="button">Active</button>
-          <button id="stickyTabCompleted" class="sticky-tab" type="button">Sticky Note Diary</button>
           <button id="stickyMinimize" class="sticky-minimize" type="button" aria-label="Minimize sticky-note organiser" title="Minimize">—</button>
           <button id="stickyClose" class="sticky-close" type="button" aria-label="Close sticky-note organiser" title="Close">×</button>
         </div>
       </header>
+      <div class="sticky-drawer-tabs" role="tablist" aria-label="Sticky note views">
+        <button id="stickyTabActive" class="sticky-tab active" type="button" role="tab">📌 Active notes</button>
+        <button id="stickyTabCompleted" class="sticky-tab" type="button" role="tab">✓ Sticky Note Diary</button>
+      </div>
       <div class="sticky-board-scroll">
-        <form id="stickyQuickForm" class="sticky-quick-form">
-          <div class="sticky-quick-heading"><strong>Add a sticky note</strong><small>Saved in the Family Dashboard spreadsheet</small></div>
-          <div class="sticky-quick-fields">
-            <label>Type<select id="quickStickyType" required><option value="REMINDER">Reminder</option><option value="TARGET">Target</option></select></label>
-            <label class="quick-title">Title *<input id="quickStickyTitle" required maxlength="100" placeholder="Enter target or reminder"></label>
-            <label>Due date<input id="quickStickyDueDate" type="date"></label>
-            <label class="quick-details">Details<textarea id="quickStickyBody" rows="2" maxlength="2000" placeholder="Optional details"></textarea></label>
-          </div>
-          <fieldset class="quick-colour-fieldset"><legend>Colour</legend><div class="quick-colour-options">
-            <label class="colour-yellow"><input type="radio" name="quickStickyColor" value="yellow" checked><span>Yellow</span></label>
-            <label class="colour-pink"><input type="radio" name="quickStickyColor" value="pink"><span>Pink</span></label>
-            <label class="colour-blue"><input type="radio" name="quickStickyColor" value="blue"><span>Blue</span></label>
-            <label class="colour-green"><input type="radio" name="quickStickyColor" value="green"><span>Green</span></label>
-            <label class="colour-purple"><input type="radio" name="quickStickyColor" value="purple"><span>Purple</span></label>
-            <label class="colour-orange"><input type="radio" name="quickStickyColor" value="orange"><span>Orange</span></label>
-          </div></fieldset>
-          <button class="sticky-save-button" type="submit">Save note</button>
-        </form>
+        <details class="sticky-add-panel">
+          <summary><span><b>＋ Add sticky note</b><small>Target or reminder</small></span><i aria-hidden="true">⌄</i></summary>
+          <form id="stickyQuickForm" class="sticky-quick-form">
+            <div class="sticky-quick-heading"><strong>Add a sticky note</strong><small>Saved in the Family Dashboard spreadsheet</small></div>
+            <div class="sticky-quick-fields">
+              <label>Type<select id="quickStickyType" required><option value="REMINDER">Reminder</option><option value="TARGET">Target</option></select></label>
+              <label class="quick-title">Title *<input id="quickStickyTitle" required maxlength="100" placeholder="Enter target or reminder"></label>
+              <label>Due date<input id="quickStickyDueDate" type="date"></label>
+              <label class="quick-details">Details<textarea id="quickStickyBody" rows="3" maxlength="2000" placeholder="Optional details"></textarea></label>
+            </div>
+            <fieldset class="quick-colour-fieldset"><legend>Colour</legend><div class="quick-colour-options">
+              <label class="colour-yellow"><input type="radio" name="quickStickyColor" value="yellow" checked><span>Yellow</span></label>
+              <label class="colour-pink"><input type="radio" name="quickStickyColor" value="pink"><span>Pink</span></label>
+              <label class="colour-blue"><input type="radio" name="quickStickyColor" value="blue"><span>Blue</span></label>
+              <label class="colour-green"><input type="radio" name="quickStickyColor" value="green"><span>Green</span></label>
+              <label class="colour-purple"><input type="radio" name="quickStickyColor" value="purple"><span>Purple</span></label>
+              <label class="colour-orange"><input type="radio" name="quickStickyColor" value="orange"><span>Orange</span></label>
+            </div></fieldset>
+            <button class="sticky-save-button" type="submit">Save note</button>
+          </form>
+        </details>
         <section class="sticky-workspace">
           <div class="sticky-section-heading"><h3 id="stickySectionTitle">Active</h3><span id="stickyBoardSummary">0 active notes</span></div>
           <div id="stickyCanvas" class="sticky-canvas"></div>
@@ -470,9 +475,10 @@
 
   <dialog id="expenseCategoryDialog" class="modal category-manager-dialog">
     <div class="modal-head"><div><p class="eyebrow">ADMINISTRATION</p><h3>Expenditure categories</h3><small>Changes apply to paid, preplanned and regular expenditure.</small></div><button class="modal-close" type="button" data-close>×</button></div>
+    <p class="category-manager-explanation"><strong>Create</strong> adds a new choice. <strong>Edit</strong> renames it. <strong>Archive</strong> hides it temporarily. <strong>Delete</strong> removes it from future choices while preserving old expenditure records.</p>
     <form id="expenseCategoryAddForm" class="category-add-form">
       <label>New category<input id="newExpenseCategoryName" maxlength="60" placeholder="e.g. Property" required></label>
-      <button class="primary-button" type="submit">＋ Add category</button>
+      <button class="primary-button" type="submit">＋ Create category</button>
     </form>
     <div class="category-manager-heading"><strong id="expenseCategoryManagerSummary">0 categories</strong><small>Use ↑ ↓ to change order. Archive hides a choice from new entries without changing historical records.</small></div>
     <div id="expenseCategoryManagerList" class="expense-category-manager-list"></div>
@@ -560,7 +566,7 @@
   <div id="loadingOverlay" class="loading-overlay hidden"><div class="spinner"></div><p id="loadingText">Working…</p></div>
   <div id="toastRegion" class="toast-region" aria-live="polite"></div>
 
-  <script src="config.js?v=1.0.16"></script>
-  <script src="app.js?v=1.0.16"></script>
+  <script src="config.js?v=1.0.18"></script>
+  <script src="app.js?v=1.0.18"></script>
 </body>
 </html>

@@ -6,7 +6,7 @@
   <meta name="theme-color" content="#5743a8">
   <meta name="description" content="Private family dashboard for expenses, goals, important dates and photos.">
   <title>Our Family Hub</title>
-  <link rel="stylesheet" href="styles.css?v=1.0.18">
+  <link rel="stylesheet" href="styles.css?v=1.0.19">
 </head>
 <body>
   <div class="ambient ambient-one"></div>
@@ -39,8 +39,8 @@
         </label>
         <div class="login-options">
           <label class="remember-row"><input id="rememberUsername" type="checkbox" checked> Save username on this device</label>
-          <span class="version-pair"><b id="loginFrontendVersion">FE v1.0.18</b><b id="loginBackendVersion">BE checking…</b></span>
-          <span id="loginVersion" class="legacy-version hidden" aria-hidden="true">Version 1.0.18</span>
+          <span class="version-pair"><b id="loginFrontendVersion">FE v1.0.19</b><b id="loginBackendVersion">BE checking…</b></span>
+          <span id="loginVersion" class="legacy-version hidden" aria-hidden="true">Version 1.0.19</span>
         </div>
         <button class="primary-button wide" type="submit">Sign in securely</button>
         <button id="repairSessionButton" class="repair-session-button" type="button">↻ Repair browser cache / session</button>
@@ -57,8 +57,8 @@
         <div class="brand-mark small">FH</div>
         <div>
           <strong id="sidebarFamilyName">Our Family Hub</strong>
-          <span class="sidebar-version-pair"><b id="sidebarFrontendVersion">FE v1.0.18</b><b id="sidebarBackendVersion">BE checking…</b></span>
-          <b id="sidebarVersion" class="legacy-version hidden" aria-hidden="true">v1.0.18</b>
+          <span class="sidebar-version-pair"><b id="sidebarFrontendVersion">FE v1.0.19</b><b id="sidebarBackendVersion">BE checking…</b></span>
+          <b id="sidebarVersion" class="legacy-version hidden" aria-hidden="true">v1.0.19</b>
         </div>
       </div>
       <nav class="main-nav" aria-label="Main navigation">
@@ -293,6 +293,11 @@
               <span id="adminExpenseCategorySummary" class="status-badge">12 categories</span>
               <button class="secondary-button" type="button" data-open="expenseCategoryDialog">Open category controls</button>
             </article>
+            <article class="panel sticky-access-admin-panel">
+              <div class="panel-heading"><div><p class="eyebrow">STICKY NOTES</p><h3>Writing permission</h3></div></div>
+              <p>Administrators always write sticky notes. For each family member, use <b>Edit → Write sticky notes</b> to allow or stop adding, editing, completing, restoring and deleting notes.</p>
+              <span class="status-badge success">● Controlled member by member</span>
+            </article>
           </div>
           <article class="panel members-panel">
             <div class="panel-heading"><div><p class="eyebrow">ACCESS</p><h3>Family members</h3></div><span id="memberCount" class="count-badge">0 people</span></div>
@@ -319,7 +324,8 @@
         <button id="stickyTabCompleted" class="sticky-tab" type="button" role="tab">✓ Sticky Note Diary</button>
       </div>
       <div class="sticky-board-scroll">
-        <details class="sticky-add-panel">
+        <p id="stickyReadOnlyNotice" class="sticky-readonly-notice hidden">🔒 Read only · Your administrator has not enabled sticky-note writing for your account.</p>
+        <details id="stickyAddPanel" class="sticky-add-panel">
           <summary><span><b>＋ Add sticky note</b><small>Target or reminder</small></span><i aria-hidden="true">⌄</i></summary>
           <form id="stickyQuickForm" class="sticky-quick-form">
             <div class="sticky-quick-heading"><strong>Add a sticky note</strong><small>Saved in the Family Dashboard spreadsheet</small></div>
@@ -501,7 +507,8 @@
         <label><input type="checkbox" name="memberPermission" value="PHOTOS" checked> Photos</label>
         <label><input type="checkbox" name="memberPermission" value="EXPERIENCES" checked> Experiences</label>
         <label><input type="checkbox" name="memberPermission" value="DIARY" checked> Diary</label>
-      </div><small>Administrators always have access to every section.</small></fieldset>
+        <label class="permission-special"><input type="checkbox" name="memberPermission" value="STICKY_WRITE"> Write sticky notes</label>
+      </div><small>“Write sticky notes” separately controls Add, Edit, Complete, Restore and Delete. Administrators always have this permission.</small></fieldset>
       <label class="check-row"><input id="memberActive" type="checkbox" checked> Active account</label>
       <div class="modal-actions"><button type="button" class="secondary-button" data-close>Cancel</button><button type="submit" class="primary-button">Save member</button></div>
     </form>
@@ -566,7 +573,7 @@
   <div id="loadingOverlay" class="loading-overlay hidden"><div class="spinner"></div><p id="loadingText">Working…</p></div>
   <div id="toastRegion" class="toast-region" aria-live="polite"></div>
 
-  <script src="config.js?v=1.0.18"></script>
-  <script src="app.js?v=1.0.18"></script>
+  <script src="config.js?v=1.0.19"></script>
+  <script src="app.js?v=1.0.19"></script>
 </body>
 </html>

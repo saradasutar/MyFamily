@@ -2,7 +2,7 @@
 
 const CONFIG = window.FAMILY_DASHBOARD_CONFIG || {};
 const PLACEHOLDER_URL = "PASTE_YOUR_APPS_SCRIPT_WEB_APP_URL_HERE";
-const FRONTEND_VERSION = "1.0.18";
+const FRONTEND_VERSION = "1.0.19";
 const SAVED_USERNAME_KEY = "familyDashboardUsername";
 const SESSION_TOKEN_KEY = "familyDashboardToken";
 const IDLE_TIMEOUT_MS = 5 * 60 * 1000;
@@ -87,6 +87,7 @@ function memberName(id) {
 }
 function isAdmin() { return !!(state.data && state.data.user && state.data.user.role === "ADMIN"); }
 function hasModuleAccess(module) { return isAdmin() || !!(state.data && state.data.user && (state.data.user.permissions || []).indexOf(module) >= 0); }
+function canWriteStickyNotes() { return isAdmin() || !!(state.data && state.data.user && (state.data.user.permissions || []).indexOf("STICKY_WRITE") >= 0); }
 function mayDelete(item) { return isAdmin() || (item && item.createdBy === state.data.user.id); }
 function memoryPhotoLimit() { return Math.max(1, Math.min(24, Number(state.data && state.data.settings && state.data.settings.memoryPhotoLimit) || 12)); }
 function memoryPrintPages() { return Number(state.data && state.data.settings && state.data.settings.memoryPrintPages) === 2 ? 2 : 1; }
@@ -943,6 +944,7 @@ async function saveImportantDate(event) {
 
 async function saveStickyNote(event) {
   event.preventDefault();
+  if (!canWriteStickyNotes()) return toast("Your administrator has not allowed sticky-note writing for your account.", "error");
   const id = $("stickyNoteId").value;
   const selectedColour = document.querySelector("input[name='stickyColor']:checked");
   const active = state.data.stickyNotes.filter(function (note) { return note.status !== "COMPLETED"; });
@@ -969,6 +971,7 @@ async function saveStickyNote(event) {
 
 async function saveQuickStickyNote(event) {
   event.preventDefault();
+  if (!canWriteStickyNotes()) return toast("Your administrator has not allowed sticky-note writing for your account.", "error");
   const title = $("quickStickyTitle").value.trim();
   const selectedColour = document.querySelector("input[name='quickStickyColor']:checked");
   const active = state.data.stickyNotes.filter(function (note) { return note.status !== "COMPLETED"; });
@@ -995,6 +998,7 @@ async function saveQuickStickyNote(event) {
 }
 
 function prepareStickyNoteDialog(noteType) {
+  if (!canWriteStickyNotes()) return toast("Your administrator has not allowed sticky-note writing for your account.", "error");
   const type = noteType === "REMINDER" ? "REMINDER" : "TARGET";
   $("stickyNoteForm").reset();
   $("stickyNoteId").value = "";
@@ -1098,12 +1102,14 @@ function editImportantDate(id) {
   const ids = String(item.recipientIds || "").split(","); const everyone = ids.indexOf("ALL") >= 0; $("notifyEveryone").checked = everyone; $("recipientChecks").classList.toggle("hidden", everyone); renderRecipientChecks(ids); $("dateDialogTitle").textContent = "Edit reminder"; openDialog("dateDialog");
 }
 function editStickyNote(id) {
+  if (!canWriteStickyNotes()) return toast("Your administrator has not allowed sticky-note writing for your account.", "error");
   const item = state.data.stickyNotes.find(function (note) { return note.id === id; }); if (!item) return;
   $("stickyNoteForm").reset(); $("stickyNoteId").value = item.id; $("stickyNoteType").value = item.noteType; configureStickyTypeChoices();
   $("stickyNoteTitle").value = item.title; $("stickyNoteBody").value = item.body; $("stickyNoteDueDate").value = item.dueDate || ""; setStickyColour(item.color);
   $("stickyNoteDialogTitle").textContent = "Edit " + (item.noteType === "REMINDER" ? "reminder" : "target") + " note"; openDialog("stickyNoteDialog");
 }
 async function completeStickyNote(id) {
+  if (!canWriteStickyNotes()) return toast("Your administrator has not allowed sticky-note writing for your account.", "error");
   if (!window.confirm("Mark this sticky note complete? It will move to the separate Sticky Note Diary sheet.")) return;
   state.stickySideOpenId = "";
   await mutate("completeStickyNote", { id: id }, "Completed and moved to the Sticky Note Diary sheet.");
@@ -1164,7 +1170,7 @@ function editMember(id) {
   prepareNewDialog("memberDialog"); $("memberId").value = item.id; $("memberName").value = item.name; $("memberUsername").value = item.username; $("memberEmail").value = item.email || ""; $("memberRole").value = item.role; setMemberPermissions(item.permissions || []); syncMemberAccessRole(); $("memberActive").checked = item.active; $("memberPin").value = ""; $("memberPin").required = false; $("memberDialogTitle").textContent = "Edit family member"; openDialog("memberDialog");
 }
 function setMemberPermissions(permissions) { all("input[name='memberPermission']").forEach(function (el) { el.checked = permissions.indexOf(el.value) >= 0; }); }
-function syncMemberAccessRole() { const admin = $("memberRole").value === "ADMIN"; if (admin) setMemberPermissions(["EXPENSES","INCOME","TARGETS","DATES","CALENDAR","PHOTOS","EXPERIENCES","DIARY"]); all("input[name='memberPermission']").forEach(function (el) { el.disabled = admin; }); }
+function syncMemberAccessRole() { const admin = $("memberRole").value === "ADMIN"; if (admin) setMemberPermissions(["EXPENSES","INCOME","TARGETS","DATES","CALENDAR","PHOTOS","EXPERIENCES","DIARY","STICKY_WRITE"]); all("input[name='memberPermission']").forEach(function (el) { el.disabled = admin; }); }
 async function resetMemberPin(id) {
   if (!window.confirm("Generate a new 6-digit PIN for this member? Their old PIN will stop working.")) return;
   showLoading("Generating a new PIN…");
@@ -1190,6 +1196,8 @@ function applyAccessUI() {
   all("[data-module]").forEach(function (el) { el.classList.toggle("hidden", !hasModuleAccess(el.dataset.module)); });
   if (viewModules[state.view] && !hasModuleAccess(viewModules[state.view])) goTo("home");
   configureStickyTypeChoices();
+  $("stickyAddPanel").classList.toggle("hidden", !canWriteStickyNotes());
+  $("stickyReadOnlyNotice").classList.toggle("hidden", canWriteStickyNotes());
   if (!canUseStickyNotes()) { $("stickyBoard").classList.add("hidden"); $("stickyBoardShade").classList.add("hidden"); $("stickyLauncher").classList.add("hidden"); $("stickyPinnedLayer").classList.add("hidden"); }
   else if ($("stickyBoard").classList.contains("hidden")) { $("stickyLauncher").classList.remove("hidden"); scheduleStickyLauncherCollapse(4200); }
 }
@@ -1380,7 +1388,7 @@ function renderAdmin() {
   $("settingMemoryPrintPages").value=String(memoryPrintPages());
   const configuredCategories=expenseCategoryConfig(), activeCategories=configuredCategories.filter(function(category){return category.active!==false;}); $("adminExpenseCategorySummary").textContent=plural(configuredCategories.length,"category","categories")+" · "+activeCategories.length+" active";
   const backup=state.data.backupStatus||{}; $("automaticBackupStatus").textContent=backup.automatic?"● Monthly backup enabled":"● Monthly backup needs setup"; $("automaticBackupStatus").classList.toggle("success",!!backup.automatic); $("lastBackupText").textContent=backup.lastBackupAt?("Last backup: "+new Date(backup.lastBackupAt).toLocaleString("en-IN")+(backup.lastBackupName?" · "+backup.lastBackupName:"")):"No backup created yet."; $("backupFolderLink").classList.toggle("hidden",!backup.folderUrl); if(backup.folderUrl)$("backupFolderLink").href=backup.folderUrl;
-  const labels={EXPENSES:"Exp",INCOME:"Income",TARGETS:"Targets",DATES:"Reminders",CALENDAR:"Calendar",PHOTOS:"Photos",EXPERIENCES:"Experiences",DIARY:"Diary"}; const items=state.data.adminMembers||[]; $("memberCount").textContent=plural(items.length,"person","people"); $("memberList").innerHTML=items.map(function(x){const access=x.role==="ADMIN"?"All sections":(x.permissions||[]).map(function(key){return labels[key]||key;}).join(", ")||"No sections";return '<div class="member-row"><span class="avatar">'+h(x.name.charAt(0).toUpperCase())+'</span><div><strong>'+h(x.name)+'</strong><small>@'+h(x.username)+'</small></div><div><strong>'+h(x.email||"No email")+'</strong><small>Access: '+h(access)+'</small></div><span class="role-chip">'+(x.role==="ADMIN"?"ADMIN":"MEMBER")+'</span><span class="active-chip '+(!x.active?'inactive':'')+'">'+(x.active?'● Active':'● Inactive')+'</span><div class="member-actions"><button class="tiny-button" data-action="edit-member" data-id="'+h(x.id)+'">Edit</button><button class="tiny-button" data-action="reset-pin" data-id="'+h(x.id)+'">New PIN</button></div></div>';}).join("");
+  const labels={EXPENSES:"Exp",INCOME:"Income",TARGETS:"Targets",DATES:"Reminders",CALENDAR:"Calendar",PHOTOS:"Photos",EXPERIENCES:"Experiences",DIARY:"Diary",STICKY_WRITE:"Write sticky notes"}; const items=state.data.adminMembers||[]; $("memberCount").textContent=plural(items.length,"person","people"); $("memberList").innerHTML=items.map(function(x){const access=x.role==="ADMIN"?"All sections · Write sticky notes":(x.permissions||[]).map(function(key){return labels[key]||key;}).join(", ")||"No sections";return '<div class="member-row"><span class="avatar">'+h(x.name.charAt(0).toUpperCase())+'</span><div><strong>'+h(x.name)+'</strong><small>@'+h(x.username)+'</small></div><div><strong>'+h(x.email||"No email")+'</strong><small>Access: '+h(access)+'</small></div><span class="role-chip">'+(x.role==="ADMIN"?"ADMIN":"MEMBER")+'</span><span class="active-chip '+(!x.active?'inactive':'')+'">'+(x.active?'● Active':'● Inactive')+'</span><div class="member-actions"><button class="tiny-button" data-action="edit-member" data-id="'+h(x.id)+'">Edit</button><button class="tiny-button" data-action="reset-pin" data-id="'+h(x.id)+'">New PIN</button></div></div>';}).join("");
 }
 
 function renderStickyNotes() {
@@ -1403,7 +1411,8 @@ function renderStickyNotes() {
 
   $("stickyCompletedList").innerHTML = completed.map(function (note) {
     const completedText = note.completedAt ? formatDate(note.completedAt) : "Completed";
-    return '<article class="sticky-completed-card sticky-'+h(note.color||"yellow")+'" data-sticky-id="'+h(note.id)+'"><span class="sticky-completed-colour"></span><div><small>'+h(note.noteType==="REMINDER"?"REMINDER":"TARGET")+'</small><h4>'+h(note.title)+'</h4><p>'+h(note.body)+'</p><em>'+h(completedText)+' by '+h(memberName(note.completedBy))+(note.dueDate?' · Due '+h(formatDate(note.dueDate)):'')+'</em></div><div class="sticky-archive-actions"><button type="button" data-action="restore-sticky" data-id="'+h(note.id)+'">↶ Restore</button>'+(mayDelete(note)?'<button class="delete" type="button" data-action="delete-sticky" data-id="'+h(note.id)+'">Delete</button>':'')+'</div></article>';
+    const writeActions = canWriteStickyNotes() ? '<button type="button" data-action="restore-sticky" data-id="'+h(note.id)+'">↶ Restore</button>'+(mayDelete(note)?'<button class="delete" type="button" data-action="delete-sticky" data-id="'+h(note.id)+'">Delete</button>':'') : '<span class="sticky-readonly-chip">🔒 Read only</span>';
+    return '<article class="sticky-completed-card sticky-'+h(note.color||"yellow")+'" data-sticky-id="'+h(note.id)+'"><span class="sticky-completed-colour"></span><div><small>'+h(note.noteType==="REMINDER"?"REMINDER":"TARGET")+'</small><h4>'+h(note.title)+'</h4><p>'+h(note.body)+'</p><em>'+h(completedText)+' by '+h(memberName(note.completedBy))+(note.dueDate?' · Due '+h(formatDate(note.dueDate)):'')+'</em></div><div class="sticky-archive-actions">'+writeActions+'</div></article>';
   }).join("");
 
   const empty = state.stickyView === "active" ? !active.length : !completed.length;
@@ -1427,10 +1436,11 @@ function stickyNoteMarkup(note, index, pinnedOverlay, sideOpen) {
   const footerCollapse = note.pinned
     ? '<button class="collapse-action locked" type="button" disabled title="Unpin this note before collapsing it">🔒 Stays open</button>'
     : sideOpen ? '<button class="collapse-action" type="button" data-action="close-side-sticky">› Side tab</button>' : '<button class="collapse-action" type="button" data-action="collapse-sticky" data-id="'+h(note.id)+'">▴ Collapse</button>';
+  const contentActions = canWriteStickyNotes() ? '<button type="button" data-action="edit-sticky" data-id="'+h(note.id)+'">Edit</button><button class="complete" type="button" data-action="complete-sticky" data-id="'+h(note.id)+'">✓ Complete</button>'+(mayDelete(note)?'<button class="delete" type="button" data-action="delete-sticky" data-id="'+h(note.id)+'">Delete</button>':'') : '<span class="sticky-readonly-chip">🔒 Read only</span>';
   return '<article class="sticky-note sticky-'+h(note.color||"yellow")+(!note.pinned&&note.collapsed&&!sideOpen?' collapsed':'')+(note.pinned?' pinned':'')+(pinnedOverlay?' pinned-overlay-note':'')+(sideOpen?' side-open-note':'')+'" data-sticky-id="'+h(note.id)+'" style="left:'+x+'px;top:'+y+'px;--overlay-top:'+y+'px;width:'+width+'px;height:'+height+'px;z-index:'+z+'">'+
     '<header class="sticky-note-head sticky-drag-handle"><span class="sticky-move-label">⠿ Move note</span><span class="sticky-type">'+(note.noteType==="REMINDER"?'REMINDER':'TARGET')+'</span>'+titleControl+'<div class="sticky-head-actions">'+collapseControl+'</div></header>'+
     '<div class="sticky-note-content"><span class="sticky-pinned-label '+(note.pinned?'':'hidden')+'">📌 PINNED OPEN</span><p>'+h(note.body)+'</p><small class="sticky-due'+dueClass+'">'+h(dueText)+'</small><small>Added by '+h(memberName(note.createdBy))+'</small></div>'+
-    '<footer class="sticky-note-actions"><button class="pin-action" type="button" data-action="pin-sticky" data-id="'+h(note.id)+'">'+(note.pinned?'📌 Unpin':'📌 Pin open')+'</button>'+footerCollapse+'<button type="button" data-action="edit-sticky" data-id="'+h(note.id)+'">Edit</button><button class="complete" type="button" data-action="complete-sticky" data-id="'+h(note.id)+'">✓ Complete</button>'+(mayDelete(note)?'<button class="delete" type="button" data-action="delete-sticky" data-id="'+h(note.id)+'">Delete</button>':'')+'<span class="sticky-size-actions"><button type="button" data-action="auto-fit-sticky" data-id="'+h(note.id)+'" title="Fit the note to its content">Auto-fit</button><button type="button" data-action="shrink-sticky" data-id="'+h(note.id)+'" title="Decrease note size">−</button><button type="button" data-action="grow-sticky" data-id="'+h(note.id)+'" title="Increase note size">＋</button></span></footer><span class="sticky-resize-handle" title="Drag to resize" aria-label="Resize sticky note"></span></article>';
+    '<footer class="sticky-note-actions"><button class="pin-action" type="button" data-action="pin-sticky" data-id="'+h(note.id)+'">'+(note.pinned?'📌 Unpin':'📌 Pin open')+'</button>'+footerCollapse+contentActions+'<span class="sticky-size-actions"><button type="button" data-action="auto-fit-sticky" data-id="'+h(note.id)+'" title="Fit the note to its content">Auto-fit</button><button type="button" data-action="shrink-sticky" data-id="'+h(note.id)+'" title="Decrease note size">−</button><button type="button" data-action="grow-sticky" data-id="'+h(note.id)+'" title="Increase note size">＋</button></span></footer><span class="sticky-resize-handle" title="Drag to resize" aria-label="Resize sticky note"></span></article>';
 }
 
 function renderStickyPinnedLayer(activeNotes) {

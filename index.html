@@ -2,578 +2,1530 @@
 <html lang="en">
 <head>
   <meta charset="utf-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1">
-  <meta name="theme-color" content="#5743a8">
-  <meta name="description" content="Private family dashboard for expenses, goals, important dates and photos.">
-  <title>Our Family Hub</title>
-  <link rel="stylesheet" href="styles.css?v=1.0.19">
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+  <meta http-equiv="Cache-Control" content="no-cache, no-store, must-revalidate">
+  <meta http-equiv="Pragma" content="no-cache">
+  <meta http-equiv="Expires" content="0">
+  <meta name="theme-color" content="#eef5ff">
+  <meta name="description" content="Private family stock and mutual fund portfolio dashboard">
+  <meta name="myfinance-build" content="20260827-19422-signout1">
+  <style>
+    html.myfinance-cache-healing body{visibility:hidden}
+    html.myfinance-cache-healing::after{
+      content:"Preparing a clean, secure sign-in…";
+      position:fixed;inset:0;z-index:99999;display:grid;place-items:center;
+      padding:24px;color:#33426a;background:#f3f7ff;
+      font:800 16px/1.4 system-ui,-apple-system,"Segoe UI",sans-serif;
+    }
+  </style>
+  <script>
+    // On a new frontend build, remove old app caches/service workers before any
+    // application script runs, then reload once. The valid login token, saved
+    // username, portfolio snapshot, diary drafts and UI preferences are kept.
+    window.__MYFINANCE_PAGE_BUILD__ = '20260827-19422-signout1';
+    (function(){
+      try{
+        var build=window.__MYFINANCE_PAGE_BUILD__;
+        var params=new URLSearchParams(location.search);
+        var stored='';
+        try{stored=localStorage.getItem('myfinance_current_build_id')||'';}catch(e){}
+        if(stored!==build&&params.get('healed')!==build){
+          window.__MYFINANCE_CACHE_HEAL_PENDING__=true;
+          document.documentElement.classList.add('myfinance-cache-healing');
+          try{
+            localStorage.setItem('myfinance_current_build_id',build);
+            localStorage.setItem('myfinance_browser_updated_notice','1');
+          }catch(e){}
+
+          var tasks=[];
+          if('caches' in window){
+            tasks.push(caches.keys().then(function(keys){
+              return Promise.all(keys.filter(function(key){return /myfinance|sarni|portfolio/i.test(String(key));}).map(function(key){return caches.delete(key);}));
+            }).catch(function(){}));
+          }
+          if('serviceWorker' in navigator){
+            tasks.push(navigator.serviceWorker.getRegistrations().then(function(regs){
+              var currentPath=location.pathname.replace(/[^/]*$/,'');
+              return Promise.all(regs.map(function(reg){
+                try{return new URL(reg.scope).pathname.startsWith(currentPath)?reg.unregister():Promise.resolve(false);}catch(e){return Promise.resolve(false);}
+              }));
+            }).catch(function(){}));
+          }
+
+          var go=function(){
+            var next=new URL(location.href);
+            next.searchParams.set('v','19422-signout1');
+            next.searchParams.set('healed',build);
+            next.searchParams.set('_',String(Date.now()));
+            location.replace(next.pathname+next.search);
+          };
+          Promise.race([
+            Promise.all(tasks),
+            new Promise(function(resolve){setTimeout(resolve,2200);})
+          ]).then(go,go);
+          return;
+        }
+
+        // Check a tiny no-cache build file on every normal load. If GitHub or
+        // Chrome serves an older index, reload once with the published build.
+        var url='build-version.json?_=' + Date.now();
+        fetch(url,{cache:'no-store',credentials:'same-origin'})
+          .then(function(r){return r.ok?r.json():null;})
+          .then(function(info){
+            if(!info||!info.build||info.build===window.__MYFINANCE_PAGE_BUILD__)return;
+            var guard='myfinance_build_reload_' + info.build;
+            if(sessionStorage.getItem(guard)==='1')return;
+            sessionStorage.setItem(guard,'1');
+            var next=location.pathname+'?v='+encodeURIComponent(info.version||info.build)+'&fresh='+Date.now();
+            location.replace(next);
+          }).catch(function(){});
+      }catch(e){}
+    })();
+  </script>
+  <title>SarNi</title>
+  <link rel="preconnect" href="https://script.google.com">
+  <link rel="stylesheet" href="styles.css?v=20260827-19422-signout1">
 </head>
 <body>
-  <div class="ambient ambient-one"></div>
-  <div class="ambient ambient-two"></div>
+  <noscript>This dashboard requires JavaScript.</noscript>
 
-  <section id="loginScreen" class="login-screen">
-    <div class="login-visual" aria-hidden="true">
-      <div class="family-orbit">
-        <span>👨‍👩‍👧‍👦</span>
-        <i class="orbit-dot dot-one">₹</i>
-        <i class="orbit-dot dot-two">📅</i>
-        <i class="orbit-dot dot-three">📷</i>
+  <section id="loginView" class="login-view">
+    <div class="login-shell">
+      <div class="brand-panel">
+        <div class="brand-mark">₹</div>
+        <p class="eyebrow">PRIVATE FAMILY PORTFOLIO</p>
+        <h1>One dashboard.<br>Two investors.</h1>
+        <p class="brand-copy">Track mutual funds, stocks and ETFs with automatic current value, gain/loss and long-period performance.</p>
+        <div class="feature-pills"><span>MF statement import</span><span>Zerodha ready</span><span>Auto prices</span><span>Family view</span></div>
       </div>
-      <p>One warm, private place for the things your family shares.</p>
-    </div>
-    <div class="login-card">
-      <div class="brand-mark">FH</div>
-      <p class="eyebrow">WELCOME HOME</p>
-      <h1 id="loginFamilyName">Our Family Hub</h1>
-      <p class="muted">Sign in with the username and PIN given by your family administrator.</p>
-      <form id="loginForm" class="stack-form">
-        <label>Username
-          <input id="loginUsername" name="username" autocomplete="username" required placeholder="e.g. sarada">
-        </label>
-        <label>6-digit PIN
-          <div class="pin-field">
-            <input id="loginPin" name="pin" type="password" inputmode="numeric" pattern="[0-9]{6}" maxlength="6" autocomplete="current-password" required placeholder="••••••">
-            <button id="togglePin" type="button" class="icon-button" aria-label="Show or hide PIN">👁</button>
-          </div>
-        </label>
+      <form id="loginForm" class="login-card" autocomplete="on">
+        <div><p class="eyebrow">WELCOME BACK</p><h2>Sign in</h2><p class="muted">Use your Apps Script dashboard username and password.</p></div>
+        <label>Username<input id="loginUsername" name="username" autocomplete="username" required maxlength="60" placeholder="admin"></label>
+        <label>Password<div class="password-wrap"><input id="loginPassword" name="password" type="password" autocomplete="current-password" required maxlength="200" placeholder="Your password"><button type="button" class="text-button" data-toggle-password="loginPassword">Show</button></div></label>
         <div class="login-options">
-          <label class="remember-row"><input id="rememberUsername" type="checkbox" checked> Save username on this device</label>
-          <span class="version-pair"><b id="loginFrontendVersion">FE v1.0.19</b><b id="loginBackendVersion">BE checking…</b></span>
-          <span id="loginVersion" class="legacy-version hidden" aria-hidden="true">Version 1.0.19</span>
+          <label class="remember-user"><input id="rememberUsername" type="checkbox"><span>Save username on this device</span></label>
+          <span class="remember-note">Password is never saved</span>
         </div>
-        <button class="primary-button wide" type="submit">Sign in securely</button>
-        <button id="repairSessionButton" class="repair-session-button" type="button">↻ Repair browser cache / session</button>
+        <button id="loginButton" class="primary-button full" type="submit">Sign in</button>
+        <p id="loginMessage" class="form-message" role="alert"></p>
+        <div class="login-meta">
+          <p class="tiny muted">Your password is never stored in the browser.</p>
+          <div class="version-pair"><span id="loginVersion" class="version-badge">Frontend · v19.4.22</span><span id="loginBackendVersion" class="version-badge backend-version">Backend · v3.17.8</span></div>
+          <button id="repairBrowserBtn" class="login-repair-button" type="button">↻ Repair browser cache/session</button>
+        </div>
       </form>
-      <p class="session-safety-note">For privacy, the dashboard signs out after 5 inactive minutes and after this page is closed or left.</p>
-      <p id="setupHint" class="setup-hint hidden">Open <strong>config.js</strong> and paste your Apps Script Web App URL first.</p>
-      <p class="login-footnote">Your Google Sheet and Drive folder remain under the dashboard owner's Google account.</p>
     </div>
   </section>
 
-  <div id="appShell" class="app-shell hidden">
-    <aside id="sidebar" class="sidebar">
-      <div class="sidebar-brand">
-        <div class="brand-mark small">FH</div>
+  <div id="appView" class="app-view hidden">
+    <div id="runtimeWarning" class="runtime-warning hidden" role="alert"></div>
+    <div id="portfolioStartupOverlay" class="portfolio-startup-overlay hidden" role="status" aria-live="polite">
+      <div class="portfolio-startup-card">
+        <div class="portfolio-startup-spinner" aria-hidden="true"></div>
         <div>
-          <strong id="sidebarFamilyName">Our Family Hub</strong>
-          <span class="sidebar-version-pair"><b id="sidebarFrontendVersion">FE v1.0.19</b><b id="sidebarBackendVersion">BE checking…</b></span>
-          <b id="sidebarVersion" class="legacy-version hidden" aria-hidden="true">v1.0.19</b>
+          <strong id="portfolioStartupTitle">Loading your portfolio…</strong>
+          <span id="portfolioStartupMessage">Holdings are updating quietly in the background.</span>
         </div>
+        <button id="portfolioStartupRetryBtn" type="button" class="secondary-button hidden">Retry load</button>
       </div>
-      <nav class="main-nav" aria-label="Main navigation">
-        <button class="nav-button active" data-view="home"><span>⌂</span> Overview</button>
-        <button class="nav-button" data-view="expenses" data-module="EXPENSES"><span>₹</span> Expenditure</button>
-        <button class="nav-button" data-view="income" data-module="INCOME"><span>↗</span> Income</button>
-        <button class="nav-button" data-view="targets" data-module="TARGETS"><span>◎</span> Targets</button>
-        <button class="nav-button" data-view="dates" data-module="DATES"><span>◫</span> Reminders</button>
-        <button class="nav-button" data-view="calendar" data-module="CALENDAR"><span>▦</span> Calendar</button>
-        <button class="nav-button" data-view="diary" data-module="DIARY"><span>☷</span> Family diary</button>
-        <button class="nav-button" data-view="photos" data-module="PHOTOS"><span>▧</span> Family memories</button>
-        <button class="nav-button" data-view="experiences" data-module="EXPERIENCES"><span>✦</span> Experiences</button>
-        <button id="adminNav" class="nav-button hidden" data-view="admin"><span>⚙</span> Administration</button>
+    </div>
+    <aside class="sidebar">
+      <div class="side-brand"><div class="brand-mark small">₹</div><div><strong id="sideAppName">SarNi</strong><span>Family portfolio</span></div></div>
+      <nav class="side-nav" aria-label="Main navigation">
+        <button class="nav-item active" data-section="overview"><span>◫</span>Overview</button>
+        <button class="nav-item" data-section="holdings"><span>▥</span>Holdings</button>
+        <button class="nav-item" data-section="transactions"><span>⇄</span>Transactions</button>
+        <button class="nav-item" data-section="watchlist"><span>☆</span>Watchlist</button>
+        <button class="nav-item" data-section="sip"><span>₹</span>SIP Planner</button>
+        <button class="nav-item" data-section="expenditure"><span>₹</span>Expenditure</button>
+        <button class="nav-item" data-section="diary"><span>✎</span>Diary</button>
+        <button id="quickDiaryBtn" class="nav-item quick-diary-nav" type="button"><span>✚</span>Quick Diary</button>
+        <button class="nav-item admin-only hidden" data-section="users"><span>♙</span>Users</button>
       </nav>
-      <div class="sidebar-quote">
-        <span>♥</span>
-        <p>Small moments.<br>Shared progress.<br>One family.</p>
+      <div class="sidebar-session-card">
+        <span class="sidebar-session-label">SIGNED IN AS</span>
+        <strong id="dashboardUsername">—</strong>
+        <span id="dashboardVersion">Frontend · v19.4.22</span><span id="dashboardBackendVersion">Backend · v3.17.8</span>
       </div>
-      <button id="logoutButton" class="logout-button">Sign out</button>
+      <div class="sidebar-foot"><button id="changePasswordBtn" class="nav-item"><span>⌁</span>Change password</button><button id="logoutBtn" class="nav-item danger-text"><span>↪</span>Log out</button></div>
     </aside>
 
-    <div id="sidebarShade" class="sidebar-shade"></div>
-    <main class="main-panel">
+    <main class="main-content">
       <header class="topbar">
-        <button id="menuButton" class="menu-button" aria-label="Open menu">☰</button>
-        <div>
-          <p id="todayLabel" class="eyebrow"></p>
-          <h2 id="viewTitle">Family overview</h2>
-        </div>
-        <div class="topbar-actions">
-          <button id="globalSearchButton" class="search-pill">⌕ <span>Search</span></button>
-          <div class="user-chip">
-            <span id="userAvatar" class="avatar">F</span>
-            <div><strong id="userName">Family Member</strong><small id="userRole">Member</small></div>
-          </div>
-        </div>
+        <div><div class="topbar-title-line"><div><p class="eyebrow" id="todayLabel"></p><h1 id="pageTitle">Portfolio overview</h1></div><div class="dashboard-version-pair"><span id="dashboardVersionTop" class="dashboard-version-chip">FE v19.4.22</span><span id="dashboardBackendVersionTop" class="dashboard-version-chip backend-chip">BE v3.17.8</span></div></div></div>
+        <div class="top-actions"><div class="auto-refresh-control" title="Automatically refresh portfolio and watchlist prices while this dashboard is open"><span class="auto-pulse"></span><div class="auto-refresh-copy"><strong>Auto update</strong><span id="autoRefreshCountdown">15 min</span></div><select id="autoRefreshSelect" aria-label="Auto update interval"><option value="5">5 min</option><option value="15" selected>15 min</option><option value="30">30 min</option><option value="60">60 min</option><option value="0">Off</option></select></div><div class="sync-status" id="syncStatus"><span class="status-dot"></span><span>Ready</span></div><button id="refreshBtn" class="icon-button" title="Refresh prices and NAVs">↻</button><button id="addInvestmentBtn" class="primary-button">+ Add investment</button><button id="profileButton" class="avatar-button"><span id="avatarInitial">A</span></button><button id="headerLogoutBtn" class="header-logout-button" type="button" title="Sign out of SarNi" aria-label="Sign out"><span aria-hidden="true">↪</span><strong>Sign out</strong></button></div>
       </header>
 
-      <div class="content-area">
-        <section id="view-home" class="view active">
-          <div class="hero-card">
-            <div>
-              <span class="soft-label">FAMILY AT A GLANCE</span>
-              <h3 id="welcomeHeading">Good to see you.</h3>
-              <p>Track shared spending, celebrate progress and never miss a special day.</p>
-            </div>
-            <button class="light-button" data-open="expenseDialog" data-module="EXPENSES">＋ Add expenditure</button>
-          </div>
-
-          <div class="family-strip">
-            <div><p class="eyebrow">FAMILY MEMBERS</p><strong id="homeMemberCount">0 members</strong></div>
-            <div id="homeMemberList" class="family-chip-list"></div>
-          </div>
-
-          <div class="summary-grid">
-            <article class="summary-card violet" data-module="EXPENSES"><span class="summary-icon">₹</span><div><small>This month's spend</small><strong id="monthSpend">₹0</strong><em id="monthExpenseCount">0 entries</em></div></article>
-            <article class="summary-card green" data-module="INCOME"><span class="summary-icon">↗</span><div><small>This month's income</small><strong id="monthIncome">₹0</strong><em id="monthIncomeCount">0 entries</em></div></article>
-            <article class="summary-card teal" data-module="TARGETS"><span class="summary-icon">◎</span><div><small>Target progress</small><strong id="targetProgress">0%</strong><em id="targetCaption">No active targets</em></div></article>
-            <article class="summary-card coral" data-module="DATES"><span class="summary-icon">◫</span><div><small>Saved reminders</small><strong id="reminderCount">0 reminders</strong><em id="upcomingCount">0 in next 30 days</em></div></article>
-            <article class="summary-card gold" data-module="PHOTOS"><span class="summary-icon">▧</span><div><small>Shared memories</small><strong id="photoCount">0 photos</strong><em>In the family gallery</em></div></article>
-            <article class="summary-card rose" data-module="EXPERIENCES"><span class="summary-icon">✦</span><div><small>Family experiences</small><strong id="experienceCount">0 stories</strong><em>Moments worth remembering</em></div></article>
-          </div>
-
-          <div class="dashboard-grid">
-            <article class="panel spend-panel" data-module="EXPENSES">
-              <div class="panel-heading"><div><p class="eyebrow">THIS MONTH</p><h3>Spending by category</h3></div><button class="text-button" data-go="expenses">View all</button></div>
-              <div id="categoryBars" class="category-bars empty-block">No expenditure added this month.</div>
-            </article>
-            <article class="panel dates-panel" data-module="DATES">
-              <div class="panel-heading"><div><p class="eyebrow">DON'T MISS</p><h3>Upcoming dates</h3></div><button class="text-button" data-go="dates">View all</button></div>
-              <div id="upcomingList" class="mini-list empty-block">No important dates coming up.</div>
-            </article>
-          </div>
-
-          <article class="panel recent-panel">
-            <div class="panel-heading"><div><p class="eyebrow">RECENT ACTIVITY</p><h3>Latest family updates</h3></div></div>
-            <div id="activityList" class="activity-list empty-block">Your family's latest additions will appear here.</div>
-          </article>
-        </section>
-
-        <section id="view-income" class="view">
-          <div class="section-toolbar">
-            <div><p class="section-intro">Record salary, pension, investment, business and other family income.</p></div>
-            <div class="toolbar-actions"><button id="exportIncome" class="secondary-button">⇩ Export CSV</button><button id="printIncome" class="secondary-button">⌑ Print</button><button class="primary-button" data-open="incomeDialog">＋ Add income</button></div>
-          </div>
-          <div class="filter-bar">
-            <label>Month<input id="incomeMonth" type="month"></label>
-            <label>Category<select id="incomeCategoryFilter"><option value="">All categories</option></select></label>
-            <label>Received by<select id="incomeMemberFilter"><option value="">All members</option></select></label>
-            <label class="search-label">Search<input id="incomeSearch" type="search" placeholder="Source or payment mode"></label>
-          </div>
-          <div id="incomeTotals" class="inline-totals"></div>
-          <div class="table-wrap">
-            <table>
-              <thead><tr><th>Date</th><th>Source</th><th>Category</th><th>Received by</th><th>Mode</th><th class="number">Amount</th><th></th></tr></thead>
-              <tbody id="incomeRows"></tbody>
-            </table>
-            <div id="incomeEmpty" class="table-empty hidden">No income matches these filters.</div>
-          </div>
-        </section>
-
-        <section id="view-expenses" class="view">
-          <div class="section-toolbar">
-            <div><p class="section-intro">Record paid, preplanned and regular expenditure with category and subcategory.</p></div>
-            <div class="toolbar-actions"><button id="manageExpenseCategoriesQuick" class="secondary-button category-quick-button hidden" data-open="expenseCategoryDialog">⚙ Categories &amp; subcategories</button><button id="exportExpenses" class="secondary-button">⇩ Export CSV</button><button id="printExpenses" class="secondary-button">⌑ Print</button><button class="secondary-button" data-open="bulkExpenseDialog">⇧ Import old records</button><button class="secondary-button" data-open="recurringExpenseDialog">↻ Add regular payment</button><button id="addPreplannedExpense" class="secondary-button">◷ Add preplanned</button><button class="primary-button" data-open="expenseDialog">＋ Add paid expenditure</button></div>
-          </div>
-          <article class="panel recurring-panel">
-            <div class="panel-heading"><div><p class="eyebrow">MONTHLY &amp; YEARLY</p><h3>Regular payments</h3><p class="recurring-intro">Electricity, maintenance, insurance, land/holding tax and any other repeating expenditure.</p></div><span id="recurringExpenseCount" class="count-badge">0 payments</span></div>
-            <div id="recurringExpenseList" class="recurring-grid"></div>
-            <div id="recurringExpenseEmpty" class="recurring-empty">No regular payment added. Choose <strong>Add regular payment</strong> to add one now or later.</div>
-          </article>
-          <div class="filter-bar">
-            <label>Month<input id="expenseMonth" type="month"></label>
-            <label>Status<select id="expenseStatusFilter"><option value="">Paid &amp; planned</option><option value="PAID">Paid only</option><option value="PLANNED">Preplanned only</option></select></label>
-            <label>Category<select id="expenseCategoryFilter"><option value="">All categories</option></select></label>
-            <label>Subcategory<select id="expenseSubcategoryFilter"><option value="">All subcategories</option></select></label>
-            <label>Send to<select id="expenseSendToFilter"><option value="">All recipients</option></select></label>
-            <label>From account<select id="expenseAccountFilter"><option value="">All accounts</option></select></label>
-            <label class="search-label">Search<input id="expenseSearch" type="search" placeholder="Category, subcategory, recipient, account or reason"></label>
-          </div>
-          <div id="expenseTotals" class="inline-totals"></div>
-          <div class="table-wrap">
-            <table id="expenseTable" class="expense-table">
-              <colgroup><col><col><col><col><col><col><col><col><col><col></colgroup>
-              <thead><tr><th class="number">Amt (Rs.)<span class="column-resizer" data-expense-column="0" tabindex="0" role="separator" aria-label="Resize amount column"></span></th><th>Date<span class="column-resizer" data-expense-column="1" tabindex="0" role="separator" aria-label="Resize date column"></span></th><th>Status<span class="column-resizer" data-expense-column="2" tabindex="0" role="separator" aria-label="Resize status column"></span></th><th>Category<span class="column-resizer" data-expense-column="3" tabindex="0" role="separator" aria-label="Resize category column"></span></th><th>Subcategory<span class="column-resizer" data-expense-column="4" tabindex="0" role="separator" aria-label="Resize subcategory column"></span></th><th>Send to<span class="column-resizer" data-expense-column="5" tabindex="0" role="separator" aria-label="Resize recipient column"></span></th><th>From Acct<span class="column-resizer" data-expense-column="6" tabindex="0" role="separator" aria-label="Resize account column"></span></th><th>Reason<span class="column-resizer" data-expense-column="7" tabindex="0" role="separator" aria-label="Resize reason column"></span></th><th>Other actions<span class="column-resizer" data-expense-column="8" tabindex="0" role="separator" aria-label="Resize actions column"></span></th><th class="row-edit-heading">Edit row<span class="column-resizer" data-expense-column="9" tabindex="0" role="separator" aria-label="Resize row edit column"></span></th></tr></thead>
-              <tbody id="expenseRows"></tbody>
-            </table>
-            <div id="expenseEmpty" class="table-empty hidden">No expenditure matches these filters.</div>
-          </div>
-        </section>
-
-        <section id="view-targets" class="view">
-          <div class="section-toolbar">
-            <div><p class="section-intro">Create a family goal and add contributions as you progress.</p></div>
-            <button class="primary-button" data-open="targetDialog">＋ New target</button>
-          </div>
-          <div class="target-summary" id="targetSummary"></div>
-          <div id="targetGrid" class="target-grid"></div>
-          <div id="targetEmpty" class="empty-state hidden"><span>◎</span><h3>No targets yet</h3><p>Create the first savings, purchase or family goal.</p></div>
-        </section>
-
-        <section id="view-dates" class="view">
-          <div class="section-toolbar">
-            <div><p class="section-intro">Birthdays, anniversaries, renewals, appointments and other reminders.</p></div>
-            <button class="primary-button" data-open="dateDialog">＋ Add important date</button>
-          </div>
-          <div class="filter-bar dates-filter">
-            <label>Type<select id="dateTypeFilter"><option value="">All types</option><option>Birthday</option><option>Anniversary</option><option>Appointment</option><option>Renewal</option><option>Payment</option><option>Other</option></select></label>
-            <label class="search-label">Search<input id="dateSearch" type="search" placeholder="Title or notes"></label>
-          </div>
-          <div id="dateGrid" class="date-grid"></div>
-          <div id="dateEmpty" class="empty-state hidden"><span>◫</span><h3>No important dates</h3><p>Add a date and choose when the family should receive email reminders.</p></div>
-        </section>
-
-        <section id="view-calendar" class="view">
-          <div class="section-toolbar calendar-toolbar">
-            <div><p class="section-intro">See reminders and family experiences together month by month.</p></div>
-            <div class="calendar-controls"><button id="calendarPrev" class="secondary-button" aria-label="Previous month">‹</button><strong id="calendarMonthLabel"></strong><button id="calendarNext" class="secondary-button" aria-label="Next month">›</button><button id="calendarToday" class="secondary-button">Today</button></div>
-          </div>
-          <div class="calendar-legend"><span><i class="legend-dot reminder-dot"></i>Reminder</span><span><i class="legend-dot recurring-dot"></i>Payment due</span><span><i class="legend-dot experience-dot"></i>Experience</span><span><i class="legend-dot diary-dot"></i>Diary</span></div>
-          <div class="calendar-shell">
-            <div class="calendar-weekdays"><span>Sun</span><span>Mon</span><span>Tue</span><span>Wed</span><span>Thu</span><span>Fri</span><span>Sat</span></div>
-            <div id="calendarGrid" class="calendar-grid"></div>
-          </div>
-        </section>
-
-        <section id="view-photos" class="view">
-          <div class="section-toolbar">
-            <div><p class="section-intro">A private collection of selected family memories. Photos stay in the owner's Google Drive.</p><p id="photoUsageText" class="memory-usage">0 of 12 memory photos used</p></div>
-            <div class="memory-toolbar-actions"><button id="printMemories" class="secondary-button" type="button">▧ View &amp; print memories</button><button id="sharePhotoButton" class="primary-button" data-open="photoDialog">＋ Add memory photo</button></div>
-          </div>
-          <div class="filter-bar photo-filter"><label class="search-label">Search photos<input id="photoSearch" type="search" placeholder="Title, caption or member"></label></div>
-          <div id="photoGrid" class="photo-grid"></div>
-          <div id="photoEmpty" class="empty-state hidden"><span>▧</span><h3>No photos shared yet</h3><p>Add the first family memory.</p></div>
-        </section>
-
-        <section id="view-diary" class="view">
-          <div class="section-toolbar">
-            <div><p class="section-intro">A shared day-by-day journal, arranged month-wise and searchable at any time.</p></div>
-            <button class="primary-button" data-open="diaryDialog">＋ Write diary entry</button>
-          </div>
-          <div class="filter-bar diary-filter"><label>Month<input id="diaryMonth" type="month"></label><label>Writer<select id="diaryWriterFilter"><option value="">All family members</option></select></label><label class="search-label">Search diary<input id="diarySearch" type="search" placeholder="Search title, entry, mood or writer"></label></div>
-          <div id="diaryTimeline" class="diary-timeline"></div>
-          <div id="diaryEmpty" class="empty-state hidden"><span>☷</span><h3>No diary entries found</h3><p>Write the first entry or choose a different month.</p></div>
-        </section>
-
-        <section id="view-experiences" class="view">
-          <div class="section-toolbar">
-            <div><p class="section-intro">Write down trips, celebrations, lessons and everyday family moments—with the writer's name.</p></div>
-            <button class="primary-button" data-open="experienceDialog">＋ Add experience</button>
-          </div>
-          <div class="filter-bar experience-filter"><label>Year<select id="experienceYear"><option value="">All years</option></select></label><label class="search-label">Search<input id="experienceSearch" type="search" placeholder="Title, place, story or writer"></label></div>
-          <div id="experienceGrid" class="experience-grid"></div>
-          <div id="experienceEmpty" class="empty-state hidden"><span>✦</span><h3>No experiences written yet</h3><p>Preserve the first family story or special moment.</p></div>
-        </section>
-
-        <section id="view-admin" class="view">
-          <div class="section-toolbar">
-            <div><p class="section-intro">Manage the family name, users, roles and access.</p></div>
-            <button class="primary-button" data-open="memberDialog">＋ Add family member</button>
-          </div>
-          <div class="admin-grid">
-            <article class="panel settings-panel">
-              <div class="panel-heading"><div><p class="eyebrow">DASHBOARD</p><h3>Family settings</h3></div></div>
-              <form id="settingsForm" class="stack-form compact-form">
-                <label>Family dashboard name<input id="settingFamilyName" required maxlength="60"></label>
-                <div class="two-fields"><label>Currency<select id="settingCurrency"><option value="INR">₹ INR</option><option value="USD">$ USD</option><option value="EUR">€ EUR</option><option value="GBP">£ GBP</option></select></label><label>Time zone<input id="settingTimezone" required placeholder="Asia/Kolkata"></label></div>
-                <fieldset class="memory-admin-settings"><legend>Family Memories control</legend>
-                  <label>Maximum photos<input id="settingMemoryPhotoLimit" type="number" min="1" max="24" step="1" required></label>
-                  <label>Who can add photos<select id="settingMemoryUploadPolicy"><option value="ADMIN_ONLY">Administrators only</option><option value="MEMBERS_WITH_ACCESS">Members having Photos access</option></select></label>
-                  <label>Printable album length<select id="settingMemoryPrintPages"><option value="1">Fit into 1 page</option><option value="2">Fit into 2 pages</option></select></label>
-                  <small>Changing the maximum never deletes existing memories. New uploads stop when the limit is reached.</small>
-                </fieldset>
-                <button class="secondary-button" type="submit">Save settings</button>
-              </form>
-            </article>
-            <article class="panel reminder-panel">
-              <div class="panel-heading"><div><p class="eyebrow">EMAIL REMINDERS</p><h3>Automatic every morning</h3></div></div>
-              <p>Reminder emails are sent at approximately 8 AM from the Google account that owns the Apps Script project. Each date can notify everyone or selected members.</p>
-              <span class="status-badge success">● Daily trigger enabled during setup</span>
-            </article>
-            <article class="panel backup-panel">
-              <div class="panel-heading"><div><p class="eyebrow">DATA SAFETY</p><h3>Monthly dashboard backup</h3></div></div>
-              <p>The complete dashboard Google Sheet is copied to a private Drive backup folder on the first day of every month. The latest 24 copies are retained.</p>
-              <span id="automaticBackupStatus" class="status-badge success">● Monthly backup enabled</span>
-              <p id="lastBackupText" class="backup-last">No backup created yet.</p>
-              <div class="backup-actions"><button id="createBackupNow" class="secondary-button" type="button">Create backup now</button><a id="backupFolderLink" class="text-button hidden" target="_blank" rel="noopener">Open backup folder</a></div>
-            </article>
-            <article class="panel category-admin-panel">
-              <div class="panel-heading"><div><p class="eyebrow">EXPENDITURE</p><h3>Categories &amp; subcategories</h3></div></div>
-              <p>Create, edit, delete, reorder, archive or restore the choices used by paid, preplanned and regular expenditure.</p>
-              <span id="adminExpenseCategorySummary" class="status-badge">12 categories</span>
-              <button class="secondary-button" type="button" data-open="expenseCategoryDialog">Open category controls</button>
-            </article>
-            <article class="panel sticky-access-admin-panel">
-              <div class="panel-heading"><div><p class="eyebrow">STICKY NOTES</p><h3>Writing permission</h3></div></div>
-              <p>Administrators always write sticky notes. For each family member, use <b>Edit → Write sticky notes</b> to allow or stop adding, editing, completing, restoring and deleting notes.</p>
-              <span class="status-badge success">● Controlled member by member</span>
-            </article>
-          </div>
-          <article class="panel members-panel">
-            <div class="panel-heading"><div><p class="eyebrow">ACCESS</p><h3>Family members</h3></div><span id="memberCount" class="count-badge">0 people</span></div>
-            <div id="memberList" class="member-list"></div>
-          </article>
-        </section>
-      </div>
-    </main>
-
-    <button id="stickyLauncher" class="sticky-launcher hidden" type="button" aria-controls="stickyBoard" aria-expanded="false" aria-label="Open sticky-note side panel" title="Open sticky notes">
-      <span aria-hidden="true">✦</span><strong>Sticky notes</strong><b id="stickyActiveCount">0</b>
-    </button>
-    <div id="stickyBoardShade" class="sticky-board-shade hidden"></div>
-    <section id="stickyBoard" class="sticky-board hidden" aria-label="Target and reminder sticky notes">
-      <header class="sticky-board-head">
-        <div class="sticky-board-title"><div><span>RIGHT UTILITY PANEL</span><strong>Sticky Notes</strong><small>Targets and reminders without occupying dashboard space. Pinned notes remain above the dashboard.</small></div></div>
-        <div class="sticky-board-controls">
-          <button id="stickyMinimize" class="sticky-minimize" type="button" aria-label="Minimize sticky-note organiser" title="Minimize">—</button>
-          <button id="stickyClose" class="sticky-close" type="button" aria-label="Close sticky-note organiser" title="Close">×</button>
+      <div id="mobileSessionBar" class="mobile-session-bar" aria-label="Mobile session controls">
+        <div class="mobile-session-versions">
+          <span id="mobileFrontendVersion" class="mobile-version-chip">FE v19.4.22</span>
+          <span id="mobileBackendVersion" class="mobile-version-chip backend">BE v3.17.8</span>
         </div>
-      </header>
-      <div class="sticky-drawer-tabs" role="tablist" aria-label="Sticky note views">
-        <button id="stickyTabActive" class="sticky-tab active" type="button" role="tab">📌 Active notes</button>
-        <button id="stickyTabCompleted" class="sticky-tab" type="button" role="tab">✓ Sticky Note Diary</button>
+        <div class="mobile-session-actions">
+          <button id="mobileChangePasswordBtn" class="mobile-session-button" type="button">Password</button>
+          <button id="mobileLogoutBtn" class="mobile-session-button danger" type="button">Log out</button>
+        </div>
       </div>
-      <div class="sticky-board-scroll">
-        <p id="stickyReadOnlyNotice" class="sticky-readonly-notice hidden">🔒 Read only · Your administrator has not enabled sticky-note writing for your account.</p>
-        <details id="stickyAddPanel" class="sticky-add-panel">
-          <summary><span><b>＋ Add sticky note</b><small>Target or reminder</small></span><i aria-hidden="true">⌄</i></summary>
-          <form id="stickyQuickForm" class="sticky-quick-form">
-            <div class="sticky-quick-heading"><strong>Add a sticky note</strong><small>Saved in the Family Dashboard spreadsheet</small></div>
-            <div class="sticky-quick-fields">
-              <label>Type<select id="quickStickyType" required><option value="REMINDER">Reminder</option><option value="TARGET">Target</option></select></label>
-              <label class="quick-title">Title *<input id="quickStickyTitle" required maxlength="100" placeholder="Enter target or reminder"></label>
-              <label>Due date<input id="quickStickyDueDate" type="date"></label>
-              <label class="quick-details">Details<textarea id="quickStickyBody" rows="3" maxlength="2000" placeholder="Optional details"></textarea></label>
-            </div>
-            <fieldset class="quick-colour-fieldset"><legend>Colour</legend><div class="quick-colour-options">
-              <label class="colour-yellow"><input type="radio" name="quickStickyColor" value="yellow" checked><span>Yellow</span></label>
-              <label class="colour-pink"><input type="radio" name="quickStickyColor" value="pink"><span>Pink</span></label>
-              <label class="colour-blue"><input type="radio" name="quickStickyColor" value="blue"><span>Blue</span></label>
-              <label class="colour-green"><input type="radio" name="quickStickyColor" value="green"><span>Green</span></label>
-              <label class="colour-purple"><input type="radio" name="quickStickyColor" value="purple"><span>Purple</span></label>
-              <label class="colour-orange"><input type="radio" name="quickStickyColor" value="orange"><span>Orange</span></label>
-            </div></fieldset>
-            <button class="sticky-save-button" type="submit">Save note</button>
-          </form>
-        </details>
-        <section class="sticky-workspace">
-          <div class="sticky-section-heading"><h3 id="stickySectionTitle">Active</h3><span id="stickyBoardSummary">0 active notes</span></div>
-          <div id="stickyCanvas" class="sticky-canvas"></div>
-          <div id="stickyCompletedList" class="sticky-completed-list hidden"></div>
-          <div id="stickyEmpty" class="sticky-empty hidden"><span>📝</span><strong>No notes here</strong><p>Add a target or reminder sticky note.</p></div>
-        </section>
+
+      <div class="portfolio-switch-wrap portfolio-filter-bar">
+        <div class="filter-group">
+          <span class="switch-label">VIEW PORTFOLIO</span>
+          <div id="ownerSwitcher" class="portfolio-switcher"></div>
+        </div>
+        <div class="filter-group">
+          <span class="switch-label">INVESTMENT TYPE</span>
+          <div id="assetViewSwitcher" class="portfolio-switcher asset-switcher">
+            <button type="button" class="owner-pill active" data-asset-view="ALL">All investments</button>
+            <button type="button" class="owner-pill" data-asset-view="MF">Mutual funds</button>
+            <button type="button" class="owner-pill" data-asset-view="STOCKS">Stocks &amp; ETFs</button>
+            <button type="button" class="owner-pill" data-asset-view="GPF">GPF</button>
+          </div>
+        </div>
+        <div class="quick-actions"><button id="importBtn" class="secondary-button">⇧ Import portfolio</button><button id="exportBtn" class="secondary-button">Export CSV</button></div>
       </div>
-      <footer class="sticky-board-footer"><button type="button" class="secondary-button" data-sticky-close>Close</button></footer>
-    </section>
-    <div id="stickyPinnedLayer" class="sticky-pinned-layer hidden" aria-label="Pinned notes kept open over the dashboard">
-      <div id="stickyPinnedCanvas" class="sticky-pinned-canvas"></div>
+
+      
+<section id="overviewSection" class="page-section">
+  <div class="overview-mode-bar">
+    <div class="overview-mode-switcher" role="tablist" aria-label="Dashboard view">
+      <button id="personalHomeModeBtn" type="button" class="active" data-overview-mode="PERSONAL"><span>⌂</span> My Home</button>
+      <button id="investmentHomeModeBtn" class="overview-investment-mode-hidden" type="button" data-overview-mode="INVESTMENT" aria-hidden="true" tabindex="-1"><span>₹</span> Investments</button>
     </div>
+    <button id="overviewSetDefaultBtn" type="button" class="overview-default-button overview-investment-mode-hidden" aria-hidden="true" tabindex="-1">✓ Default view</button>
   </div>
 
-  <dialog id="expenseDialog" class="modal">
-    <form id="expenseForm" method="dialog">
-      <div class="modal-head"><div><p class="eyebrow">EXPENDITURE</p><h3 id="expenseDialogTitle">Add expenditure</h3></div><button class="modal-close" type="button" data-close>×</button></div>
-      <input id="expenseId" type="hidden">
-      <input id="expenseRecurringId" type="hidden">
-      <input id="expenseMarkPaidId" type="hidden">
-      <p id="expenseRecurringNote" class="recurring-pay-note hidden"></p>
-      <div class="two-fields"><label>Entry type<select id="expenseEntryType" required><option value="REGULAR">Paid expenditure</option><option value="PREPLANNED">Preplanned expenditure</option></select></label><label id="expenseDateLabel">Date Paid<input id="expenseDate" type="date" required></label></div>
-      <div class="two-fields"><label>Amt (Rs.)<input id="expenseAmount" type="number" min="0.01" step="0.01" required placeholder="12000"></label><label>Category<select id="expenseCategory" required></select></label></div>
-      <div class="two-fields"><label>Subcategory<select id="expenseSubcategory" required></select></label><span class="category-help">Subcategories change with the selected category. Administrators manage these choices.</span></div>
-      <div class="two-fields"><label>Send to<input id="expenseSendTo" required maxlength="100" placeholder="e.g. Mani SBI"></label><label>From Acct<input id="expenseFromAccount" required maxlength="100" placeholder="e.g. Family SBI"></label></div>
-      <label>Reason<textarea id="expenseReason" rows="3" required maxlength="500" placeholder="e.g. Monthly 12k sent to Mani SBI on 05th &amp; 20th of each month"></textarea></label>
-      <div class="modal-actions"><button type="button" class="secondary-button" data-close>Cancel</button><button type="submit" class="primary-button">Save expenditure</button></div>
-    </form>
-  </dialog>
-
-  <dialog id="recurringExpenseDialog" class="modal">
-    <form id="recurringExpenseForm" method="dialog">
-      <div class="modal-head"><div><p class="eyebrow">REGULAR EXPENDITURE</p><h3 id="recurringExpenseDialogTitle">Add regular payment</h3></div><button class="modal-close" type="button" data-close>×</button></div>
-      <input id="recurringExpenseId" type="hidden">
-      <div class="two-fields"><label>Payment name<input id="recurringExpenseTitle" required maxlength="100" placeholder="e.g. Electricity bill"></label><label>Estimated amount (optional)<input id="recurringExpenseAmount" type="number" min="0" step="0.01" placeholder="Amount can be changed when paid"></label></div>
-      <div class="two-fields"><label>Repeat<select id="recurringExpenseFrequency" required><option value="MONTHLY">Every month</option><option value="YEARLY">Every year</option></select></label><label>Next due date<input id="recurringExpenseDueDate" type="date" required></label></div>
-      <div class="two-fields"><label>Category<select id="recurringExpenseCategory" required></select></label><label>Subcategory<select id="recurringExpenseSubcategory" required></select></label></div>
-      <div class="two-fields"><label>Send to<input id="recurringExpenseSendTo" required maxlength="100" placeholder="e.g. BESCOM"></label><label>From Acct<input id="recurringExpenseFromAccount" required maxlength="100" placeholder="e.g. Family SBI"></label></div>
-      <label>Reason<textarea id="recurringExpenseReason" rows="3" required maxlength="500" placeholder="e.g. Monthly home electricity bill"></textarea></label>
-      <label>Send email reminder<select id="recurringExpenseRemind"><option value="7,1,0">7 days, 1 day and same day</option><option value="3,1,0">3 days, 1 day and same day</option><option value="1,0">1 day and same day</option><option value="0">Same day only</option><option value="14,7,1,0">14 days, 7 days, 1 day and same day</option></select></label>
-      <fieldset><legend>Email recipients</legend><div class="check-row"><label><input id="recurringNotifyEveryone" type="checkbox" checked> All active family members with email</label></div><div id="recurringRecipientChecks" class="recipient-checks hidden"></div></fieldset>
-      <div class="modal-actions"><button type="button" class="secondary-button" data-close>Cancel</button><button type="submit" class="primary-button">Save regular payment</button></div>
-    </form>
-  </dialog>
-
-  <dialog id="bulkExpenseDialog" class="modal bulk-modal">
-    <form id="bulkExpenseForm" method="dialog">
-      <div class="modal-head"><div><p class="eyebrow">OLD EXPENDITURE</p><h3>Import old records</h3></div><button class="modal-close" type="button" data-close>×</button></div>
-      <p class="bulk-note">Copy five columns from Excel or Google Sheets and paste them below in this exact order. A heading row is optional.</p>
-      <div class="bulk-example"><strong>Amt (Rs.)</strong><span>Date Paid</span><span>Send to</span><span>From Acct</span><span>Reason</span></div>
-      <label>Paste rows<textarea id="bulkExpenseText" rows="11" required spellcheck="false" placeholder="12000&#9;05/01/2024&#9;Mani SBI&#9;Family SBI&#9;Monthly transfer"></textarea></label>
-      <small id="bulkExpenseHelp" class="muted">Accepts extra or missing pasted cells. Dates: DD/MM/YYYY, DD-MMM-YYYY, YYYY-MM-DD, or Excel date numbers. Up to 500 records.</small>
-      <div class="modal-actions"><button type="button" class="secondary-button" data-close>Cancel</button><button type="submit" class="primary-button">Import records</button></div>
-    </form>
-  </dialog>
-
-  <dialog id="expensePrintDialog" class="modal small-modal">
-    <form id="expensePrintForm" method="dialog">
-      <div class="modal-head"><div><p class="eyebrow">PRINT EXPENDITURE</p><h3>Select payment period</h3></div><button class="modal-close" type="button" data-close>×</button></div>
-      <p class="bulk-note">Filter the expenditure, choose the column width, then view or print the same report.</p>
-      <div class="report-filter-grid">
-        <label>From date<input id="expensePrintFrom" type="date" required></label>
-        <label>To date<input id="expensePrintTo" type="date" required></label>
-        <label>Status<select id="expensePrintStatus"><option value="">Paid &amp; planned</option><option value="PAID">Paid only</option><option value="PLANNED">Preplanned only</option></select></label>
-        <label>Category<select id="expensePrintCategory"><option value="">All categories</option></select></label>
-        <label>Subcategory<select id="expensePrintSubcategory"><option value="">All subcategories</option></select></label>
-        <label>Send to<select id="expensePrintSendTo"><option value="">All recipients</option></select></label>
-        <label>From account<select id="expensePrintAccount"><option value="">All accounts</option></select></label>
-        <label>Search<input id="expensePrintSearch" type="search" placeholder="Category, recipient, account or reason"></label>
-        <label>Column width<select id="expensePrintDensity"><option value="comfortable">Comfortable</option><option value="compact">Compact</option><option value="minimum">Minimum width</option></select></label>
+  <div id="personalHomeContent" class="personal-home-content">
+    <section class="personal-home-hero tint-lilac">
+      <div>
+        <p class="eyebrow">MY DAILY DASHBOARD</p>
+        <h2 id="personalHomeGreeting">Your day at a glance</h2>
+        <p>Diary, targets, reminders and a daily thought. Investment details stay hidden until you choose to view them.</p>
       </div>
-      <div class="modal-actions"><button type="button" class="secondary-button" data-close>Cancel</button><button id="viewExpenseReport" type="button" class="secondary-button">◉ View selected period</button><button type="submit" class="primary-button">⌑ Print selected period</button></div>
+      <div class="personal-home-actions">
+        <button id="homeDailyWriteBtn" type="button" class="primary-button">✎ Daily diary</button>
+        <button id="homeMonthlyWriteBtn" type="button" class="secondary-button">▣ Monthly diary</button>
+        <button id="homeAddTargetBtn" type="button" class="secondary-button">+ Target / reminder</button>
+      </div>
+    </section>
+
+    <div class="personal-home-grid">
+      <article class="personal-home-card diary-home-card tint-blue">
+        <div class="personal-card-head">
+          <div><p class="eyebrow">TODAY'S DIARY</p><h3>Write & remember</h3></div>
+          <span id="homeDiaryCount" class="personal-count-badge">0 today</span>
+        </div>
+        <div id="homeDiaryPreview" class="home-diary-preview">
+          <p class="personal-empty-copy">Nothing written today yet.</p>
+        </div>
+        <div class="personal-card-actions">
+          <button id="homeDiaryQuickBtn" type="button">+ Write now</button>
+          <button id="homeFullDiaryBtn" type="button">Open Diary</button>
+        </div>
+      </article>
+
+      <article class="personal-home-card target-home-card tint-yellow">
+        <div class="personal-card-head">
+          <div><p class="eyebrow">TARGETS & REMINDERS</p><h3>What needs attention</h3></div>
+          <span id="homeStickyCount" class="personal-count-badge target-count">0 active</span>
+        </div>
+        <div id="homeStickySummary" class="home-sticky-summary">
+          <div><strong id="homeStickyDueToday">0</strong><span>Due today</span></div>
+          <div><strong id="homeStickyOverdue">0</strong><span>Overdue</span></div>
+          <div><strong id="homeStickyUpcoming">0</strong><span>Upcoming</span></div>
+        </div>
+        <div id="homeStickyPreview" class="home-sticky-preview">
+          <p class="personal-empty-copy">No active target or reminder.</p>
+        </div>
+        <div class="personal-card-actions">
+          <button id="homeTargetAddBtn" type="button">+ Add</button>
+          <button id="homeTargetsOpenBtn" type="button">Open panel</button>
+        </div>
+      </article>
+
+      <article id="homeQuoteCard" class="personal-home-card quote-home-card quote-tone-0">
+        <div class="personal-card-head">
+          <div><p class="eyebrow">QUOTE OF THE DAY</p><h3>Pause for a thought</h3></div>
+          <div class="quote-head-tools"><span id="homeQuoteAutoStatus" class="quote-auto-status">Auto move · 12s</span><span class="quote-mini-mark">“</span></div>
+        </div>
+        <blockquote id="homeQuoteText">Your saved life quote will appear here.</blockquote>
+        <div id="homeQuoteAuthor" class="home-quote-author">— Quote Library</div>
+        <div class="personal-card-actions">
+          <button id="homeQuoteNextBtn" type="button">↻ Another</button>
+          <button id="homeQuotesOpenBtn" type="button">Open Quotes</button>
+        </div>
+      </article>
+    </div>
+
+    <section class="personal-home-footer tint-green">
+      <div>
+        <strong>Investment details stay outside the Overview.</strong>
+        <span>Open Holdings or Watchlist from the left menu only when you want financial details.</span>
+      </div>
+      <button id="homeShowInvestmentsBtn" type="button">▥ Open Holdings</button>
+    </section>
+  </div>
+
+  <div id="investmentOverviewContent" class="investment-overview-content hidden">
+<div id="masterLoadBanner" class="master-load-banner hidden">
+          <div>
+            <p class="eyebrow">MASTER SPREADSHEET NOT YET APPLIED</p>
+            <h3>Your dashboard is still showing the old portfolio data.</h3>
+            <p>The uploaded master workbook contains 35 consolidated investments and 17 watchlist items. Load it once to replace the old holdings/watchlist.</p>
+          </div>
+          <button id="masterLoadNowBtn" class="primary-button" type="button">⇄ Load Master Sheet Data</button>
+        </div>
+        <div class="welcome-banner">
+          <div><p class="eyebrow">LIVE WEALTH DASHBOARD</p><h2 id="welcomeTitle">Combined portfolio</h2><p id="lastUpdatedText">Loading your latest portfolio…</p><div class="live-data-line"><span class="live-dot"></span><span>Portfolio + watchlist auto tracking</span></div></div>
+          <div class="banner-chip" id="viewChip">Combined</div>
+        </div>
+
+        <div class="overview-utility-row">
+          <button id="overviewStickyShortcut" class="overview-utility-chip sticky-chip" type="button"><span>📌</span><strong id="overviewStickyShortcutCount">0 active</strong><small>Targets & reminders</small></button>
+          <button id="overviewQuoteShortcut" class="overview-utility-chip quote-chip" type="button"><span>💬</span><strong>Daily quote</strong><small>Open right panel</small></button>
+        </div>
+
+        <div class="summary-grid">
+          <article class="summary-card accent-blue"><div class="card-icon">₹</div><p id="sumInvestedLabel">Invested / cost value</p><strong id="sumInvested">₹0</strong><span id="sumAssetCount">0 holdings</span><div id="sumInvestedTrend" class="summary-trend neutral">Tracking growth…</div></article>
+          <article class="summary-card accent-green"><div class="card-icon">↗</div><p id="sumCurrentLabel">Current value</p><strong id="sumCurrent">₹0</strong><span id="sumPricedCount">0 priced</span><div id="sumCurrentTrend" class="summary-trend neutral">Tracking growth…</div></article>
+          <article class="summary-card accent-purple"><div class="card-icon">±</div><p>Total gain / loss</p><strong id="sumGain">₹0</strong><span id="sumReturn">0.00%</span><div id="sumGainTrend" class="summary-trend neutral">Latest portfolio result</div></article>
+          <article class="summary-card accent-orange"><div class="card-icon">☆</div><p>Watchlist pulse</p><strong id="sumSplit">All investments</strong><span id="sumWatchCount">0 watchlist</span><div id="sumWatchTrend" class="summary-trend neutral">Tracking opportunities…</div></article>
+        </div>
+        <div class="insight-grid">
+          <article class="panel trend-panel portfolio-trend-panel">
+            <div class="panel-head trend-panel-head"><div><p class="eyebrow">WEALTH GROWTH</p><h3>Invested capital vs current value</h3><p class="panel-subcopy">Automatically records dashboard snapshots while you use My Finance.</p></div><div id="growthRangeButtons" class="range-switcher"><button type="button" data-growth-range="7D">7D</button><button type="button" class="active" data-growth-range="30D">30D</button><button type="button" data-growth-range="ALL">All</button></div></div>
+            <div class="growth-kpi-grid"><div class="growth-kpi"><span>Invested change</span><strong id="growthInvestedDelta">₹0</strong><small id="growthInvestedPct">0.00%</small></div><div class="growth-kpi"><span>Value change</span><strong id="growthValueDelta">₹0</strong><small id="growthValuePct">0.00%</small></div><div class="growth-kpi"><span>Portfolio gain</span><strong id="growthGainNow">₹0</strong><small id="growthReturnNow">0.00%</small></div></div>
+            <div id="portfolioGrowthChart" class="trend-chart"></div><div class="chart-legend"><span><i class="legend-line invested"></i>Invested amount</span><span><i class="legend-line current"></i>Current value</span><span id="growthHistoryNote" class="muted">Growth history starts from this version.</span></div>
+          </article>
+          <article class="panel trend-panel watch-trend-panel">
+            <div class="panel-head"><div><p class="eyebrow">WATCHLIST PULSE</p><h3>How close are ideas to your target?</h3><p class="panel-subcopy">Prices and target gaps refresh automatically with the portfolio.</p></div><span id="watchPulseBadge" class="pulse-badge">Live</span></div>
+            <div class="watch-pulse-grid"><div class="watch-pulse-card opportunity"><span>At / below target</span><strong id="watchAtTarget">0</strong><small>Potential opportunities</small></div><div class="watch-pulse-card near"><span>Within 5% of target</span><strong id="watchNearTarget">0</strong><small>Worth watching closely</small></div><div class="watch-pulse-card gap"><span>Average gap</span><strong id="watchAverageGap">—</strong><small>From your target prices</small></div><div class="watch-pulse-card total"><span>Watchlist size</span><strong id="watchPulseCount">0</strong><small>Stocks / ETFs / MFs</small></div></div>
+            <div id="watchlistTrendChart" class="trend-chart compact"></div><div class="chart-legend"><span><i class="legend-line watch"></i>Average distance to target</span><span id="watchTrendNote" class="muted">Lower is closer to your target.</span></div>
+          </article>
+        </div>
+
+        <article class="panel type-breakdown-panel">
+          <div class="panel-head">
+            <div><p class="eyebrow">INVESTMENT TYPE SUMMARY</p><h3>Mutual funds, Stocks, ETFs &amp; GPF</h3></div>
+            <span class="tiny muted">Click a card to filter the dashboard</span>
+          </div>
+          <div id="typeSummaryGrid" class="type-summary-grid"></div>
+        </article>
+
+        <div class="overview-grid">
+          <article class="panel allocation-panel"><div class="panel-head"><div><p class="eyebrow">ALLOCATION</p><h3>By asset type</h3></div></div><div id="allocationChart" class="allocation-chart"></div></article>
+          <article class="panel"><div class="panel-head"><div><p class="eyebrow">INVESTOR SUMMARY</p><h3>Family comparison</h3></div></div><div id="investorSummary" class="investor-summary"></div></article>
+        </div>
+
+        <article class="panel"><div class="panel-head"><div><p class="eyebrow">TOP HOLDINGS</p><h3>Largest current holdings</h3></div><button class="link-button" data-section-link="holdings">View all</button></div><div id="topHoldings" class="mini-holdings empty-state">Add investments to begin.</div></article>
+  </div>
+</section>
+
+<section id="holdingsSection" class="page-section hidden">
+        <section id="holdingsSummaryPanel" class="holdings-summary-panel is-collapsed" aria-label="Investment summary" aria-hidden="true">
+          <div class="holdings-summary-head">
+            <div>
+              <p class="eyebrow">HOLDINGS SUMMARY</p>
+              <h3>Sarada · Niharika · Combined</h3>
+            </div>
+            <div class="holdings-summary-head-actions">
+              <span class="holdings-summary-note">One compact comparison · GPF includes monthly payment, estimated interest and 12-month projection</span>
+              <div class="summary-value-legend" aria-label="Summary colour guide">
+                <span class="invested">Invested</span>
+                <span class="present">Present value</span>
+                <span class="growth">Growth / Loss</span>
+                <span class="gpf">GPF projection</span>
+              </div>
+              <button id="hideHoldingsSummaryInsideBtn" class="summary-inline-hide" type="button" data-hide-holdings-summary>Hide summary ↑</button>
+            </div>
+          </div>
+
+          <div class="holding-matrix-tabs" role="tablist" aria-label="Choose investor summary">
+            <button type="button" role="tab" data-matrix-owner="sarada" aria-selected="false">Sarada</button>
+            <button type="button" role="tab" data-matrix-owner="niharika" aria-selected="false">Niharika</button>
+            <button type="button" role="tab" class="is-active" data-matrix-owner="combined" aria-selected="true">Combined</button>
+          </div>
+
+          <div class="holding-matrix-wrap" data-matrix-owner-view="combined">
+            <table class="holding-matrix-table" aria-label="Sarada, Niharika and combined investment summary">
+              <thead>
+                <tr class="matrix-owner-row">
+                  <th class="matrix-corner" scope="col">Investment</th>
+                  <th class="matrix-owner matrix-owner-sarada" scope="colgroup" colspan="3" data-owner="sarada"><span>Sarada</span><small>Personal portfolio</small></th>
+                  <th class="matrix-owner matrix-owner-niharika" scope="colgroup" colspan="3" data-owner="niharika"><span>Niharika</span><small>Personal portfolio</small></th>
+                  <th class="matrix-owner matrix-owner-combined" scope="colgroup" colspan="3" data-owner="combined"><span>Combined</span><small>Unified family portfolio</small></th>
+                </tr>
+                <tr class="matrix-metric-row">
+                  <th scope="col">Asset type</th>
+                  <th scope="col" data-owner="sarada">Invested</th><th scope="col" data-owner="sarada">Growth</th><th scope="col" data-owner="sarada">Present value</th>
+                  <th scope="col" data-owner="niharika">Invested</th><th scope="col" data-owner="niharika">Growth</th><th scope="col" data-owner="niharika">Present value</th>
+                  <th scope="col" data-owner="combined">Invested</th><th scope="col" data-owner="combined">Growth</th><th scope="col" data-owner="combined">Present value</th>
+                </tr>
+              </thead>
+              <tbody>
+                <tr class="matrix-asset-row matrix-mf-row">
+                  <th scope="row"><span class="matrix-asset-badge">MF</span><strong>Mutual funds</strong></th>
+                  <td class="matrix-value matrix-invested" data-owner="sarada"><strong id="holdSumSaradaMfInvested">₹0</strong></td>
+                  <td class="matrix-value matrix-growth" data-owner="sarada"><strong id="holdSumSaradaMfGrowth">₹0 · 0.00%</strong></td>
+                  <td class="matrix-value matrix-present" data-owner="sarada"><strong id="holdSumSaradaMfCurrent">₹0</strong></td>
+                  <td class="matrix-value matrix-invested" data-owner="niharika"><strong id="holdSumNiharikaMfInvested">₹0</strong></td>
+                  <td class="matrix-value matrix-growth" data-owner="niharika"><strong id="holdSumNiharikaMfGrowth">₹0 · 0.00%</strong></td>
+                  <td class="matrix-value matrix-present" data-owner="niharika"><strong id="holdSumNiharikaMfCurrent">₹0</strong></td>
+                  <td class="matrix-value matrix-invested" data-owner="combined"><strong id="holdSumCombinedMfInvested">₹0</strong></td>
+                  <td class="matrix-value matrix-growth" data-owner="combined"><strong id="holdSumCombinedMfGrowth">₹0 · 0.00%</strong></td>
+                  <td class="matrix-value matrix-present" data-owner="combined"><strong id="holdSumCombinedMfCurrent">₹0</strong></td>
+                </tr>
+                <tr class="matrix-asset-row matrix-stock-row">
+                  <th scope="row"><span class="matrix-asset-badge">ST</span><strong>Stocks &amp; ETFs</strong></th>
+                  <td class="matrix-value matrix-invested" data-owner="sarada"><strong id="holdSumSaradaStockInvested">₹0</strong></td>
+                  <td class="matrix-value matrix-growth" data-owner="sarada"><strong id="holdSumSaradaStockGrowth">₹0 · 0.00%</strong></td>
+                  <td class="matrix-value matrix-present" data-owner="sarada"><strong id="holdSumSaradaStockCurrent">₹0</strong></td>
+                  <td class="matrix-value matrix-invested" data-owner="niharika"><strong id="holdSumNiharikaStockInvested">₹0</strong></td>
+                  <td class="matrix-value matrix-growth" data-owner="niharika"><strong id="holdSumNiharikaStockGrowth">₹0 · 0.00%</strong></td>
+                  <td class="matrix-value matrix-present" data-owner="niharika"><strong id="holdSumNiharikaStockCurrent">₹0</strong></td>
+                  <td class="matrix-value matrix-invested" data-owner="combined"><strong id="holdSumCombinedStockInvested">₹0</strong></td>
+                  <td class="matrix-value matrix-growth" data-owner="combined"><strong id="holdSumCombinedStockGrowth">₹0 · 0.00%</strong></td>
+                  <td class="matrix-value matrix-present" data-owner="combined"><strong id="holdSumCombinedStockCurrent">₹0</strong></td>
+                </tr>
+                <tr class="matrix-asset-row matrix-gpf-row">
+                  <th scope="row"><span class="matrix-asset-badge">GPF</span><strong>GPF</strong><small>12-month projection</small></th>
+                  <td class="matrix-value matrix-invested" data-owner="sarada"><span>Balance</span><strong id="holdSumSaradaGpfPresent">₹0</strong><small><b id="holdSumSaradaGpfMonthly">₹0</b> / month</small></td>
+                  <td class="matrix-value matrix-growth" data-owner="sarada"><span>Est. interest</span><strong id="holdSumSaradaGpfInterest">₹0</strong><small>next 12 months</small></td>
+                  <td class="matrix-value matrix-present" data-owner="sarada"><span>Projected 12M</span><strong id="holdSumSaradaGpfProjected">₹0</strong><small>balance + payments + interest</small></td>
+                  <td class="matrix-value matrix-invested" data-owner="niharika"><span>Balance</span><strong id="holdSumNiharikaGpfPresent">₹0</strong><small><b id="holdSumNiharikaGpfMonthly">₹0</b> / month</small></td>
+                  <td class="matrix-value matrix-growth" data-owner="niharika"><span>Est. interest</span><strong id="holdSumNiharikaGpfInterest">₹0</strong><small>next 12 months</small></td>
+                  <td class="matrix-value matrix-present" data-owner="niharika"><span>Projected 12M</span><strong id="holdSumNiharikaGpfProjected">₹0</strong><small>balance + payments + interest</small></td>
+                  <td class="matrix-value matrix-invested" data-owner="combined"><span>Balance</span><strong id="holdSumCombinedGpfPresent">₹0</strong><small><b id="holdSumCombinedGpfMonthly">₹0</b> / month</small></td>
+                  <td class="matrix-value matrix-growth" data-owner="combined"><span>Est. interest</span><strong id="holdSumCombinedGpfInterest">₹0</strong><small>next 12 months</small></td>
+                  <td class="matrix-value matrix-present" data-owner="combined"><span>Projected 12M</span><strong id="holdSumCombinedGpfProjected">₹0</strong><small>balance + payments + interest</small></td>
+                </tr>
+                <tr class="matrix-asset-row matrix-total-row">
+                  <th scope="row"><span class="matrix-asset-badge">ALL</span><strong>Total portfolio</strong><small>Current position</small></th>
+                  <td class="matrix-value matrix-invested" data-owner="sarada"><strong id="holdSumSaradaTotalInvested">₹0</strong></td>
+                  <td class="matrix-value matrix-growth" data-owner="sarada"><strong id="holdSumSaradaTotalGrowth">₹0 · 0.00%</strong></td>
+                  <td class="matrix-value matrix-present" data-owner="sarada"><strong id="holdSumSaradaTotalCurrent">₹0</strong></td>
+                  <td class="matrix-value matrix-invested" data-owner="niharika"><strong id="holdSumNiharikaTotalInvested">₹0</strong></td>
+                  <td class="matrix-value matrix-growth" data-owner="niharika"><strong id="holdSumNiharikaTotalGrowth">₹0 · 0.00%</strong></td>
+                  <td class="matrix-value matrix-present" data-owner="niharika"><strong id="holdSumNiharikaTotalCurrent">₹0</strong></td>
+                  <td class="matrix-value matrix-invested" data-owner="combined"><strong id="holdSumCombinedTotalInvested">₹0</strong></td>
+                  <td class="matrix-value matrix-growth" data-owner="combined"><strong id="holdSumCombinedTotalGrowth">₹0 · 0.00%</strong></td>
+                  <td class="matrix-value matrix-present" data-owner="combined"><strong id="holdSumCombinedTotalCurrent">₹0</strong></td>
+                </tr>
+              </tbody>
+            </table>
+          </div>
+        </section>
+
+        <article class="panel table-panel">
+          <div class="panel-head responsive-head">
+            <div class="holdings-title-block"><h3 id="holdingsHeading"><span class="holdings-title-label">PORTFOLIO DETAILS</span><span class="holdings-title-sep">·</span><span>Mutual funds, stocks, ETFs &amp; GPF</span></h3><p id="masterDataStatus" class="master-data-status">Master spreadsheet not loaded yet.</p></div>
+            <div class="table-tools"><button id="toggleHoldingsSummaryBtn" class="summary-toggle-button" type="button" aria-expanded="false">▾ Show Holding Summary</button><button id="replaceMasterDataBtn" class="master-data-button" type="button">⇄ Replace from Master Sheet</button><button id="showAllInvestmentsBtn" class="show-all-button" type="button">▦ Show All Investments</button><input id="holdingSearch" class="search-input" type="search" placeholder="Search holdings…"><select id="holdingTypeFilter" class="compact-select"><option value="ALL">All assets</option><option value="MF">Mutual funds</option><option value="STOCK">Stocks</option><option value="ETF">ETFs</option><option value="GPF">GPF</option><option value="OTHER">Other</option></select><select id="holdingResultFilter" class="compact-select advanced-filter"><option value="ALL">All results</option><option value="CURRENT_PROFIT">Current profit</option><option value="CURRENT_LOSS">Current loss</option><option value="TOTAL_PROFIT">Total profit</option><option value="TOTAL_LOSS">Total loss</option><option value="REALISED_PROFIT">Realised profit</option><option value="REALISED_LOSS">Realised loss</option><option value="PNL_PENDING">P/L pending</option></select><select id="holdingNotesFilter" class="compact-select advanced-filter"><option value="ALL">All notes</option><option value="WITH_NOTES">Has notes</option><option value="WITHOUT_NOTES">No notes</option></select><select id="holdingTradeFilter" class="compact-select advanced-filter"><option value="ALL">All trade history</option><option value="HAS_PURCHASE">Has purchase date</option><option value="HAS_SALE">Has sale/redemption</option><option value="MISSING_DATES">Missing exact dates</option></select><span id="holdingsFilterCount" class="filter-result-pill">0 visible</span><button id="printHoldingsBtn" class="print-view-button" type="button">⎙ Preview / Print</button><button id="holdingsFullscreenBtn" class="fullscreen-view-button" type="button" aria-pressed="false" title="Expand Holdings to full browser area">⛶ Full screen</button><button id="showAllHoldingColumnsBtn" class="secondary-button default-column-toggle-btn" type="button">👁 Show all columns</button><button id="manageHoldingsColumnsBtn" class="secondary-button column-manager-main-btn" type="button">⚙ Add / Edit / Delete Columns</button><button id="viewAllNotesBtn" class="secondary-button">📝 All notes</button><button id="bulkImportBtn" class="secondary-button">⇧ Import</button><button id="addInvestmentTableBtn" class="primary-button">+ Add</button></div>
+          </div>
+          <div class="saved-view-bar holdings-saved-view-bar">
+  <div class="saved-view-left">
+    <span class="saved-view-label">Default dashboard view</span>
+    <select id="holdingsViewPreset" class="compact-select view-preset-select">
+      <option value="RESULT">My Investment Result</option>
+      <option value="PERFORMANCE">MF / Stock Performance</option>
+      <option value="COMPACT">Compact Result</option>
+      <option value="FULL">Full View</option>
+      <option value="CUSTOM">Custom</option>
+    </select>
+    <button id="saveHoldingsDefaultViewBtn" type="button" class="small-button saved-view-save">★ Save current as default</button>
+    <button id="restoreHoldingsDefaultViewBtn" type="button" class="small-button">↺ Restore saved</button>
+    <button id="resetHoldingsViewBtn" type="button" class="small-button">Reset</button>
+    <span id="holdingsDefaultViewStatus" class="saved-view-status">Recommended: My Investment Result</span><span id="mfNavHealthBadge" class="mf-nav-health neutral">MF NAV status pending</span>
+  </div>
+  <div class="investment-view-legend">
+    <span class="view-legend-chip transaction">Trade history</span>
+    <span class="view-legend-chip result">My investment result</span>
+    <span class="view-legend-chip performance">Asset / scheme performance</span>
+  </div>
+</div>
+<div class="table-view-size-bar" data-table-size-for="holdings">
+            <strong>Table size</strong>
+            <span class="size-group-label">Row height</span>
+            <button id="holdRowMinusBtn" type="button" class="size-step-button" title="Reduce Holdings row height">−</button>
+            <span id="holdRowSizeLabel" class="size-value-label">100%</span>
+            <button id="holdRowPlusBtn" type="button" class="size-step-button" title="Increase Holdings row height">+</button>
+            <input id="holdRowSlider" class="size-drag-slider" type="range" min="70" max="160" step="5" value="100" aria-label="Drag to change Holdings row height">
+            <span class="size-divider"></span>
+            <span class="size-group-label">Column width</span>
+            <button id="holdWidthMinusBtn" type="button" class="size-step-button" title="Reduce Holdings table width">−</button>
+            <span id="holdWidthSizeLabel" class="size-value-label">100%</span>
+            <button id="holdWidthPlusBtn" type="button" class="size-step-button" title="Increase Holdings table width">+</button>
+            <input id="holdWidthSlider" class="size-drag-slider" type="range" min="70" max="160" step="5" value="100" aria-label="Drag to change Holdings column width">
+            <span class="drag-hint">↔ Drag column edges too</span>
+            <span id="holdLayoutSavedStatus" class="layout-saved-status">✓ Saved</span>
+            <button id="holdSizeResetBtn" type="button" class="size-reset-button">Reset</button>
+          </div>
+          <div class="performance-note">1D–10Y columns show the asset/scheme price or NAV performance for that period. XIRR is available for mutual funds imported from transaction statements.</div>
+          <div class="holding-pnl-strip" aria-label="Profit and loss to date">
+            <article class="holding-pnl-card current"><span>Current P/L till today*</span><strong id="holdCurrentPnlToday">₹0</strong><small>Remaining holdings vs current cost</small></article>
+            <article class="holding-pnl-card realised"><span>Realised P/L</span><strong id="holdRealizedPnl">₹0</strong><small>Completed sales/redemptions</small></article>
+            <article class="holding-pnl-card total"><span>Total P/L to date</span><strong id="holdTotalPnlToDate">₹0</strong><small>Current + realised, where history is complete</small></article>
+            <article class="holding-pnl-card coverage"><span>Exact trade-date coverage</span><strong id="holdTradeDateCoverage">0 / 0</strong><small id="holdPnlAsOf">*Using latest available price/NAV</small></article>
+          </div>
+          <div class="table-wrap wide-table" data-layout-scroll="holdings">
+            <table class="holdings-table">
+              <thead><tr id="holdingsHeadRow"><th class="sticky-col owner-col">Investor</th><th class="sticky-col asset-col">Asset</th><th class="trade-date-head purchase-head">Purchase Date(s)</th><th class="trade-date-head sale-head">Sale Date(s)</th><th>Qty / Units</th><th>Avg Buy</th><th>Invested</th><th>Current Price / NAV</th><th>Current Value</th><th>P/L Till Today</th><th>Realised P/L</th><th>Total P/L to Date</th><th>Gain %</th><th>XIRR</th><th>1D</th><th>1W</th><th>1M</th><th>6M</th><th>1Y</th><th>3Y</th><th>5Y</th><th>10Y</th><th class="personal-note-head">Personal Note</th><th></th></tr></thead>
+              <tbody id="holdingsBody"></tbody>
+            </table>
+          </div>
+          <div id="holdingsEmpty" class="empty-state hidden">No holdings match this view.</div>
+        </article>
+      </section>
+
+
+      <section id="transactionsSection" class="page-section hidden">
+        <div class="transaction-hero">
+          <div>
+            <p class="eyebrow">TRANSACTION HISTORY</p>
+            <h2>Purchase &amp; Sale Dates</h2>
+            <p>Mutual-fund statement transactions and imported stock/ETF tradebook history. <strong class="sale-copy">SALE is always red.</strong></p>
+          </div>
+          <div class="transaction-hero-actions">
+            <button id="transactionImportBtn" class="primary-button" type="button">⇧ Import stock tradebook</button>
+            <button id="printTransactionsBtn" class="print-view-button" type="button">⎙ Preview / Print</button>
+          </div>
+        </div>
+
+        <div class="transaction-summary-grid">
+          <article class="transaction-summary-card buy-card"><span>Total purchases</span><strong id="transactionBuyTotal">₹0</strong><small>BUY / Purchase / SIP</small></article>
+          <article class="transaction-summary-card sale-card"><span>Total sales</span><strong id="transactionSaleTotal">₹0</strong><small>SALE / Redemption</small></article>
+          <article class="transaction-summary-card pnl-card"><span>Realised profit / loss</span><strong id="transactionRealizedPnl">—</strong><small>FIFO where complete transaction history is available</small></article>
+          <article class="transaction-summary-card count-card"><span>Transactions</span><strong id="transactionCount">0</strong><small>Current filtered view</small></article>
+        </div>
+
+        <article class="panel table-panel transaction-panel">
+          <div class="panel-head responsive-head">
+            <div><p class="eyebrow">BUY / SALE REGISTER</p><h3>Stocks, ETFs &amp; Mutual Funds</h3></div>
+            <div class="table-tools transaction-filter-tools">
+              <input id="transactionSearch" class="search-input" type="search" placeholder="Search asset, symbol or broker…">
+              <select id="transactionOwnerFilter" class="compact-select"><option value="ALL">All investors</option></select>
+              <select id="transactionAssetFilter" class="compact-select"><option value="ALL">All assets</option><option value="MF">Mutual funds</option><option value="STOCK">Stocks</option><option value="ETF">ETFs</option></select>
+              <select id="transactionSideFilter" class="compact-select"><option value="ALL">Buy + Sale</option><option value="BUY">BUY only</option><option value="SELL">SALE only</option></select>
+              <label class="transaction-date-filter">From<input id="transactionFromDate" type="date"></label>
+              <label class="transaction-date-filter">To<input id="transactionToDate" type="date"></label>
+              <span id="transactionFilterCount" class="filter-result-pill">0 visible</span>
+            </div>
+          </div>
+          <div class="transaction-note">For stocks/ETFs, import the broker Tradebook to obtain actual purchase/sale dates. Holdings files alone usually do not contain full transaction dates. MF statement imports automatically appear here.</div>
+          <div class="table-wrap wide-table transaction-table-wrap">
+            <table class="transaction-table">
+              <thead><tr><th>Date</th><th>Investor</th><th>Asset Type</th><th>Asset / Symbol</th><th>Buy / Sale</th><th>Qty / Units</th><th>Price / NAV</th><th>Amount</th><th>Realised P/L</th><th>Holding Period</th><th>Broker / Source</th></tr></thead>
+              <tbody id="transactionBody"></tbody>
+            </table>
+          </div>
+          <div id="transactionEmpty" class="empty-state hidden">No transactions match this view. Import an MF transaction statement or stock/ETF tradebook.</div>
+        </article>
+      </section>
+
+      <section id="watchlistSection" class="page-section hidden"><div class="watchlist-live-strip"><div><span class="live-dot"></span><strong>Live watchlist tracking</strong><span id="watchlistLastAutoUpdate" class="muted">Waiting for update…</span></div><div class="watchlist-live-stats"><span>At target <b id="watchStripAtTarget">0</b></span><span>Near target <b id="watchStripNear">0</b></span><span>Avg gap <b id="watchStripGap">—</b></span></div></div>
+        <article class="panel table-panel"><div class="panel-head responsive-head"><div><p class="eyebrow">FUTURE IDEAS</p><h3>Investment watchlist</h3></div><div class="table-tools watch-filter-tools"><input id="watchSearch" class="search-input" type="search" placeholder="Search watchlist…"><select id="watchTypeFilter" class="compact-select"><option value="ALL">All types</option><option value="STOCK">Stocks</option><option value="ETF">ETFs</option><option value="MF">Mutual funds</option></select><select id="watchPriorityFilter" class="compact-select"><option value="ALL">All priority</option><option value="HIGH">High</option><option value="MEDIUM">Medium</option><option value="LOW">Low</option></select><select id="watchTargetFilter" class="compact-select"><option value="ALL">All target status</option><option value="AT">At / below target</option><option value="NEAR">Within 5%</option><option value="FAR">More than 5% away</option><option value="NO_TARGET">No target</option></select><select id="watchNotesFilter" class="compact-select"><option value="ALL">All notes</option><option value="WITH_NOTES">Has notes</option><option value="WITHOUT_NOTES">No notes</option></select><span id="watchFilterCount" class="filter-result-pill">0 visible</span><button id="printWatchlistBtn" class="print-view-button" type="button">⎙ Preview / Print</button><button id="watchlistFullscreenBtn" class="fullscreen-view-button" type="button" aria-pressed="false" title="Expand Watchlist to full browser area">⛶ Full screen</button><button id="showAllWatchColumnsBtn" class="secondary-button default-column-toggle-btn" type="button">👁 Show all columns</button><button id="manageWatchlistColumnsBtn" class="secondary-button column-manager-main-btn" type="button">⚙ Add / Edit / Delete Columns</button><button id="watchAllNotesBtn" class="secondary-button">📝 All notes</button><button id="addWatchBtn" class="primary-button">+ Add</button></div></div><div class="saved-view-bar watch-saved-view-bar">
+  <div class="saved-view-left">
+    <span class="saved-view-label">Watchlist default view</span>
+    <button id="saveWatchDefaultViewBtn" type="button" class="small-button saved-view-save">★ Save current as default</button>
+    <button id="restoreWatchDefaultViewBtn" type="button" class="small-button">↺ Restore saved</button>
+    <span id="watchDefaultViewStatus" class="saved-view-status">Filters and visible columns can be saved</span>
+  </div>
+</div>
+<div class="table-view-size-bar" data-table-size-for="watchlist">
+            <strong>Table size</strong>
+            <span class="size-group-label">Row height</span>
+            <button id="watchRowMinusBtn" type="button" class="size-step-button" title="Reduce Watchlist row height">−</button>
+            <span id="watchRowSizeLabel" class="size-value-label">100%</span>
+            <button id="watchRowPlusBtn" type="button" class="size-step-button" title="Increase Watchlist row height">+</button>
+            <input id="watchRowSlider" class="size-drag-slider" type="range" min="70" max="160" step="5" value="100" aria-label="Drag to change Watchlist row height">
+            <span class="size-divider"></span>
+            <span class="size-group-label">Column width</span>
+            <button id="watchWidthMinusBtn" type="button" class="size-step-button" title="Reduce Watchlist table width">−</button>
+            <span id="watchWidthSizeLabel" class="size-value-label">100%</span>
+            <button id="watchWidthPlusBtn" type="button" class="size-step-button" title="Increase Watchlist table width">+</button>
+            <input id="watchWidthSlider" class="size-drag-slider" type="range" min="70" max="160" step="5" value="100" aria-label="Drag to change Watchlist column width">
+            <span class="drag-hint">↔ Drag column edges too</span>
+            <span id="watchLayoutSavedStatus" class="layout-saved-status">✓ Saved</span>
+            <button id="watchSizeResetBtn" type="button" class="size-reset-button">Reset</button>
+          </div>
+          <div class="performance-note">Live price comes from the backend. Sheet columns retain the uploaded workbook’s valuation, growth, 52-week and performance details.</div><div class="table-wrap wide-table" data-layout-scroll="watchlist"><table class="watchlist-details-table"><thead><tr id="watchHeadRow"><th class="sticky-col asset-col">Asset</th><th>Live Price/NAV</th><th>Sheet Day %</th><th>Target</th><th>Distance</th><th>52W H/L</th><th>P/E or P/B</th><th>1M</th><th>1Y</th><th>3Y</th><th>5Y</th><th>10Y</th><th>Remark / Moat</th><th class="personal-note-head">Personal Note</th><th></th></tr></thead><tbody id="watchBody"></tbody></table></div><div id="watchEmpty" class="empty-state hidden">No watchlist items match this search.</div></article>
+      </section>
+
+
+
+      <section id="sipSection" class="page-section hidden">
+        <div class="sip-hero">
+          <div>
+            <p class="eyebrow">PLANNED INVESTING</p>
+            <h2>SIP Planner &amp; Future Investment</h2>
+            <p>Plan future mutual-fund, ETF or stock investments without adding them to current Holdings before they are actually invested.</p>
+          </div>
+          <button id="addSipPlanBtn" type="button" class="primary-button">+ Add SIP</button>
+        </div>
+
+        <div class="sip-kpi-grid">
+          <article class="sip-kpi-card">
+            <span>MONTHLY COMMITMENT</span>
+            <strong id="sipMonthlyCommitment">₹0</strong>
+            <small>Monthly-equivalent active SIPs</small>
+          </article>
+          <article class="sip-kpi-card">
+            <span>NEXT 30 DAYS</span>
+            <strong id="sipNext30Amount">₹0</strong>
+            <small id="sipNext30Count">0 upcoming instalments</small>
+          </article>
+          <article class="sip-kpi-card">
+            <span>NEXT 12 MONTHS</span>
+            <strong id="sipNext12Amount">₹0</strong>
+            <small>Planned future contribution</small>
+          </article>
+          <article class="sip-kpi-card">
+            <span>ACTIVE SIPs</span>
+            <strong id="sipActiveCount">0</strong>
+            <small id="sipPausedCount">0 paused</small>
+          </article>
+        </div>
+
+        <article class="panel sip-panel">
+          <div class="panel-head responsive-head">
+            <div>
+              <p class="eyebrow">SIP MASTER</p>
+              <h3>Recurring investment plans</h3>
+            </div>
+            <div class="sip-filter-tools">
+              <select id="sipOwnerFilter" class="compact-select" aria-label="SIP investor filter">
+                <option value="ALL">All investors</option>
+              </select>
+              <select id="sipStatusFilter" class="compact-select" aria-label="SIP status filter">
+                <option value="ALL">All status</option>
+                <option value="ACTIVE">Active</option>
+                <option value="PAUSED">Paused</option>
+                <option value="STOPPED">Stopped</option>
+              </select>
+              <span id="sipPlanCount" class="filter-result-pill">0 plans</span>
+            </div>
+          </div>
+
+          <div class="sip-info-strip">
+            <strong>Future SIP amounts are kept separate from current Holdings.</strong>
+            They are counted in Holdings only after your actual MF statement / broker transaction is imported.
+          </div>
+
+          <div class="table-wrap sip-table-wrap">
+            <table class="sip-table">
+              <thead>
+                <tr>
+                  <th>Investor</th><th>Asset / Scheme</th><th>SIP Amount</th><th>Frequency</th>
+                  <th>SIP Date</th><th>Step-up</th><th>Next SIP</th><th>Status</th><th>Actions</th>
+                </tr>
+              </thead>
+              <tbody id="sipPlansBody"></tbody>
+            </table>
+          </div>
+          <div id="sipPlansEmpty" class="empty-state">No SIP plan yet. Click “Add SIP” to plan future investments.</div>
+        </article>
+
+        <article class="panel sip-panel">
+          <div class="panel-head responsive-head">
+            <div>
+              <p class="eyebrow">FUTURE SIP SCHEDULE</p>
+              <h3>Upcoming instalments</h3>
+            </div>
+            <div class="sip-filter-tools">
+              <label class="sip-horizon-label">Show
+                <select id="sipHorizonSelect" class="compact-select">
+                  <option value="3">Next 3 months</option>
+                  <option value="6">Next 6 months</option>
+                  <option value="12" selected>Next 12 months</option>
+                  <option value="24">Next 24 months</option>
+                </select>
+              </label>
+              <span id="sipScheduleCount" class="filter-result-pill">0 instalments</span>
+            </div>
+          </div>
+
+          <div class="table-wrap sip-table-wrap sip-schedule-wrap">
+            <table class="sip-table sip-schedule-table">
+              <thead>
+                <tr><th>Due Date</th><th>Investor</th><th>Asset / Scheme</th><th>Amount</th><th>Status</th><th>Action</th></tr>
+              </thead>
+              <tbody id="sipScheduleBody"></tbody>
+            </table>
+          </div>
+          <div id="sipScheduleEmpty" class="empty-state">No upcoming SIP instalments for the selected period.</div>
+          <p class="sip-footnote">“Mark Invested” records completion of the SIP schedule only. It does not create units in Holdings because actual units/NAV should come from the MF statement or broker transaction file.</p>
+        </article>
+      </section>
+
+
+      <section id="expenditureSection" class="page-section hidden">
+        <div class="expense-hero">
+          <div>
+            <p class="eyebrow">PERSONAL EXPENDITURE</p>
+            <h2>Expenses, plans &amp; regular payments</h2>
+            <p>Record actual spending, pre-plan upcoming expenses, manage recurring payments, and keep categories organised — without mixing planned amounts with actual expenditure.</p>
+          </div>
+          <div class="expense-hero-actions">
+            <button id="addExpenseBtn" type="button" class="primary-button">+ Actual expense</button>
+            <button id="addExpensePlanBtn" type="button" class="secondary-button">+ Preplan</button>
+            <button id="addRecurringExpenseBtn" type="button" class="secondary-button">+ Regular payment</button>
+          </div>
+        </div>
+
+        <div class="expense-kpi-grid">
+          <article class="expense-kpi-card actual"><span>SPENT THIS MONTH</span><strong id="expenseMonthActual">₹0</strong><small id="expenseMonthActualCount">0 expenses</small></article>
+          <article class="expense-kpi-card planned"><span>PREPLANNED PENDING</span><strong id="expensePlannedPending">₹0</strong><small id="expensePlannedCount">0 pending</small></article>
+          <article class="expense-kpi-card regular"><span>REGULAR DUE · 30 DAYS</span><strong id="expenseRegularDue">₹0</strong><small id="expenseRegularDueCount">0 payments</small></article>
+          <article class="expense-kpi-card year"><span>SPENT THIS YEAR</span><strong id="expenseYearActual">₹0</strong><small>Actual expenditure only</small></article>
+        </div>
+
+        <div class="expense-view-tabs" role="tablist" aria-label="Expenditure views">
+          <button type="button" class="expense-view-tab active" data-expense-view="ACTUAL">Actual Expenses</button>
+          <button type="button" class="expense-view-tab" data-expense-view="PLANNED">Preplanned</button>
+          <button type="button" class="expense-view-tab" data-expense-view="REGULAR">Regular Payments</button>
+          <button type="button" class="expense-view-tab" data-expense-view="CATEGORIES">Categories</button>
+        </div>
+
+        <article id="expenseDataPanel" class="panel expense-panel">
+          <div class="expense-filter-bar">
+            <div class="expense-search-wrap"><span>⌕</span><input id="expenseSearch" type="search" placeholder="Search reason, name, notes, account…"></div>
+            <label>From <input id="expenseFromDate" type="date"></label>
+            <label>To <input id="expenseToDate" type="date"></label>
+            <select id="expenseCategoryFilter" aria-label="Expense category filter"><option value="ALL">All categories</option></select>
+            <select id="expenseSubcategoryFilter" aria-label="Expense subcategory filter"><option value="ALL">All subcategories</option></select>
+            <select id="expenseAccountFilter" aria-label="Debited from filter"><option value="ALL">All accounts</option></select>
+            <select id="expenseSort" aria-label="Sort expenses">
+              <option value="DATE_DESC">Date · newest</option><option value="DATE_ASC">Date · oldest</option>
+              <option value="AMOUNT_DESC">Amount · high to low</option><option value="AMOUNT_ASC">Amount · low to high</option>
+              <option value="CATEGORY">Category · A–Z</option><option value="NAME">Name / Paid to · A–Z</option><option value="ACCOUNT">Debited from · A–Z</option>
+            </select>
+            <button id="expenseSubcategoryToggle" type="button" class="small-button expense-subcategory-toggle" aria-pressed="false">Hide subcategory</button>
+            <button id="expenseResetFiltersBtn" type="button" class="small-button">Reset</button>
+            <button id="expensePrintBtn" type="button" class="small-button expense-print-button">▣ Print</button>
+            <span id="expenseResultCount" class="filter-result-pill">0 records</span>
+          </div>
+
+          <div class="expense-table-help"><strong>Quick editing:</strong> Use the fixed Actions column to choose <strong>Row edit</strong> for direct changes or <strong>Popup edit</strong> for the full form. Drag heading edges to resize columns.</div>
+
+          <div id="actualExpenseView" class="expense-data-view">
+            <div class="expense-table-wrap" data-expense-table="ACTUAL">
+              <table id="actualExpenseTable" class="expense-table">
+                <thead><tr>
+                  <th data-exp-col="amount">Amount</th><th data-exp-col="date">Dt Spent</th><th data-exp-col="paidTo">Paid To / Name</th>
+                  <th data-exp-col="account">Debited From</th><th data-exp-col="reason">Reason</th><th data-exp-col="category">Category</th><th data-exp-col="subcategory">Subcategory</th>
+                  <th data-exp-col="notes">Notes to Remember</th><th data-exp-col="actions">Actions</th>
+                </tr></thead><tbody id="actualExpenseBody"></tbody>
+              </table>
+            </div>
+            <div id="actualExpenseEmpty" class="empty-state">No actual expenditure matches this view.</div>
+          </div>
+
+          <div id="plannedExpenseView" class="expense-data-view hidden">
+            <div class="expense-table-wrap" data-expense-table="PLANNED">
+              <table id="plannedExpenseTable" class="expense-table">
+                <thead><tr>
+                  <th data-exp-col="amount">Planned Amount</th><th data-exp-col="date">Planned Date</th><th data-exp-col="paidTo">Paid To / Name</th>
+                  <th data-exp-col="account">Debited From</th><th data-exp-col="reason">Reason</th><th data-exp-col="category">Category</th><th data-exp-col="subcategory">Subcategory</th>
+                  <th data-exp-col="notes">Notes</th><th data-exp-col="status">Status</th><th data-exp-col="actions">Actions</th>
+                </tr></thead><tbody id="plannedExpenseBody"></tbody>
+              </table>
+            </div>
+            <div id="plannedExpenseEmpty" class="empty-state">No preplanned expenses match this view.</div>
+          </div>
+
+          <div id="regularExpenseView" class="expense-data-view hidden">
+            <div class="expense-table-wrap" data-expense-table="REGULAR">
+              <table id="regularExpenseTable" class="expense-table">
+                <thead><tr>
+                  <th data-exp-col="name">Regular Payment</th><th data-exp-col="amount">Amount</th><th data-exp-col="account">Debited From</th>
+                  <th data-exp-col="category">Category</th><th data-exp-col="subcategory">Subcategory</th><th data-exp-col="frequency">Frequency</th><th data-exp-col="date">Next Due</th>
+                  <th data-exp-col="reason">Reason</th><th data-exp-col="notes">Notes</th><th data-exp-col="status">Status</th><th data-exp-col="actions">Actions</th>
+                </tr></thead><tbody id="regularExpenseBody"></tbody>
+              </table>
+            </div>
+            <div id="regularExpenseEmpty" class="empty-state">No regular payments match this view.</div>
+          </div>
+        </article>
+
+        <article id="expenseCategoriesView" class="panel expense-category-panel hidden">
+          <div class="panel-head responsive-head">
+            <div><p class="eyebrow">CATEGORY MANAGER</p><h3>Categories with flexible subcategories</h3></div>
+            <button id="addExpenseCategoryBtn" type="button" class="primary-button">+ Add category</button>
+          </div>
+          <div class="expense-category-note"><strong>Example:</strong> Credit Card → Axis, HDFC, ICICI. Edit a card to add or rename its subcategories. Renaming the main category updates existing records; deleting a category in use remains protected.</div>
+          <div id="expenseCategoryGrid" class="expense-category-grid"></div>
+          <div id="expenseCategoryEmpty" class="empty-state">No expense categories yet.</div>
+        </article>
+      </section>
+
+      <section id="diarySection" class="page-section hidden">
+        <div class="diary-hero">
+          <div>
+            <p class="eyebrow">PERSONAL DIARY & MONTHLY LIFE PLAN</p>
+            <h2>Daily diary, monthly plans, experiences & targets</h2>
+            <p>Write day-to-day notes, plan each month, record experiences, set targets, mark achievements, and keep completed months permanently.</p>
+          </div>
+          <div class="diary-hero-actions">
+            <span id="diaryHeroStatus" class="diary-hero-status">Private to your login</span>
+            <button id="newDiaryEntryBtn" class="primary-button" type="button">+ New daily entry</button>
+          </div>
+        </div>
+
+        <div id="diaryWorkspaceSwitcher" class="diary-workspace-switcher">
+          <button type="button" class="active" data-diary-workspace="DAILY"><span>☀</span> Daily Diary</button>
+          <button type="button" data-diary-workspace="MONTHLY"><span>▣</span> Monthly Diary / Plan / Experience</button>
+        </div>
+
+        <div id="dailyDiaryWorkspace">
+          <div class="diary-layout">
+            <article class="panel diary-compose-panel">
+              <div class="panel-head">
+                <div><p class="eyebrow">WRITE / EDIT</p><h3>Daily diary entry</h3></div>
+                <span id="diarySaveStatus" class="tiny muted">New entry</span>
+              </div>
+              <div class="diary-compose-with-recent">
+              <form id="diaryForm" class="diary-form">
+                <input id="diaryId" type="hidden">
+                <div class="diary-date-row">
+                  <label>Date<input id="diaryDate" type="date" required></label>
+                  <div class="diary-date-nav" aria-label="Diary date navigation">
+                    <button id="diaryPrevDayBtn" type="button" class="diary-nav-button" title="Previous day">‹</button>
+                    <button id="diaryTodayBtn" type="button" class="diary-nav-button diary-today-button">Today</button>
+                    <button id="diaryNextDayBtn" type="button" class="diary-nav-button" title="Next day">›</button>
+                  </div>
+                </div>
+                <label>Title <small>(optional)</small><input id="diaryTitle" type="text" maxlength="120" placeholder="Give this day a meaningful title"></label>
+                <div class="diary-writing-starters" aria-label="Diary writing starters">
+                  <div><strong>Writing starters</strong><span>Choose one to begin, or write freely.</span></div>
+                  <div class="diary-starter-buttons">
+                    <button type="button" data-diary-starter="highlight">✨ Today’s highlight</button>
+                    <button type="button" data-diary-starter="gratitude">♡ Gratitude</button>
+                    <button type="button" data-diary-starter="lesson">💡 Lesson learned</button>
+                    <button type="button" data-diary-starter="tomorrow">◎ Tomorrow’s focus</button>
+                  </div>
+                </div>
+                <label class="diary-entry-field">Reflection
+                  <textarea id="diaryText" rows="8" maxlength="5000" required placeholder="Reflect on what happened, how you felt, what you learned, and what you want to carry forward…"></textarea>
+                  <div class="diary-writing-meta">
+                    <span id="diaryDraftStatus">Draft ready</span>
+                    <span class="diary-writing-progress"><span id="diaryWordCount">0 words</span><span id="diaryReadTime">Ready to write</span><span id="diaryCharCount">0 / 5000</span></span>
+                  </div>
+                </label>
+                <div class="diary-keyboard-tip">Tip: press <strong>⌘/Ctrl + Enter</strong> to save quickly.</div>
+                <div class="diary-form-actions diary-sticky-actions">
+                  <button id="clearDiaryBtn" type="button" class="secondary-button">Clear</button>
+                  <button id="saveDiaryBtn" type="submit" class="primary-button">Save diary entry</button>
+                </div>
+              </form>
+
+              <aside id="recentDailyRail" class="recent-diary-rail mobile-collapsed" aria-label="Recent daily diary entries">
+                <button type="button" class="recent-diary-mobile-toggle" data-recent-rail-toggle="daily" aria-expanded="false">
+                  Recent entries <span id="recentDailyMobileCount">0</span>
+                </button>
+                <div class="recent-diary-rail-body">
+                  <div class="recent-diary-head">
+                    <div><p class="eyebrow">RECENT REFLECTIONS</p><h4>Your latest diary entries</h4></div>
+                    <span id="recentDailyCount" class="tiny muted">0 entries</span>
+                  </div>
+                  <div class="recent-diary-tools">
+                    <select id="recentDailyLimit" aria-label="Number of recent daily entries">
+                      <option value="3">Recent 3</option>
+                      <option value="5" selected>Recent 5</option>
+                      <option value="10">Recent 10</option>
+                    </select>
+                    <input id="recentDailySearch" type="search" placeholder="Search recent…">
+                  </div>
+                  <div id="recentDailyList" class="recent-diary-list"></div>
+                  <div id="recentDailyEmpty" class="recent-diary-empty">No recent daily entries yet.</div>
+                </div>
+              </aside>
+              </div>
+            </article>
+
+            <article class="panel diary-browser-panel">
+              <div class="panel-head diary-browser-head">
+                <div><p class="eyebrow">DIARY ARCHIVE</p><h3>Search and revisit your diary</h3></div>
+                <div id="diaryViewSwitcher" class="range-switcher diary-view-switcher">
+                  <button type="button" class="active" data-diary-view="DAILY">Day</button>
+                  <button type="button" data-diary-view="MONTHLY">Month</button><button type="button" data-diary-view="RANGE">Range</button>
+                </div>
+              </div>
+
+              <div class="diary-controls">
+                <div class="diary-search-wrap"><input id="diarySearch" class="search-input diary-search" type="search" placeholder="Search title, entry or date…"><button id="diarySearchClearBtn" type="button" class="search-clear-button" title="Clear search">×</button></div>
+                <label id="diaryDayControl" class="diary-date-control">Day<input id="diaryBrowseDate" type="date"></label>
+                <label id="diaryMonthControl" class="diary-date-control hidden">Month<input id="diaryBrowseMonth" type="month"></label>
+                <div id="diaryRangeControl" class="diary-range-control hidden"><label>From<input id="diaryFromDate" type="date"></label><label>To<input id="diaryToDate" type="date"></label></div>
+                <button id="printDiaryBtn" class="print-view-button diary-print-button" type="button">⎙ Print filtered diary</button>
+              </div>
+
+              <div id="diarySummary" class="diary-summary"></div>
+              <div id="diaryList" class="diary-list"></div>
+              <div id="diaryEmpty" class="empty-state hidden">No daily diary entries match this view.</div>
+            </article>
+          </div>
+        </div>
+
+        <div id="monthlyDiaryWorkspace" class="hidden">
+          <div class="monthly-control-bar">
+            <div class="monthly-filter-group">
+              <label>Year<select id="monthlyYearFilter"></select></label>
+              <label>Month<select id="monthlyMonthFilter">
+                <option value="ALL">All months</option>
+                <option value="01">January</option><option value="02">February</option><option value="03">March</option>
+                <option value="04">April</option><option value="05">May</option><option value="06">June</option>
+                <option value="07">July</option><option value="08">August</option><option value="09">September</option>
+                <option value="10">October</option><option value="11">November</option><option value="12">December</option>
+              </select></label>
+              <label>Type<select id="monthlyTypeFilter">
+                <option value="ALL">All types</option>
+                <option value="DIARY">Diary</option>
+                <option value="PLAN">Plan</option>
+                <option value="EXPERIENCE">Experience</option>
+                <option value="TARGET">Target</option>
+              </select></label>
+              <label>Status<select id="monthlyStatusFilter">
+                <option value="ALL">All status</option>
+                <option value="OPEN">Open targets</option>
+                <option value="COMPLETED">Completed targets</option>
+              </select></label>
+            </div>
+            <div class="monthly-search-actions"><input id="monthlySearch" class="search-input monthly-search" type="search" placeholder="Search monthly diary, plan, experience or target…"><button id="printMonthlyBtn" class="print-view-button" type="button">⎙ Print filtered view</button></div>
+          </div>
+
+          <div id="monthCompletionPanel" class="month-completion-panel">
+            <div>
+              <p class="eyebrow">MONTH PROGRESS</p>
+              <h3 id="monthCompletionTitle">This month</h3>
+              <p id="monthCompletionText" class="muted">Add targets to track completion.</p>
+            </div>
+            <div class="month-progress-side">
+              <div class="month-progress-track"><div id="monthProgressBar" class="month-progress-bar"></div></div>
+              <strong id="monthProgressLabel">0 / 0 targets completed</strong>
+              <button id="completeMonthBtn" class="primary-button" type="button">✓ Complete month</button>
+            </div>
+          </div>
+
+          <div class="monthly-workspace-grid">
+            <article class="panel monthly-compose-panel">
+              <div class="panel-head">
+                <div><p class="eyebrow">ADD / EDIT MONTHLY ITEM</p><h3>Diary, plan, experience or target</h3></div>
+                <span id="monthlySaveStatus" class="tiny muted">New monthly item</span>
+              </div>
+              <div class="diary-compose-with-recent monthly-compose-with-recent">
+              <form id="monthlyForm" class="diary-form">
+                <input id="monthlyId" type="hidden">
+                <div class="diary-date-row">
+                  <label>Month<input id="monthlyEntryMonth" type="month" required></label>
+                  <div class="diary-date-nav" aria-label="Monthly entry navigation">
+                    <button id="monthlyPrevMonthBtn" type="button" class="diary-nav-button" title="Previous month">‹</button>
+                    <button id="monthlyThisMonthBtn" type="button" class="diary-nav-button diary-today-button">This month</button>
+                    <button id="monthlyNextMonthBtn" type="button" class="diary-nav-button" title="Next month">›</button>
+                  </div>
+                </div>
+                <label>Type<select id="monthlyEntryType" required>
+                  <option value="DIARY">Monthly Diary</option>
+                  <option value="PLAN">Plan</option>
+                  <option value="EXPERIENCE">Experience</option>
+                  <option value="TARGET">Target</option>
+                </select></label>
+                <label>Title<input id="monthlyTitle" type="text" maxlength="140" placeholder="e.g. Health target, Trip plan, Monthly reflection"></label>
+                <label class="diary-entry-field">Details
+                  <textarea id="monthlyText" rows="7" maxlength="5000" required placeholder="Write the monthly diary, plan, experience or target details…"></textarea>
+                  <div class="diary-writing-meta"><span id="monthlyDraftStatus">Draft ready</span><span id="monthlyCharCount">0 / 5000</span></div>
+                </label>
+                <div class="diary-keyboard-tip">Tip: press <strong>⌘/Ctrl + Enter</strong> to save quickly.</div>
+                <div class="monthly-target-help" id="monthlyTargetHelp">
+                  For a Target, save it first. Then use <strong>Mark completed</strong> when achieved.
+                </div>
+                <div class="diary-form-actions">
+                  <button id="clearMonthlyBtn" type="button" class="secondary-button">Clear</button>
+                  <button id="saveMonthlyBtn" type="submit" class="primary-button">Save monthly item</button>
+                </div>
+              </form>
+
+              <aside id="recentMonthlyRail" class="recent-diary-rail recent-monthly-rail mobile-collapsed" aria-label="Recent monthly diary entries">
+                <button type="button" class="recent-diary-mobile-toggle" data-recent-rail-toggle="monthly" aria-expanded="false">
+                  Recent monthly <span id="recentMonthlyMobileCount">0</span>
+                </button>
+                <div class="recent-diary-rail-body">
+                  <div class="recent-diary-head">
+                    <div><p class="eyebrow">IMMEDIATE HISTORY</p><h4>Recent monthly entries</h4></div>
+                    <span id="recentMonthlyCount" class="tiny muted">0 items</span>
+                  </div>
+                  <div class="recent-diary-tools">
+                    <select id="recentMonthlyLimit" aria-label="Number of recent monthly entries">
+                      <option value="3">Recent 3</option>
+                      <option value="5" selected>Recent 5</option>
+                      <option value="10">Recent 10</option>
+                    </select>
+                    <input id="recentMonthlySearch" type="search" placeholder="Search recent…">
+                  </div>
+                  <div id="recentMonthlyList" class="recent-diary-list"></div>
+                  <div id="recentMonthlyEmpty" class="recent-diary-empty">No recent monthly entries yet.</div>
+                </div>
+              </aside>
+              </div>
+            </article>
+
+            <article class="panel monthly-list-panel">
+              <div class="panel-head">
+                <div><p class="eyebrow">MONTHLY RECORDS</p><h3 id="monthlyListTitle">Monthly diary / plan / experience</h3></div>
+                <span id="monthlyResultCount" class="tiny muted">0 items</span>
+              </div>
+              <div id="completedMonthArchive" class="completed-month-archive"></div>
+              <div id="monthlyList" class="monthly-list"></div>
+              <div id="monthlyEmpty" class="empty-state hidden">No monthly records match these filters.</div>
+            </article>
+          </div>
+        </div>
+      </section>
+
+      <section id="usersSection" class="page-section hidden">
+        <article class="panel table-panel user-admin-panel">
+          <div class="panel-head responsive-head">
+            <div>
+              <p class="eyebrow">ADMINISTRATION</p>
+              <h3>Dashboard users</h3>
+              <p class="user-admin-help">Create accounts, edit name/role/status, reset password or delete an account. Deleting a login account does not delete portfolio data.</p>
+            </div>
+            <button id="addUserBtn" class="primary-button" type="button">+ Create user</button>
+          </div>
+          <div class="table-wrap user-table-wrap">
+            <table class="users-table">
+              <thead><tr><th>Username</th><th>Name</th><th>Role</th><th>Status</th><th>Last login</th><th>Actions</th></tr></thead>
+              <tbody id="usersBody"></tbody>
+            </table>
+          </div>
+        </article>
+      </section>
+    </main>
+
+    <aside id="quickDiaryPanel" class="quick-diary-panel" aria-hidden="true">
+      <div class="quick-diary-head">
+        <div><p class="eyebrow">QUICK DIARY</p><h3>Write without leaving dashboard</h3></div>
+        <button id="quickDiaryCloseBtn" class="icon-button" type="button" aria-label="Close quick diary">×</button>
+      </div>
+      <div class="quick-diary-tabs">
+        <button type="button" class="active" data-quick-diary-mode="DAILY">Daily Diary</button>
+        <button type="button" data-quick-diary-mode="MONTHLY">Monthly Diary</button>
+      </div>
+      <form id="quickDailyForm" class="quick-diary-form">
+        <label>Date<input id="quickDailyDate" type="date" required></label>
+        <label>Title<input id="quickDailyTitle" type="text" maxlength="120" placeholder="Optional title"></label>
+        <label>Entry<textarea id="quickDailyText" rows="8" maxlength="5000" required placeholder="Write your daily diary…"></textarea></label>
+        <div class="quick-diary-meta"><span id="quickDailyStatus">Ready</span><span id="quickDailyCount">0 / 5000</span></div>
+        <button id="quickDailySaveBtn" class="primary-button" type="submit">Save daily entry</button>
+      </form>
+      <form id="quickMonthlyForm" class="quick-diary-form hidden">
+        <label>Month<input id="quickMonthlyMonth" type="month" required></label>
+        <label>Type<select id="quickMonthlyType">
+          <option value="DIARY">Monthly Diary</option>
+          <option value="PLAN">Plan</option>
+          <option value="EXPERIENCE">Experience</option>
+          <option value="TARGET">Target</option>
+        </select></label>
+        <label>Title<input id="quickMonthlyTitle" type="text" maxlength="140" placeholder="Optional title"></label>
+        <label>Details<textarea id="quickMonthlyText" rows="8" maxlength="5000" required placeholder="Write monthly diary / plan / experience / target…"></textarea></label>
+        <div class="quick-diary-meta"><span id="quickMonthlyStatus">Ready</span><span id="quickMonthlyCount">0 / 5000</span></div>
+        <button id="quickMonthlySaveBtn" class="primary-button" type="submit">Save monthly item</button>
+      </form>
+      <button id="openFullDiaryBtn" class="secondary-button quick-full-diary" type="button">Open full Diary</button>
+    </aside>
+
+    <button id="utilityDrawerOpenBtn" class="utility-drawer-launcher" type="button" aria-controls="utilityDrawer" aria-expanded="false" title="Open targets, reminders and quotes">
+      <span class="utility-launcher-icon">✦</span>
+      <span class="utility-launcher-text">Notes & Quotes</span>
+      <span id="utilityStickyBadge" class="utility-launcher-badge">0</span>
+    </button>
+
+    <div id="utilityDrawerScrim" class="utility-drawer-scrim" aria-hidden="true"></div>
+
+    <aside id="utilityDrawer" class="utility-drawer" aria-hidden="true">
+      <div class="utility-drawer-head">
+        <div><p class="eyebrow">RIGHT UTILITY PANEL</p><h3>Notes & Quotes</h3><p>Targets, reminders and inspiration without occupying dashboard space.</p></div>
+        <button id="utilityDrawerCloseBtn" class="icon-button" type="button" aria-label="Close right utility panel">×</button>
+      </div>
+
+      <div class="utility-drawer-tabs" role="tablist" aria-label="Right panel sections">
+        <button type="button" class="active" data-utility-tab="STICKY">📌 Sticky <span id="utilityStickyTabCount">0</span></button>
+        <button type="button" data-utility-tab="QUOTE">💬 Quotes</button>
+      </div>
+
+      <div id="utilityStickySection" class="utility-drawer-section active">
+        <section class="sticky-notes-panel" aria-label="Sticky targets and reminders">
+          <div class="sticky-notes-head">
+            <div><p class="eyebrow">STICKY NOTES</p><h3>Targets & reminders</h3></div>
+            <div class="sticky-head-actions"><span id="stickyNotesCount">0 active</span><button id="addStickyNoteBtn" class="sticky-add-button" type="button">+ Add sticky</button></div>
+          </div>
+          <p class="sticky-pin-help">📌 Pin a note to keep it floating above other dashboard fields. Done and Delete remain available while pinned.</p>
+          <div id="stickyNotesList" class="sticky-notes-list"></div>
+          <div id="stickyNotesEmpty" class="sticky-empty">No active target or reminder. Add one when something needs your attention.</div>
+          <section class="sticky-history-panel" aria-label="Sticky Note Diary">
+            <div class="sticky-history-head">
+              <div><p class="eyebrow">STICKY NOTE DIARY</p><h3>Completed history</h3></div>
+              <span id="stickyHistoryCount">0 completed</span>
+            </div>
+            <p class="sticky-history-help">Completed items are stored here separately and do not enter your regular Diary.</p>
+            <div class="sticky-history-columns">
+              <section class="sticky-history-column target-history"><h4>✓ Completed targets <span id="stickyTargetHistoryCount">0</span></h4><div id="stickyTargetHistoryList" class="sticky-history-list"></div></section>
+              <section class="sticky-history-column reminder-history"><h4>✓ Completed reminders <span id="stickyReminderHistoryCount">0</span></h4><div id="stickyReminderHistoryList" class="sticky-history-list"></div></section>
+            </div>
+            <div id="stickyHistoryEmpty" class="sticky-empty">Completed targets and reminders will appear here.</div>
+          </section>
+        </section>
+      </div>
+
+      <div id="utilityQuoteSection" class="utility-drawer-section hidden">
+        <section class="life-quote-panel" aria-label="Daily life quote">
+          <div class="life-quote-mark">“</div>
+          <div class="life-quote-copy">
+            <div class="life-quote-label"><span>QUOTE OF THE DAY</span><span id="lifeQuoteShuffleStatus">Auto shuffle · 30s</span></div>
+            <blockquote id="lifeQuoteText">Add your favorite life quotes to start the daily rotation.</blockquote>
+            <div id="lifeQuoteAuthor" class="life-quote-author">— Quote Library</div>
+          </div>
+          <div class="life-quote-actions">
+            <button id="lifeQuoteNextBtn" type="button" title="Show another quote">↻ Next</button>
+            <button id="lifeQuotePauseBtn" type="button" title="Pause automatic shuffle">Ⅱ Pause</button>
+            <button id="lifeQuoteLibraryBtn" type="button" class="quote-library-button" title="Manage saved quotes">☰ Library</button>
+          </div>
+        </section>
+      </div>
+    </aside>
+
+    <div id="pinnedStickyLayer" class="pinned-sticky-layer hidden" aria-label="Pinned sticky notes"></div>
+
+    <div id="dashboardHScroll" class="dashboard-hscroll hidden" aria-label="Horizontal dashboard scroller">
+      <button id="dashboardHScrollLeft" class="dashboard-hscroll-arrow" type="button" title="Scroll left">‹</button>
+      <div class="dashboard-hscroll-center">
+        <div class="dashboard-hscroll-labels"><span id="dashboardHScrollLabel">Horizontal scroll</span><span id="dashboardHScrollPct">0%</span></div>
+        <input id="dashboardHScrollRange" class="dashboard-hscroll-range" type="range" min="0" max="1000" value="0" step="1" aria-label="Move table left or right">
+      </div>
+      <button id="dashboardHScrollRight" class="dashboard-hscroll-arrow" type="button" title="Scroll right">›</button>
+    </div>
+
+    <nav class="mobile-nav"><button class="mobile-nav-item active" data-section="overview"><span>◫</span>Overview</button><button class="mobile-nav-item" data-section="holdings"><span>▥</span>Holdings</button><button class="mobile-nav-item" data-section="transactions"><span>⇄</span>Trades</button><button class="mobile-nav-item" data-section="watchlist"><span>☆</span>Watchlist</button><button class="mobile-nav-item" data-section="sip"><span>₹</span>SIP</button><button class="mobile-nav-item" data-section="expenditure"><span>₹</span>Spend</button><button class="mobile-nav-item" data-section="diary"><span>✎</span>Diary</button><button id="quickDiaryMobileBtn" class="mobile-nav-item" type="button"><span>✚</span>Quick</button></nav>
+  </div>
+
+  <div id="modalBackdrop" class="modal-backdrop hidden" aria-hidden="true">
+    <div id="investmentModal" class="modal hidden" role="dialog" aria-modal="true">
+      <div class="modal-head"><div><p class="eyebrow">PORTFOLIO ENTRY</p><h2 id="investmentModalTitle">Add investment</h2></div><button class="modal-close" data-close-modal>×</button></div>
+      <form id="investmentForm" class="form-grid"><input id="holdingId" type="hidden">
+        <label>Investor<select id="holdingOwner" required></select></label>
+        <label>Asset type<select id="holdingType" required><option value="STOCK">Stock</option><option value="ETF">ETF</option><option value="MF">Mutual fund</option><option value="GPF">GPF</option><option value="OTHER">Other</option></select></label>
+        <label>Asset name<input id="holdingName" required maxlength="160" placeholder="Reliance Industries"></label>
+        <label id="holdingCodeField"><span id="holdingCodeLabel">Ticker symbol</span><input id="holdingCode" required maxlength="40" placeholder="RELIANCE"></label>
+        <label id="exchangeLabel">Exchange<select id="holdingExchange"><option value="NSE">NSE</option><option value="BOM">BSE (BOM)</option><option value="NASDAQ">NASDAQ</option><option value="NYSE">NYSE</option></select></label>
+        <label id="holdingUnitsField">Units / quantity<input id="holdingUnits" type="number" min="0" step="0.000001" required placeholder="10"></label>
+        <label id="holdingInvestedField">Total invested / current cost<input id="holdingInvested" type="number" min="0" step="0.01" required placeholder="25000"></label>
+        <label id="holdingManualPriceField">Manual current price <small>(optional)</small><input id="holdingManualPrice" type="number" min="0" step="0.0001" placeholder="Automatic when blank"></label>
+        <label id="holdingBuyDateField">Purchase date <small>(optional)</small><input id="holdingBuyDate" type="date"></label>
+        <section id="gpfFields" class="gpf-entry-fields span-2 hidden" aria-label="GPF details">
+          <div class="gpf-entry-intro span-2"><strong>General Provident Fund</strong><span>Enter the latest balance and monthly payment. SarNi will estimate the next 12 months with interest.</span></div>
+          <label>Present GPF balance<input id="gpfPresentBalance" type="number" min="0" step="0.01" inputmode="decimal" placeholder="500000"></label>
+          <label>Monthly payment<input id="gpfMonthlyContribution" type="number" min="0" step="0.01" inputmode="decimal" placeholder="10000"></label>
+          <label>Annual interest rate (%)<input id="gpfAnnualInterestRate" type="number" min="0" max="100" step="0.01" inputmode="decimal" value="7.10"></label>
+          <label>Balance as on<input id="gpfBalanceAsOfDate" type="date"></label>
+          <div id="gpfProjectionPreview" class="gpf-projection-preview span-2" aria-live="polite"></div>
+        </section>
+        <label class="span-2">Personal Note <small>(optional)</small><textarea id="holdingNotes" rows="4" maxlength="500" placeholder="Example: Hold for 5+ years; add more below ₹1,200; review after Q3 results…"></textarea></label>
+        <div id="mfHelp" class="info-box span-2 hidden">For manual MF entry, use the numeric AMFI scheme code. For statement import, mapping is attempted automatically.</div>
+        <div class="form-actions span-2"><button type="button" class="secondary-button" data-close-modal>Cancel</button><button id="saveInvestmentBtn" type="submit" class="primary-button">Save investment</button></div>
+      </form>
+    </div>
+
+    <div id="bulkImportModal" class="modal import-modal hidden" role="dialog" aria-modal="true">
+      <div class="modal-head"><div><p class="eyebrow">SMART IMPORT</p><h2>Import portfolio data</h2></div><button class="modal-close" data-close-modal>×</button></div>
+      <form id="bulkImportForm" class="stack-form">
+        <div class="import-mode-tabs"><button type="button" class="import-mode active" data-import-mode="MF_STATEMENT">MF transaction statement</button><button type="button" class="import-mode" data-import-mode="MF_SNAPSHOT">MF current holdings</button><button type="button" class="import-mode" data-import-mode="STOCK_HOLDINGS">Stock / Zerodha holdings</button><button type="button" class="import-mode" data-import-mode="STOCK_TRADES">Stock / ETF tradebook</button></div>
+        <div id="mfImportHelp" class="info-box"><strong>MF statement:</strong> accepts your columns MF_NAME, INVESTOR_NAME, PRODUCT_CODE, SCHEME_NAME, TRADE_DATE, TRANSACTION_TYPE, AMOUNT, UNITS, PRICE and BROKER. PAN and folio columns are ignored and are not sent to the backend.</div>
+        <div id="mfSnapshotImportHelp" class="info-box hidden"><strong>MF current holdings:</strong> accepts Investor Name, Scheme Name, ISIN, Units Held, Avg NAV and Invested Amount. The backend resolves the ISIN to the numeric AMFI scheme code so NAV and 1D–10Y performance can update automatically. Snapshot mode does not create transaction history, so XIRR remains blank unless a transaction statement is also imported.</div><div id="stockImportHelp" class="info-box hidden"><strong>Stock/Zerodha:</strong> accepts Investor Name, Stock Symbol, Exchange, Quantity, Avg Buy Price and Invested Amount. It also recognises common Zerodha holdings headings such as Instrument, Qty. and Avg. cost. Native Zerodha XLSX holdings files are supported.</div><div id="stockTradeImportHelp" class="info-box hidden"><strong>Stock/ETF tradebook:</strong> imports actual BUY/SELL dates, quantity and price from Zerodha Tradebook CSV/XLSX or similar broker files. Existing holdings are not replaced. Sale entries are shown in red in the Transactions tab.</div>
+        <label id="stockOwnerLabel" class="hidden">Investor if file has no investor column<select id="importOwner"></select></label>
+        <div class="import-actions"><button id="downloadImportTemplateBtn" type="button" class="secondary-button">Download template</button></div>
+        <label class="import-drop"><strong>Select CSV or Excel file</strong><span id="importFileHint">Up to 5,000 MF transaction rows. CSV and XLSX are supported.</span><input id="bulkCsvFile" type="file" accept=".csv,.xlsx,.xls,text/csv,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet,application/vnd.ms-excel" required></label>
+        <div id="bulkImportStatus" class="import-status muted">No file selected.</div>
+        <div class="form-actions"><button type="button" class="secondary-button" data-close-modal>Cancel</button><button id="runBulkImportBtn" type="submit" class="primary-button" disabled>Import</button></div>
+      </form>
+    </div>
+
+
+
+    <div id="columnManagerModal" class="modal column-manager-modal hidden" role="dialog" aria-modal="true" aria-labelledby="columnManagerTitle">
+      <div class="modal-head">
+        <div>
+          <p class="eyebrow">TABLE DESIGN</p>
+          <h2 id="columnManagerTitle">Manage columns</h2>
+          <p class="modal-subcopy">Available for both Investment Holdings and Watchlist: add new parameter columns, edit names/type/order, hide/rename/move standard columns, or delete custom columns.</p>
+        </div>
+        <button class="modal-close" data-close-modal aria-label="Close column manager">×</button>
+      </div>
+      <div class="column-manager-layout">
+        <form id="customColumnForm" class="stack-form custom-column-editor">
+          <input id="customColumnId" type="hidden">
+          <label>Table
+            <select id="customColumnSection">
+              <option value="HOLDINGS">Holdings</option>
+              <option value="WATCHLIST">Watchlist</option>
+            </select>
+          </label>
+          <label>Column name
+            <input id="customColumnLabel" maxlength="80" required placeholder="e.g. Risk level">
+          </label>
+          <label>Parameter key
+            <input id="customColumnKey" maxlength="60" placeholder="e.g. RiskLevel">
+            <small>Unique key used to store this parameter.</small>
+          </label>
+          <label>Data type
+            <select id="customColumnType">
+              <option value="TEXT">Text</option>
+              <option value="NUMBER">Number</option>
+              <option value="CURRENCY">Currency ₹</option>
+              <option value="PERCENT">Percentage %</option>
+              <option value="DATE">Date</option>
+            </select>
+          </label>
+          <label>Order
+            <input id="customColumnOrder" type="number" min="1" max="999" value="100">
+          </label>
+          <div class="form-actions">
+            <button id="clearCustomColumnBtn" type="button" class="secondary-button">Clear</button>
+            <button id="saveCustomColumnBtn" type="submit" class="primary-button">Add column</button>
+          </div>
+        </form>
+
+        <div class="column-manager-lists">
+          <section class="column-list-panel">
+            <div class="column-list-head">
+  <div><p class="eyebrow">STANDARD COLUMNS</p><h3>Default view · show, hide, rename or move</h3></div>
+  <div class="column-default-actions">
+    <button id="saveColumnsAsDefaultBtn" type="button" class="small-button saved-view-save">★ Save as default</button>
+    <button id="showAllColumnsTempBtn" type="button" class="small-button">👁 Show all temporarily</button>
+    <button id="resetStandardColumnsBtn" type="button" class="small-button">Reset columns</button>
+  </div>
+</div>
+            <div id="standardColumnsList" class="column-config-list"></div>
+          </section>
+          <section class="column-list-panel">
+            <div class="column-list-head"><div><p class="eyebrow">CUSTOM PARAMETERS</p><h3>Your added columns</h3></div><span id="customColumnCount" class="filter-result-pill">0 custom</span></div>
+            <div id="customColumnsList" class="column-config-list"></div>
+            <div id="customColumnsEmpty" class="empty-state">No custom columns yet.</div>
+          </section>
+        </div>
+      </div>
+      <div class="column-manager-tip"><strong>Default view:</strong> untick <b>Show</b> beside any standard column you do not want in the normal dashboard, then click <b>★ Save as default</b>. Use <b>👁 Show all temporarily</b> whenever you need every column without changing your saved default. Use ← / → or ⇤ Front to move columns. Investor/Asset and Actions stay fixed for safe scrolling.</div>
+    </div>
+
+    <div id="customValueModal" class="modal small-modal hidden" role="dialog" aria-modal="true" aria-labelledby="customValueTitle">
+      <div class="modal-head">
+        <div><p class="eyebrow">CUSTOM PARAMETER</p><h2 id="customValueTitle">Edit value</h2><p id="customValueRecord" class="modal-subcopy"></p></div>
+        <button class="modal-close" data-close-modal aria-label="Close value editor">×</button>
+      </div>
+      <form id="customValueForm" class="stack-form">
+        <input id="customValueSection" type="hidden">
+        <input id="customValueRecordId" type="hidden">
+        <input id="customValueColumnKey" type="hidden">
+        <label id="customValueFieldLabel">Value
+          <input id="customValueInput" maxlength="2000">
+        </label>
+        <p class="tiny muted">Leave blank and save to clear this value.</p>
+        <div class="form-actions">
+          <button type="button" class="secondary-button" data-close-modal>Cancel</button>
+          <button id="saveCustomValueBtn" type="submit" class="primary-button">Save value</button>
+        </div>
+      </form>
+    </div>
+
+    <div id="notesModal" class="modal notes-modal hidden" role="dialog" aria-modal="true" aria-labelledby="notesModalTitle">
+      <div class="modal-head">
+        <div><p class="eyebrow">PERSONAL NOTES CENTRE</p><h2 id="notesModalTitle">All personal notes</h2></div>
+        <button class="modal-close" data-close-modal aria-label="Close notes">×</button>
+      </div>
+      <div class="notes-toolbar">
+        <input id="notesSearch" class="search-input" type="search" placeholder="Search asset, symbol or note…">
+        <select id="notesSource" class="compact-select">
+          <option value="BOTH">Investments + Watchlist</option>
+          <option value="HOLDINGS">Portfolio investments</option>
+          <option value="WATCHLIST">Watchlist</option>
+        </select>
+        <select id="notesScope" class="compact-select">
+          <option value="ALL">Entire portfolio</option>
+          <option value="CURRENT">Current portfolio view</option>
+        </select>
+        <select id="notesFilter" class="compact-select">
+          <option value="ALL">All items</option>
+          <option value="WITH_NOTES">With notes only</option>
+          <option value="WITHOUT_NOTES">Without notes</option>
+        </select>
+      </div>
+      <div id="notesSummary" class="notes-summary muted"></div>
+      <div id="notesList" class="notes-list"></div>
+      <div id="notesEmpty" class="empty-state hidden">No investments match this notes view.</div>
+      <div class="form-actions">
+        <button type="button" class="secondary-button" data-close-modal>Close</button>
+      </div>
+    </div>
+
+
+
+    <div id="expenseModal" class="modal expense-modal hidden" role="dialog" aria-modal="true" aria-labelledby="expenseModalTitle">
+      <div class="modal-head"><div><p id="expenseModalEyebrow" class="eyebrow">ACTUAL EXPENSE</p><h2 id="expenseModalTitle">Add expense</h2><p id="expenseModalSubcopy" class="modal-subcopy">Record money already spent.</p></div><button class="modal-close" data-close-modal aria-label="Close">×</button></div>
+      <form id="expenseForm" class="form-grid">
+        <input id="expenseRecordId" type="hidden"><input id="expenseRecordMode" type="hidden" value="ACTUAL">
+        <label id="expenseRegularNameGroup" class="span-2 hidden">Regular payment name<input id="expenseRegularName" maxlength="140" placeholder="e.g. Electricity bill / Insurance premium"></label>
+        <label>Amount<input id="expenseAmount" type="number" min="0.01" step="0.01" required></label>
+        <label id="expenseDateGroup"><span id="expenseDateLabel">Date spent</span><input id="expenseDate" type="date" required></label>
+        <label>Paid To / Name <small>(optional)</small><input id="expensePaidTo" maxlength="140" placeholder="Person, shop, service…"></label>
+        <label>Debited From<input id="expenseDebitedFrom" list="expenseAccountSuggestions" maxlength="120" placeholder="SBI / HDFC / Cash / Credit Card / UPI…"><datalist id="expenseAccountSuggestions"></datalist></label>
+        <label class="span-2">Reason<input id="expenseReason" maxlength="220" required placeholder="What was this payment for?"></label>
+        <label>Category of expense<select id="expenseCategory" required></select></label>
+        <label>Subcategory <small>(optional)</small><select id="expenseSubcategory"><option value="">No subcategory</option></select><small id="expenseSubcategoryHelp" class="field-help">Add subcategories in Category Manager whenever needed.</small></label>
+        <label id="expenseFrequencyGroup" class="hidden">Frequency<select id="expenseFrequency"><option value="MONTHLY">Monthly</option><option value="QUARTERLY">Quarterly</option><option value="HALF_YEARLY">Half-yearly</option><option value="YEARLY">Yearly</option></select></label>
+        <label id="expenseEndDateGroup" class="hidden">End date <small>(optional)</small><input id="expenseEndDate" type="date"></label>
+        <label id="expenseStatusGroup" class="hidden">Status<select id="expenseStatus"><option value="ACTIVE">Active</option><option value="PAUSED">Paused</option><option value="STOPPED">Stopped</option></select></label>
+        <label class="span-2">Notes to remember <small>(optional)</small><textarea id="expenseNotes" rows="3" maxlength="1000" placeholder="Anything useful to remember later…"></textarea></label>
+        <div class="form-actions span-2"><button type="button" class="secondary-button" data-close-modal>Cancel</button><button id="saveExpenseBtn" type="submit" class="primary-button">Save expense</button></div>
+      </form>
+    </div>
+
+    <div id="expensePaymentModal" class="modal expense-payment-modal hidden" role="dialog" aria-modal="true" aria-labelledby="expensePaymentTitle">
+      <div class="modal-head"><div><p class="eyebrow">CONVERT TO ACTUAL EXPENDITURE</p><h2 id="expensePaymentTitle">Mark paid</h2><p class="modal-subcopy">Confirm the actual payment details. A new Actual Expense will be created.</p></div><button class="modal-close" data-close-modal aria-label="Close">×</button></div>
+      <form id="expensePaymentForm" class="form-grid">
+        <input id="expensePaymentSourceType" type="hidden"><input id="expensePaymentSourceId" type="hidden">
+        <label>Actual amount<input id="expensePaymentAmount" type="number" min="0.01" step="0.01" required></label>
+        <label>Date paid<input id="expensePaymentDate" type="date" required></label>
+        <label>Paid To / Name<input id="expensePaymentPaidTo" maxlength="140"></label>
+        <label>Debited From<input id="expensePaymentAccount" list="expenseAccountSuggestions" maxlength="120"></label>
+        <label class="span-2">Additional note <small>(optional)</small><textarea id="expensePaymentNotes" rows="2" maxlength="600"></textarea></label>
+        <div class="expense-convert-note span-2">After confirmation, the amount appears in Actual Expenses. For a Regular Payment, the next due date is automatically advanced.</div>
+        <div class="form-actions span-2"><button type="button" class="secondary-button" data-close-modal>Cancel</button><button id="confirmExpensePaymentBtn" type="submit" class="primary-button">✓ Mark paid &amp; add actual</button></div>
+      </form>
+    </div>
+
+    <div id="expenseCategoryModal" class="modal compact-modal hidden" role="dialog" aria-modal="true" aria-labelledby="expenseCategoryModalTitle">
+      <div class="modal-head"><div><p class="eyebrow">EXPENSE CATEGORY</p><h2 id="expenseCategoryModalTitle">Add category</h2></div><button class="modal-close" data-close-modal aria-label="Close">×</button></div>
+      <form id="expenseCategoryForm" class="form-grid">
+        <input id="expenseCategoryId" type="hidden">
+        <label class="span-2">Category name<input id="expenseCategoryName" maxlength="80" required placeholder="e.g. Credit Card"></label>
+        <label class="span-2">Colour<select id="expenseCategoryColor"><option value="BLUE">Blue</option><option value="GREEN">Green</option><option value="PURPLE">Purple</option><option value="ORANGE">Orange</option><option value="PINK">Pink</option><option value="TEAL">Teal</option><option value="GOLD">Gold</option><option value="GREY">Grey</option></select></label>
+        <label class="span-2">Subcategories <small>(one per line or comma-separated)</small><textarea id="expenseCategorySubcategories" rows="6" maxlength="1600" placeholder="Axis&#10;HDFC&#10;ICICI"></textarea><small class="field-help">These choices appear only when this category is selected. Existing historical values remain safe if you later change this list.</small></label>
+        <div class="form-actions span-2"><button type="button" class="secondary-button" data-close-modal>Cancel</button><button id="saveExpenseCategoryBtn" type="submit" class="primary-button">Save category</button></div>
+      </form>
+    </div>
+
+    <div id="expensePrintModal" class="modal expense-print-modal hidden" role="dialog" aria-modal="true" aria-labelledby="expensePrintTitle">
+      <div class="modal-head"><div><p class="eyebrow">PRINT PREVIEW</p><h2 id="expensePrintTitle">Expenditure print</h2><p class="modal-subcopy">Print the current filtered view. Choose columns and drag preview headings to adjust widths.</p></div><button class="modal-close" data-close-modal aria-label="Close">×</button></div>
+      <div class="expense-print-controls">
+        <label>Orientation<select id="expensePrintOrientation"><option value="landscape" selected>Landscape</option><option value="portrait">Portrait</option></select></label>
+        <div id="expensePrintColumns" class="expense-print-columns"></div>
+        <button id="expensePrintAllColumnsBtn" type="button" class="small-button">All columns</button>
+      </div>
+      <div id="expensePrintPreview" class="expense-print-preview"></div>
+      <div class="form-actions"><button type="button" class="secondary-button" data-close-modal>Close</button><button id="runExpensePrintBtn" type="button" class="primary-button">Print current preview</button></div>
+    </div>
+
+    <div id="sipPlanModal" class="modal sip-plan-modal hidden" role="dialog" aria-modal="true" aria-labelledby="sipPlanModalTitle">
+      <div class="modal-head">
+        <div>
+          <p class="eyebrow">FUTURE INVESTMENT PLAN</p>
+          <h2 id="sipPlanModalTitle">Add SIP</h2>
+          <p class="modal-subcopy">Plan recurring investments. Future SIPs remain separate from current Holdings.</p>
+        </div>
+        <button class="modal-close" data-close-modal aria-label="Close SIP planner">×</button>
+      </div>
+      <form id="sipPlanForm" class="form-grid">
+        <input id="sipPlanId" type="hidden">
+
+        <label>Investor
+          <select id="sipPlanOwner" required></select>
+        </label>
+
+        <label>Investment type
+          <select id="sipPlanAssetType" required>
+            <option value="MF" selected>Mutual fund</option>
+            <option value="ETF">ETF</option>
+            <option value="STOCK">Stock</option>
+            <option value="OTHER">Other</option>
+          </select>
+        </label>
+
+        <label class="span-2">Asset / Scheme name
+          <input id="sipPlanAssetName" list="sipAssetSuggestions" required maxlength="160" placeholder="e.g. Parag Parikh Flexi Cap Fund - Direct Growth">
+          <datalist id="sipAssetSuggestions"></datalist>
+        </label>
+
+        <label>Scheme code / Symbol <small>(optional)</small>
+          <input id="sipPlanCode" maxlength="60" placeholder="AMFI code or ticker">
+        </label>
+
+        <label>SIP amount
+          <input id="sipPlanAmount" type="number" min="1" step="0.01" required placeholder="10000">
+        </label>
+
+        <label>Frequency
+          <select id="sipPlanFrequency">
+            <option value="MONTHLY" selected>Monthly</option>
+            <option value="QUARTERLY">Quarterly</option>
+          </select>
+        </label>
+
+        <label>SIP day
+          <input id="sipPlanDay" type="number" min="1" max="28" step="1" value="5" required>
+          <small>1–28 avoids invalid month-end dates.</small>
+        </label>
+
+        <label>Start date
+          <input id="sipPlanStartDate" type="date" required>
+        </label>
+
+        <label>End date <small>(optional)</small>
+          <input id="sipPlanEndDate" type="date">
+        </label>
+
+        <label>Annual step-up %
+          <input id="sipPlanStepUpPct" type="number" min="0" max="100" step="0.1" value="0">
+        </label>
+
+        <label>Expected return % <small>(planning only)</small>
+          <input id="sipPlanExpectedReturnPct" type="number" min="-50" max="100" step="0.1" value="12">
+        </label>
+
+        <label>Status
+          <select id="sipPlanStatus">
+            <option value="ACTIVE" selected>Active</option>
+            <option value="PAUSED">Paused</option>
+            <option value="STOPPED">Stopped</option>
+          </select>
+        </label>
+
+        <label class="span-2">Personal note <small>(optional)</small>
+          <textarea id="sipPlanNotes" rows="3" maxlength="800" placeholder="e.g. Increase by 10% every April; continue for long term."></textarea>
+        </label>
+
+        <div class="sip-modal-note span-2">Expected return is only a planning assumption and is not a guaranteed return.</div>
+
+        <div class="form-actions span-2">
+          <button type="button" class="secondary-button" data-close-modal>Cancel</button>
+          <button id="saveSipPlanBtn" type="submit" class="primary-button">Save SIP</button>
+        </div>
+      </form>
+    </div>
+
+    <div id="watchModal" class="modal hidden" role="dialog" aria-modal="true"><div class="modal-head"><div><p class="eyebrow">FUTURE INVESTMENT</p><h2>Add to watchlist</h2></div><button class="modal-close" data-close-modal>×</button></div><form id="watchForm" class="form-grid"><input id="watchId" type="hidden"><label>Asset type<select id="watchType" required><option value="STOCK">Stock</option><option value="ETF">ETF</option><option value="MF">Mutual fund</option><option value="OTHER">Other</option></select></label><label>Asset name<input id="watchName" required maxlength="160"></label><label><span id="watchCodeLabel">Ticker symbol</span><input id="watchCode" required maxlength="40"></label><label id="watchExchangeLabel">Exchange<select id="watchExchange"><option value="NSE">NSE</option><option value="BOM">BSE (BOM)</option><option value="NASDAQ">NASDAQ</option><option value="NYSE">NYSE</option></select></label><label>Target buy price<input id="watchTarget" type="number" min="0" step="0.0001"></label><label>Manual current price <small>(optional)</small><input id="watchManualPrice" type="number" min="0" step="0.0001"></label><label>Priority<select id="watchPriority"><option value="HIGH">High</option><option value="MEDIUM" selected>Medium</option><option value="LOW">Low</option></select></label><label class="span-2">Personal Note <small>(optional)</small><textarea id="watchNotes" rows="4" maxlength="500" placeholder="Example: Buy below ₹1,500; wait for valuation correction; review after Q3 results…"></textarea></label><div id="watchMfHelp" class="info-box span-2 hidden">For Indian mutual funds, enter the numeric AMFI scheme code.</div><div class="form-actions span-2"><button type="button" class="secondary-button" data-close-modal>Cancel</button><button id="saveWatchBtn" type="submit" class="primary-button">Save watch item</button></div></form></div>
+
+    <div id="lifeQuoteModal" class="modal quote-library-modal hidden" role="dialog" aria-modal="true">
+      <div class="modal-head">
+        <div><p class="eyebrow">DAILY LIFE QUOTES</p><h2>Quote Library</h2><p class="modal-subcopy">Saved permanently in the Google Sheet tab <strong>DailyQuotes</strong>. The dashboard chooses a different starting quote each day and auto-shuffles while open.</p></div>
+        <button class="modal-close" data-close-modal>×</button>
+      </div>
+      <div class="quote-library-layout">
+        <form id="lifeQuoteForm" class="stack-form quote-editor">
+          <input id="lifeQuoteId" type="hidden">
+          <label>Quote<textarea id="lifeQuoteInput" rows="5" maxlength="500" required placeholder="Write or paste a life quote…"></textarea></label>
+          <label>Author / source <small>(optional)</small><input id="lifeQuoteAuthorInput" maxlength="120" placeholder="e.g. Personal note, book author, My Finance"></label>
+          <div class="form-actions"><button id="clearLifeQuoteBtn" type="button" class="secondary-button">Clear</button><button id="saveLifeQuoteBtn" type="submit" class="primary-button">Save quote</button></div>
+        </form>
+        <div class="quote-library-list-wrap">
+          <div class="quote-library-tools"><input id="lifeQuoteSearch" class="search-input" type="search" placeholder="Search saved quotes…"><span id="lifeQuoteCount" class="filter-result-pill">0 quotes</span></div>
+          <div id="lifeQuoteList" class="quote-library-list"></div>
+          <div id="lifeQuoteEmpty" class="empty-state hidden">No quotes saved yet.</div>
+        </div>
+      </div>
+    </div>
+
+    <div id="stickyNoteModal" class="modal small-modal sticky-note-modal hidden" role="dialog" aria-modal="true">
+      <div class="modal-head"><div><p class="eyebrow">DASHBOARD STICKY</p><h2 id="stickyNoteModalTitle">Add target or reminder</h2></div><button class="modal-close" data-close-modal>×</button></div>
+      <form id="stickyNoteForm" class="stack-form">
+        <input id="stickyNoteId" type="hidden">
+        <label>Type<select id="stickyNoteType"><option value="TARGET">Target</option><option value="REMINDER">Reminder</option></select></label>
+        <label>Title<input id="stickyNoteTitle" required maxlength="120" placeholder="What needs attention?"></label>
+        <label>Due date <small>(optional)</small><input id="stickyNoteDueDate" type="date"></label>
+        <label>Details<textarea id="stickyNoteText" rows="7" maxlength="5000" placeholder="Write any number of lines, next actions, amounts or people. Line breaks will be preserved."></textarea></label>
+        <p class="tiny muted">Pin the note, drag its Move bar anywhere and drag the lower-right corner to resize. Clicking <strong>Completed</strong> removes it from active targets and saves the full note in Daily Diary.</p>
+        <div class="form-actions"><button type="button" class="secondary-button" data-close-modal>Cancel</button><button id="saveStickyNoteBtn" type="submit" class="primary-button">Save sticky</button></div>
+      </form>
+    </div>
+
+    <div id="passwordModal" class="modal small-modal hidden" role="dialog" aria-modal="true"><div class="modal-head"><div><p class="eyebrow">ACCOUNT SECURITY</p><h2>Change password</h2></div><button class="modal-close" data-close-modal>×</button></div><form id="passwordForm" class="stack-form"><label>Current password<input id="currentPassword" type="password" required></label><label>New password<input id="newPassword" type="password" required minlength="10"></label><label>Confirm new password<input id="confirmPassword" type="password" required minlength="10"></label><p class="tiny muted">At least 10 characters with upper-case, lower-case, number and symbol.</p><div class="form-actions"><button type="button" class="secondary-button" data-close-modal>Cancel</button><button type="submit" class="primary-button">Update password</button></div></form></div>
+
+    <div id="userModal" class="modal small-modal hidden user-admin-modal" role="dialog" aria-modal="true" aria-labelledby="userModalTitle">
+    <div class="modal-head">
+      <div><p class="eyebrow">ADMINISTRATION</p><h2 id="userModalTitle">Create user</h2></div>
+      <button class="modal-close" data-close-modal type="button">×</button>
+    </div>
+    <form id="userForm" class="stack-form">
+      <input id="userFormMode" type="hidden" value="CREATE">
+      <input id="editOriginalUsername" type="hidden" value="">
+      <label>Username
+        <input id="newUsername" required maxlength="60" pattern="[A-Za-z0-9._-]+" autocomplete="off">
+        <small id="usernameEditHelp" class="form-help">3–60 characters: letters, numbers, dot, underscore or hyphen.</small>
+      </label>
+      <label>Display name<input id="newDisplayName" required maxlength="100"></label>
+      <label>Role
+        <select id="newUserRole"><option value="USER">User</option><option value="ADMIN">Admin</option></select>
+      </label>
+      <label id="newUserActiveLabel" class="user-active-label hidden">Account status
+        <select id="newUserActive"><option value="true">Active</option><option value="false">Disabled</option></select>
+      </label>
+      <div id="userPasswordGroup" class="user-password-group">
+        <label>Temporary password
+          <div class="user-password-row">
+            <input id="newUserPassword" type="text" minlength="10" autocomplete="new-password">
+            <button id="generateUserPasswordBtn" type="button" class="secondary-button compact-user-btn">Generate</button>
+            <button id="copyUserPasswordBtn" type="button" class="secondary-button compact-user-btn">Copy</button>
+          </div>
+          <small class="form-help">At least 10 characters with uppercase, lowercase, number and symbol. A strong password is generated automatically.</small>
+        </label>
+      </div>
+      <div id="userFormStatus" class="user-form-status" aria-live="polite"></div>
+      <div class="form-actions">
+        <button type="button" class="secondary-button" data-close-modal>Cancel</button>
+        <button id="saveUserBtn" type="submit" class="primary-button">Create user</button>
+      </div>
     </form>
-  </dialog>
+  </div>
+  </div>
 
-  <dialog id="incomeDialog" class="modal">
-    <form id="incomeForm" method="dialog">
-      <div class="modal-head"><div><p class="eyebrow">INCOME</p><h3 id="incomeDialogTitle">Add income</h3></div><button class="modal-close" type="button" data-close>×</button></div>
-      <input id="incomeId" type="hidden">
-      <div class="two-fields"><label>Date<input id="incomeDate" type="date" required></label><label>Amount<input id="incomeAmount" type="number" min="0.01" step="0.01" required placeholder="0.00"></label></div>
-      <label>Income source<input id="incomeSource" required maxlength="100" placeholder="e.g. Salary for August"></label>
-      <div class="two-fields"><label>Category<select id="incomeCategory" required><option>Salary</option><option>Pension</option><option>Business</option><option>Investment</option><option>Rent</option><option>Interest</option><option>Gift</option><option>Refund</option><option>Other</option></select></label><label>Received by<select id="incomeReceivedBy" required></select></label></div>
-      <label>Receiving mode<select id="incomeMode"><option>Bank transfer</option><option>UPI</option><option>Cash</option><option>Cheque</option><option>Other</option></select></label>
-      <div class="modal-actions"><button type="button" class="secondary-button" data-close>Cancel</button><button type="submit" class="primary-button">Save income</button></div>
-    </form>
-  </dialog>
 
-  <dialog id="targetDialog" class="modal">
-    <form id="targetForm" method="dialog">
-      <div class="modal-head"><div><p class="eyebrow">FAMILY GOAL</p><h3>New target</h3></div><button class="modal-close" type="button" data-close>×</button></div>
-      <label>Target title<input id="targetTitle" required maxlength="80" placeholder="e.g. Kerala family trip"></label>
-      <div class="two-fields"><label>Target amount<input id="targetAmount" type="number" min="1" step="0.01" required></label><label>Due date<input id="targetDueDate" type="date" required></label></div>
-      <div class="two-fields"><label>Category<select id="targetCategory"><option>Savings</option><option>Travel</option><option>Home</option><option>Education</option><option>Health</option><option>Purchase</option><option>Celebration</option><option>Other</option></select></label><label>Owner<select id="targetOwner"></select></label></div>
-      <label>Notes<textarea id="targetNotes" rows="3" maxlength="300" placeholder="What are we working towards?"></textarea></label>
-      <div class="modal-actions"><button type="button" class="secondary-button" data-close>Cancel</button><button type="submit" class="primary-button">Create target</button></div>
-    </form>
-  </dialog>
+  <!-- Investment detail drawer: click any holding to open -->
+  <div id="holdingDrawerBackdrop" class="drawer-backdrop" aria-hidden="true"></div>
+  <aside id="holdingDrawer" class="holding-drawer" role="dialog" aria-modal="true" aria-hidden="true" aria-labelledby="drawerTitle">
+    <div class="drawer-head">
+      <div class="drawer-title-wrap">
+        <div id="drawerAssetBadge" class="drawer-asset-badge">₹</div>
+        <div>
+          <p id="drawerEyebrow" class="eyebrow">INVESTMENT DETAILS</p>
+          <h2 id="drawerTitle">Investment</h2>
+          <p id="drawerSubtitle" class="drawer-subtitle"></p>
+        </div>
+      </div>
+      <button id="drawerCloseBtn" class="drawer-close" type="button" aria-label="Close investment details">×</button>
+    </div>
+    <div id="drawerContent" class="drawer-content"></div>
+    <div class="drawer-footer">
+      <button id="drawerEditBtn" class="secondary-button" type="button">Edit</button>
+      <button id="drawerDoneBtn" class="primary-button" type="button">Done</button>
+    </div>
+  </aside>
 
-  <dialog id="contributionDialog" class="modal small-modal">
-    <form id="contributionForm" method="dialog">
-      <div class="modal-head"><div><p class="eyebrow">PROGRESS</p><h3 id="contributionTitle">Add contribution</h3></div><button class="modal-close" type="button" data-close>×</button></div>
-      <input id="contributionTargetId" type="hidden">
-      <div class="two-fields"><label>Date<input id="contributionDate" type="date" required></label><label>Amount<input id="contributionAmount" type="number" min="0.01" step="0.01" required></label></div>
-      <label>Note<input id="contributionNote" maxlength="120" placeholder="Optional note"></label>
-      <div class="modal-actions"><button type="button" class="secondary-button" data-close>Cancel</button><button type="submit" class="primary-button">Add progress</button></div>
-    </form>
-  </dialog>
-
-  <dialog id="dateDialog" class="modal">
-    <form id="dateForm" method="dialog">
-      <div class="modal-head"><div><p class="eyebrow">REMINDER</p><h3 id="dateDialogTitle">Add important date</h3></div><button class="modal-close" type="button" data-close>×</button></div>
-      <input id="importantDateId" type="hidden">
-      <label>Title<input id="importantDateTitle" required maxlength="100" placeholder="e.g. Maa's birthday"></label>
-      <div class="two-fields"><label>Date<input id="importantDateValue" type="date" required></label><label>Type<select id="importantDateType"><option>Birthday</option><option>Anniversary</option><option>Appointment</option><option>Renewal</option><option>Payment</option><option>Other</option></select></label></div>
-      <div class="check-row"><label><input id="importantDateRepeat" type="checkbox"> Repeat every year</label></div>
-      <label>Send email reminder<select id="importantDateRemind"><option value="7,1,0">7 days, 1 day and same day</option><option value="3,1,0">3 days, 1 day and same day</option><option value="1,0">1 day and same day</option><option value="0">Same day only</option><option value="14,7,1,0">14 days, 7 days, 1 day and same day</option></select></label>
-      <fieldset><legend>Email recipients</legend><div class="check-row"><label><input id="notifyEveryone" type="checkbox" checked> All active family members with email</label></div><div id="recipientChecks" class="recipient-checks hidden"></div></fieldset>
-      <label>Notes<textarea id="importantDateNotes" rows="3" maxlength="300"></textarea></label>
-      <div class="modal-actions"><button type="button" class="secondary-button" data-close>Cancel</button><button type="submit" class="primary-button">Save important date</button></div>
-    </form>
-  </dialog>
-
-  <dialog id="photoDialog" class="modal">
-    <form id="photoForm" method="dialog">
-      <div class="modal-head"><div><p class="eyebrow">MEMORY</p><h3>Add a family memory</h3><small id="photoDialogLimitText">Selected memories are controlled by the administrator.</small></div><button class="modal-close" type="button" data-close>×</button></div>
-      <label class="upload-drop"><input id="photoFile" type="file" accept="image/jpeg,image/png,image/webp" required><span>▧</span><strong>Choose a photo</strong><small>JPG, PNG or WebP · automatically resized for faster sharing</small></label>
-      <img id="photoPreview" class="photo-preview hidden" alt="Selected photo preview">
-      <label>Title<input id="photoTitle" required maxlength="80" placeholder="e.g. Sunday lunch together"></label>
-      <div class="two-fields"><label>Photo date<input id="photoTakenDate" type="date"></label><label>Caption<input id="photoCaption" maxlength="180" placeholder="A short memory"></label></div>
-      <div class="modal-actions"><button type="button" class="secondary-button" data-close>Cancel</button><button type="submit" class="primary-button">Save as memory</button></div>
-    </form>
-  </dialog>
-
-  <dialog id="expenseCategoryDialog" class="modal category-manager-dialog">
-    <div class="modal-head"><div><p class="eyebrow">ADMINISTRATION</p><h3>Expenditure categories</h3><small>Changes apply to paid, preplanned and regular expenditure.</small></div><button class="modal-close" type="button" data-close>×</button></div>
-    <p class="category-manager-explanation"><strong>Create</strong> adds a new choice. <strong>Edit</strong> renames it. <strong>Archive</strong> hides it temporarily. <strong>Delete</strong> removes it from future choices while preserving old expenditure records.</p>
-    <form id="expenseCategoryAddForm" class="category-add-form">
-      <label>New category<input id="newExpenseCategoryName" maxlength="60" placeholder="e.g. Property" required></label>
-      <button class="primary-button" type="submit">＋ Create category</button>
-    </form>
-    <div class="category-manager-heading"><strong id="expenseCategoryManagerSummary">0 categories</strong><small>Use ↑ ↓ to change order. Archive hides a choice from new entries without changing historical records.</small></div>
-    <div id="expenseCategoryManagerList" class="expense-category-manager-list"></div>
-    <div class="category-manager-footer"><small>Renaming a category or subcategory also updates matching old expenditure and regular-payment records.</small><div><button type="button" class="secondary-button" data-close>Cancel</button><button id="saveExpenseCategories" type="button" class="primary-button">Save category changes</button></div></div>
-  </dialog>
-
-  <dialog id="memberDialog" class="modal">
-    <form id="memberForm" method="dialog">
-      <div class="modal-head"><div><p class="eyebrow">ACCESS</p><h3 id="memberDialogTitle">Add family member</h3></div><button class="modal-close" type="button" data-close>×</button></div>
-      <input id="memberId" type="hidden">
-      <label>Full name<input id="memberName" required maxlength="70"></label>
-      <div class="two-fields"><label>Username<input id="memberUsername" required maxlength="30" pattern="[A-Za-z0-9._-]+"></label><label>Email<input id="memberEmail" type="email" placeholder="For reminders"></label></div>
-      <div class="two-fields"><label>Role<select id="memberRole"><option value="MEMBER">Member</option><option value="ADMIN">Administrator</option></select></label><label>6-digit PIN<input id="memberPin" type="password" inputmode="numeric" pattern="[0-9]{6}" maxlength="6" placeholder="Required for a new member"></label></div>
-      <fieldset id="memberAccessFieldset"><legend>Can view and use</legend><div class="permission-grid">
-        <label><input type="checkbox" name="memberPermission" value="EXPENSES" checked> Expenditure</label>
-        <label><input type="checkbox" name="memberPermission" value="INCOME" checked> Income</label>
-        <label><input type="checkbox" name="memberPermission" value="TARGETS" checked> Targets</label>
-        <label><input type="checkbox" name="memberPermission" value="DATES" checked> Reminders</label>
-        <label><input type="checkbox" name="memberPermission" value="CALENDAR" checked> Calendar</label>
-        <label><input type="checkbox" name="memberPermission" value="PHOTOS" checked> Photos</label>
-        <label><input type="checkbox" name="memberPermission" value="EXPERIENCES" checked> Experiences</label>
-        <label><input type="checkbox" name="memberPermission" value="DIARY" checked> Diary</label>
-        <label class="permission-special"><input type="checkbox" name="memberPermission" value="STICKY_WRITE"> Write sticky notes</label>
-      </div><small>“Write sticky notes” separately controls Add, Edit, Complete, Restore and Delete. Administrators always have this permission.</small></fieldset>
-      <label class="check-row"><input id="memberActive" type="checkbox" checked> Active account</label>
-      <div class="modal-actions"><button type="button" class="secondary-button" data-close>Cancel</button><button type="submit" class="primary-button">Save member</button></div>
-    </form>
-  </dialog>
-
-  <dialog id="diaryDialog" class="modal">
-    <form id="diaryForm" method="dialog">
-      <div class="modal-head"><div><p class="eyebrow">FAMILY DIARY</p><h3 id="diaryDialogTitle">Write diary entry</h3></div><button class="modal-close" type="button" data-close>×</button></div>
-      <input id="diaryId" type="hidden">
-      <div class="two-fields"><label>Date<input id="diaryDate" type="date" required></label><label>Mood<select id="diaryMood"><option>😊 Happy</option><option>🙏 Grateful</option><option>🎉 Celebrating</option><option>😌 Calm</option><option>💭 Thoughtful</option><option>😟 Worried</option><option>😴 Tired</option><option>🌤 Mixed</option></select></label></div>
-      <label>Title<input id="diaryTitle" required maxlength="100" placeholder="A short title for today"></label>
-      <label>Diary entry<textarea id="diaryBody" rows="8" maxlength="5000" required placeholder="What happened today? What would the family like to remember?"></textarea></label>
-      <label>Tags<input id="diaryTags" maxlength="120" placeholder="home, health, celebration"></label>
-      <div class="modal-actions"><button type="button" class="secondary-button" data-close>Cancel</button><button type="submit" class="primary-button">Save diary entry</button></div>
-    </form>
-  </dialog>
-
-  <dialog id="experienceDialog" class="modal">
-    <form id="experienceForm" method="dialog">
-      <div class="modal-head"><div><p class="eyebrow">FAMILY STORY</p><h3 id="experienceDialogTitle">Add experience</h3></div><button class="modal-close" type="button" data-close>×</button></div>
-      <input id="experienceId" type="hidden">
-      <label>Experience title<input id="experienceTitle" required maxlength="100" placeholder="e.g. Our first day in Kanyakumari"></label>
-      <div class="two-fields"><label>Date<input id="experienceDate" type="date" required></label><label>Place<input id="experiencePlace" maxlength="100" placeholder="City or place"></label></div>
-      <label>What happened?<textarea id="experienceStory" rows="6" maxlength="3000" required placeholder="Write the memory, lesson or experience here…"></textarea></label>
-      <label>Tags<input id="experienceTags" maxlength="120" placeholder="trip, celebration, lesson"></label>
-      <div class="modal-actions"><button type="button" class="secondary-button" data-close>Cancel</button><button type="submit" class="primary-button">Save experience</button></div>
-    </form>
-  </dialog>
-
-  <dialog id="searchDialog" class="modal search-modal">
-    <div class="modal-head"><div><p class="eyebrow">FIND ANYTHING</p><h3>Search family dashboard</h3></div><button class="modal-close" type="button" data-close>×</button></div>
-    <label><input id="globalSearch" type="search" placeholder="Search expenses, sticky notes, dates, photos or diary…"></label>
-    <div id="globalSearchResults" class="search-results"><p class="muted">Start typing to search all family records.</p></div>
-  </dialog>
-
-  <dialog id="stickyNoteDialog" class="modal sticky-note-dialog">
-    <form id="stickyNoteForm" method="dialog">
-      <div class="modal-head"><div><p class="eyebrow">STICKY NOTE</p><h3 id="stickyNoteDialogTitle">Add target note</h3></div><button class="modal-close" type="button" data-close>×</button></div>
-      <input id="stickyNoteId" type="hidden">
-      <div class="two-fields"><label>Type<select id="stickyNoteType" required><option value="TARGET">Target</option><option value="REMINDER">Reminder</option></select></label><label>Due date (optional)<input id="stickyNoteDueDate" type="date"></label></div>
-      <label>Title<input id="stickyNoteTitle" required maxlength="100" placeholder="e.g. Renew home insurance"></label>
-      <label>Note<textarea id="stickyNoteBody" rows="5" required maxlength="2000" placeholder="Write the target or reminder details…"></textarea></label>
-      <fieldset class="sticky-colour-fieldset"><legend>Note colour</legend><div class="sticky-colour-options">
-        <label class="colour-yellow" title="Yellow"><input type="radio" name="stickyColor" value="yellow" checked><span>✓</span></label>
-        <label class="colour-pink" title="Pink"><input type="radio" name="stickyColor" value="pink"><span>✓</span></label>
-        <label class="colour-blue" title="Blue"><input type="radio" name="stickyColor" value="blue"><span>✓</span></label>
-        <label class="colour-green" title="Green"><input type="radio" name="stickyColor" value="green"><span>✓</span></label>
-        <label class="colour-purple" title="Purple"><input type="radio" name="stickyColor" value="purple"><span>✓</span></label>
-        <label class="colour-orange" title="Orange"><input type="radio" name="stickyColor" value="orange"><span>✓</span></label>
-      </div></fieldset>
-      <div class="modal-actions"><button type="button" class="secondary-button" data-close>Cancel</button><button type="submit" class="primary-button">Save sticky note</button></div>
-    </form>
-  </dialog>
-
-  <dialog id="photoViewer" class="photo-viewer">
-    <button class="viewer-close" type="button" data-close>×</button>
-    <div id="viewerLoading" class="viewer-loading">Loading photo…</div>
-    <img id="viewerImage" class="hidden" alt="Family photo">
-    <div class="viewer-caption"><strong id="viewerTitle"></strong><span id="viewerMeta"></span><p id="viewerText"></p></div>
-  </dialog>
-
-  <div id="loadingOverlay" class="loading-overlay hidden"><div class="spinner"></div><p id="loadingText">Working…</p></div>
   <div id="toastRegion" class="toast-region" aria-live="polite"></div>
-
-  <script src="config.js?v=1.0.19"></script>
-  <script src="app.js?v=1.0.19"></script>
+    <div id="idleWarningBar" class="idle-warning-bar hidden" role="status" aria-live="polite">
+      <span>Auto logout in <strong id="idleWarningCountdown">60 sec</strong> due to inactivity.</span>
+      <button id="staySignedInBtn" type="button">Stay signed in</button>
+    </div>
+  <script src="config.js?v=20260827-19422-signout1"></script>
+  <script>
+    (function(){
+      try{
+        if(location.hostname!=='saradasutar.github.io')return;
+        var target=new URL(String(window.PORTFOLIO_CONFIG&&window.PORTFOLIO_CONFIG.API_URL||''));
+        if(!/^https:\/\/script\.google\.com\/macros\/s\/.+\/exec$/.test(target.toString()))return;
+        window.__MYFINANCE_NATIVE_REDIRECT__=true;
+        target.searchParams.set('app','1');
+        target.searchParams.set('v','19422-signout1');
+        var saved=localStorage.getItem('portfolio_saved_username')||'';
+        if(/^[A-Za-z0-9._-]{1,60}$/.test(saved))target.searchParams.set('user',saved);
+        location.replace(target.toString());
+      }catch(e){}
+    })();
+  </script>
+  <script src="app-v19-4-22.js?v=20260827-19422-signout1" defer></script>
 </body>
 </html>

@@ -6,7 +6,7 @@
   <meta name="theme-color" content="#5743a8">
   <meta name="description" content="Private family dashboard for expenses, goals, important dates and photos.">
   <title>Our Family Hub</title>
-  <link rel="stylesheet" href="styles.css?v=1.0.20">
+  <link rel="stylesheet" href="styles.css?v=1.0.21">
 </head>
 <body>
   <div class="ambient ambient-one"></div>
@@ -26,21 +26,21 @@
       <div class="brand-mark">FH</div>
       <p class="eyebrow">WELCOME HOME</p>
       <h1 id="loginFamilyName">Our Family Hub</h1>
-      <p class="muted">Sign in with the username and PIN given by your family administrator.</p>
+      <p class="muted">Sign in with the username and password managed by your family administrator.</p>
       <form id="loginForm" class="stack-form">
         <label>Username
           <input id="loginUsername" name="username" autocomplete="username" required placeholder="e.g. sarada">
         </label>
-        <label>6-digit PIN
-          <div class="pin-field">
-            <input id="loginPin" name="pin" type="password" inputmode="numeric" pattern="[0-9]{6}" maxlength="6" autocomplete="current-password" required placeholder="••••••">
-            <button id="togglePin" type="button" class="icon-button" aria-label="Show or hide PIN">👁</button>
+        <label>Password
+          <div class="password-field">
+            <input id="loginPassword" name="password" type="password" maxlength="64" autocomplete="current-password" required placeholder="Enter your password">
+            <button id="togglePassword" type="button" class="icon-button" aria-label="Show or hide password">👁</button>
           </div>
         </label>
         <div class="login-options">
           <label class="remember-row"><input id="rememberUsername" type="checkbox" checked> Save username on this device</label>
-          <span class="version-pair"><b id="loginFrontendVersion">FE v1.0.20</b><b id="loginBackendVersion">BE checking…</b></span>
-          <span id="loginVersion" class="legacy-version hidden" aria-hidden="true">Version 1.0.20</span>
+          <span class="version-pair"><b id="loginFrontendVersion">FE v1.0.21</b><b id="loginBackendVersion">BE checking…</b></span>
+          <span id="loginVersion" class="legacy-version hidden" aria-hidden="true">Version 1.0.21</span>
         </div>
         <button class="primary-button wide" type="submit">Sign in securely</button>
         <button id="repairSessionButton" class="repair-session-button" type="button">↻ Repair browser cache / session</button>
@@ -57,8 +57,8 @@
         <div class="brand-mark small">FH</div>
         <div>
           <strong id="sidebarFamilyName">Our Family Hub</strong>
-          <span class="sidebar-version-pair"><b id="sidebarFrontendVersion">FE v1.0.20</b><b id="sidebarBackendVersion">BE checking…</b></span>
-          <b id="sidebarVersion" class="legacy-version hidden" aria-hidden="true">v1.0.20</b>
+          <span class="sidebar-version-pair"><b id="sidebarFrontendVersion">FE v1.0.21</b><b id="sidebarBackendVersion">BE checking…</b></span>
+          <b id="sidebarVersion" class="legacy-version hidden" aria-hidden="true">v1.0.21</b>
         </div>
       </div>
       <nav class="main-nav" aria-label="Main navigation">
@@ -503,7 +503,7 @@
       <input id="memberId" type="hidden">
       <label>Full name<input id="memberName" required maxlength="70"></label>
       <div class="two-fields"><label>Username<input id="memberUsername" required maxlength="30" pattern="[A-Za-z0-9._-]+"></label><label>Email<input id="memberEmail" type="email" placeholder="For reminders"></label></div>
-      <div class="two-fields"><label>Role<select id="memberRole"><option value="MEMBER">Member</option><option value="ADMIN">Administrator</option></select></label><label>6-digit PIN<input id="memberPin" type="password" inputmode="numeric" pattern="[0-9]{6}" maxlength="6" placeholder="Required for a new member"></label></div>
+      <div class="two-fields"><label>Role<select id="memberRole"><option value="MEMBER">Member</option><option value="ADMIN">Administrator</option></select></label><label>Password<input id="memberPassword" type="password" autocomplete="new-password" minlength="8" maxlength="64" placeholder="Required for a new member"><small>Use 8–64 characters with at least one letter and one number. Leave blank when editing to keep the current password.</small></label></div>
       <fieldset id="memberAccessFieldset"><legend>Can view and use</legend><div class="permission-grid">
         <label><input type="checkbox" name="memberPermission" value="EXPENSES" checked> Expenditure</label>
         <label><input type="checkbox" name="memberPermission" value="INCOME" checked> Income</label>
@@ -579,7 +579,7 @@
   <div id="loadingOverlay" class="loading-overlay hidden"><div class="spinner"></div><p id="loadingText">Working…</p></div>
   <div id="toastRegion" class="toast-region" aria-live="polite"></div>
 
-  <script src="config.js?v=1.0.20"></script>
-  <script src="app.js?v=1.0.20"></script>
+  <script src="config.js?v=1.0.21"></script>
+  <script src="app.js?v=1.0.21"></script>
 </body>
 </html>

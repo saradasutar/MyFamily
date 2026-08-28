@@ -2,7 +2,7 @@
 
 const CONFIG = window.FAMILY_DASHBOARD_CONFIG || {};
 const PLACEHOLDER_URL = "PASTE_YOUR_APPS_SCRIPT_WEB_APP_URL_HERE";
-const FRONTEND_VERSION = "1.0.20";
+const FRONTEND_VERSION = "1.0.21";
 const SAVED_USERNAME_KEY = "familyDashboardUsername";
 const SESSION_TOKEN_KEY = "familyDashboardToken";
 const IDLE_TIMEOUT_MS = 5 * 60 * 1000;
@@ -407,7 +407,7 @@ function bindDialogs() {
       if (event.clientX < box.left || event.clientX > box.right || event.clientY < box.top || event.clientY > box.bottom) dialog.close();
     });
   });
-  $("togglePin").addEventListener("click", function () { $("loginPin").type = $("loginPin").type === "password" ? "text" : "password"; });
+  $("togglePassword").addEventListener("click", function () { $("loginPassword").type = $("loginPassword").type === "password" ? "text" : "password"; });
   $("notifyEveryone").addEventListener("change", function () { $("recipientChecks").classList.toggle("hidden", $("notifyEveryone").checked); });
   $("recurringNotifyEveryone").addEventListener("change", function () { $("recurringRecipientChecks").classList.toggle("hidden", $("recurringNotifyEveryone").checked); });
   $("photoFile").addEventListener("change", previewPhoto);
@@ -437,7 +437,7 @@ function prepareNewDialog(id) {
   if (id === "contributionDialog") { $("contributionForm").reset(); $("contributionDate").value = todayIso(); }
   if (id === "dateDialog") { $("dateDialogTitle").textContent = "Add important date"; $("notifyEveryone").checked = true; $("recipientChecks").classList.add("hidden"); renderRecipientChecks([]); }
   if (id === "photoDialog") { $("photoForm").reset(); $("photoTakenDate").value = todayIso(); $("photoPreview").classList.add("hidden"); state.pendingPhoto = null; }
-  if (id === "memberDialog") { $("memberDialogTitle").textContent = "Add family member"; $("memberActive").checked = true; $("memberPin").required = true; setMemberPermissions(["EXPENSES","INCOME","TARGETS","DATES","CALENDAR","PHOTOS","EXPERIENCES","DIARY"]); syncMemberAccessRole(); }
+  if (id === "memberDialog") { $("memberDialogTitle").textContent = "Add family member"; $("memberActive").checked = true; $("memberPassword").required = true; setMemberPermissions(["EXPENSES","INCOME","TARGETS","DATES","CALENDAR","PHOTOS","EXPERIENCES","DIARY"]); syncMemberAccessRole(); }
   if (id === "experienceDialog") $("experienceDialogTitle").textContent = "Add experience";
   if (id === "diaryDialog") $("diaryDialogTitle").textContent = "Write diary entry";
   if (id === "expenseCategoryDialog") { state.categoryDraft = JSON.parse(JSON.stringify(expenseCategoryConfig())); state.categoryEditIds.clear(); state.subcategoryEditIds.clear(); $("newExpenseCategoryName").value = ""; renderExpenseCategoryManager(); }
@@ -670,7 +670,7 @@ function bindActions() {
     if (action === "edit-diary") editDiary(id);
     if (action === "delete-diary") confirmDelete("deleteDiary", id, "Delete this diary entry?");
     if (action === "edit-member") editMember(id);
-    if (action === "reset-pin") resetMemberPin(id);
+    if (action === "reset-password") resetMemberPassword(id);
     if (action === "edit-sticky") editStickyNote(id);
     if (action === "delete-sticky") confirmDelete("deleteStickyNote", id, "Delete this sticky note permanently?");
     if (action === "complete-sticky") completeStickyNote(id);
@@ -779,7 +779,7 @@ async function login(event) {
   showLoading("Signing you in…");
   try {
     const username = $("loginUsername").value.trim();
-    const result = await api("login", { username: username, pin: $("loginPin").value });
+    const result = await api("login", { username: username, password: $("loginPassword").value });
     if ($("rememberUsername").checked) localStorage.setItem(SAVED_USERNAME_KEY, username); else localStorage.removeItem(SAVED_USERNAME_KEY);
     state.token = result.token;
     state.data = normalizeBootstrapData(result.bootstrap);
@@ -1096,8 +1096,15 @@ async function saveMember(event) {
   event.preventDefault();
   const id = $("memberId").value;
   const permissions = all("input[name='memberPermission']:checked").map(function (el) { return el.value; });
-  const payload = { id: id, name: $("memberName").value.trim(), username: $("memberUsername").value.trim(), email: $("memberEmail").value.trim(), role: $("memberRole").value, pin: $("memberPin").value, active: $("memberActive").checked, permissions: permissions };
-  if (!id && !payload.pin) return toast("Enter a 6-digit PIN for the new member.", "error");
+  const payload = { id: id, name: $("memberName").value.trim(), username: $("memberUsername").value.trim(), email: $("memberEmail").value.trim(), role: $("memberRole").value, password: $("memberPassword").value, active: $("memberActive").checked, permissions: permissions };
+  if (!id && !payload.password) return toast("Enter a password for the new member.", "error");
+  if (id && id === state.data.user.id && payload.password) {
+    showLoading("Updating your administrator password…");
+    try { await api("saveMember", payload); if ($("memberDialog").open) $("memberDialog").close(); window.alert("Your password was updated. Please sign in again with the new password."); clearLocalSession(); showLogin(); }
+    catch (error) { if (!handleSessionError(error)) toast(error.message, "error"); }
+    finally { hideLoading(); }
+    return;
+  }
   await mutate("saveMember", payload, id ? "Member updated." : "Family member added.", "memberDialog");
 }
 async function saveSettings(event) {
@@ -1224,14 +1231,14 @@ function editDiary(id) {
 }
 function editMember(id) {
   const item = (state.data.adminMembers || []).find(function (x) { return x.id === id; }); if (!item) return;
-  prepareNewDialog("memberDialog"); $("memberId").value = item.id; $("memberName").value = item.name; $("memberUsername").value = item.username; $("memberEmail").value = item.email || ""; $("memberRole").value = item.role; setMemberPermissions(item.permissions || []); syncMemberAccessRole(); $("memberActive").checked = item.active; $("memberPin").value = ""; $("memberPin").required = false; $("memberDialogTitle").textContent = "Edit family member"; openDialog("memberDialog");
+  prepareNewDialog("memberDialog"); $("memberId").value = item.id; $("memberName").value = item.name; $("memberUsername").value = item.username; $("memberEmail").value = item.email || ""; $("memberRole").value = item.role; setMemberPermissions(item.permissions || []); syncMemberAccessRole(); $("memberActive").checked = item.active; $("memberPassword").value = ""; $("memberPassword").required = false; $("memberDialogTitle").textContent = "Edit family member"; openDialog("memberDialog");
 }
 function setMemberPermissions(permissions) { all("input[name='memberPermission']").forEach(function (el) { el.checked = permissions.indexOf(el.value) >= 0; }); }
 function syncMemberAccessRole() { const admin = $("memberRole").value === "ADMIN"; if (admin) setMemberPermissions(["EXPENSES","INCOME","TARGETS","DATES","CALENDAR","PHOTOS","EXPERIENCES","DIARY","STICKY_WRITE"]); all("input[name='memberPermission']").forEach(function (el) { el.disabled = admin; }); }
-async function resetMemberPin(id) {
-  if (!window.confirm("Generate a new 6-digit PIN for this member? Their old PIN will stop working.")) return;
-  showLoading("Generating a new PIN…");
-  try { const result = await api("resetMemberPin", { id: id }); await refreshData(); window.alert("New PIN: " + result.newPin + "\n\nPlease give this PIN privately to the family member."); }
+async function resetMemberPassword(id) {
+  if (!window.confirm("Generate a new temporary password for this member? Their old password will stop working and all existing sessions will be signed out.")) return;
+  showLoading("Generating a temporary password…");
+  try { const result = await api("resetMemberPassword", { id: id }); window.alert("Temporary password: " + result.newPassword + "\n\nPlease give this password privately to the family member."); if (id === state.data.user.id) { clearLocalSession(); showLogin(); } else await refreshData(); }
   catch (error) { if (!handleSessionError(error)) toast(error.message, "error"); } finally { hideLoading(); }
 }
 
@@ -1448,7 +1455,7 @@ function renderAdmin() {
   $("settingMemoryPrintPages").value=String(memoryPrintPages());
   const configuredCategories=expenseCategoryConfig(), activeCategories=configuredCategories.filter(function(category){return category.active!==false;}); $("adminExpenseCategorySummary").textContent=plural(configuredCategories.length,"category","categories")+" · "+activeCategories.length+" active";
   const backup=state.data.backupStatus||{}; $("automaticBackupStatus").textContent=backup.automatic?"● Monthly backup enabled":"● Monthly backup needs setup"; $("automaticBackupStatus").classList.toggle("success",!!backup.automatic); $("lastBackupText").textContent=backup.lastBackupAt?("Last backup: "+new Date(backup.lastBackupAt).toLocaleString("en-IN")+(backup.lastBackupName?" · "+backup.lastBackupName:"")):"No backup created yet."; $("backupFolderLink").classList.toggle("hidden",!backup.folderUrl); if(backup.folderUrl)$("backupFolderLink").href=backup.folderUrl;
-  const labels={EXPENSES:"Exp",INCOME:"Income",TARGETS:"Targets",DATES:"Reminders",CALENDAR:"Calendar",PHOTOS:"Photos",EXPERIENCES:"Experiences",DIARY:"Diary",STICKY_WRITE:"Write sticky notes"}; const items=state.data.adminMembers||[]; $("memberCount").textContent=plural(items.length,"person","people"); $("memberList").innerHTML=items.map(function(x){const access=x.role==="ADMIN"?"All sections · Write sticky notes":(x.permissions||[]).map(function(key){return labels[key]||key;}).join(", ")||"No sections";return '<div class="member-row"><span class="avatar">'+h(x.name.charAt(0).toUpperCase())+'</span><div><strong>'+h(x.name)+'</strong><small>@'+h(x.username)+'</small></div><div><strong>'+h(x.email||"No email")+'</strong><small>Access: '+h(access)+'</small></div><span class="role-chip">'+(x.role==="ADMIN"?"ADMIN":"MEMBER")+'</span><span class="active-chip '+(!x.active?'inactive':'')+'">'+(x.active?'● Active':'● Inactive')+'</span><div class="member-actions"><button class="tiny-button" data-action="edit-member" data-id="'+h(x.id)+'">Edit</button><button class="tiny-button" data-action="reset-pin" data-id="'+h(x.id)+'">New PIN</button></div></div>';}).join("");
+  const labels={EXPENSES:"Exp",INCOME:"Income",TARGETS:"Targets",DATES:"Reminders",CALENDAR:"Calendar",PHOTOS:"Photos",EXPERIENCES:"Experiences",DIARY:"Diary",STICKY_WRITE:"Write sticky notes"}; const items=state.data.adminMembers||[]; $("memberCount").textContent=plural(items.length,"person","people"); $("memberList").innerHTML=items.map(function(x){const access=x.role==="ADMIN"?"All sections · Write sticky notes":(x.permissions||[]).map(function(key){return labels[key]||key;}).join(", ")||"No sections";return '<div class="member-row"><span class="avatar">'+h(x.name.charAt(0).toUpperCase())+'</span><div><strong>'+h(x.name)+'</strong><small>@'+h(x.username)+'</small></div><div><strong>'+h(x.email||"No email")+'</strong><small>Access: '+h(access)+'</small></div><span class="role-chip">'+(x.role==="ADMIN"?"ADMIN":"MEMBER")+'</span><span class="active-chip '+(!x.active?'inactive':'')+'">'+(x.active?'● Active':'● Inactive')+'</span><div class="member-actions"><button class="tiny-button" data-action="edit-member" data-id="'+h(x.id)+'">Edit</button><button class="tiny-button" data-action="reset-password" data-id="'+h(x.id)+'">New password</button></div></div>';}).join("");
 }
 
 function renderStickyNotes() {

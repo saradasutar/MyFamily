@@ -2,7 +2,7 @@
 
 const CONFIG = window.FAMILY_DASHBOARD_CONFIG || {};
 const PLACEHOLDER_URL = "PASTE_YOUR_APPS_SCRIPT_WEB_APP_URL_HERE";
-const FRONTEND_VERSION = "1.0.19";
+const FRONTEND_VERSION = "1.0.20";
 const SAVED_USERNAME_KEY = "familyDashboardUsername";
 const SESSION_TOKEN_KEY = "familyDashboardToken";
 const IDLE_TIMEOUT_MS = 5 * 60 * 1000;
@@ -30,7 +30,8 @@ const state = {
   inlineExpenseId: "",
   categoryDraft: [],
   categoryEditIds: new Set(),
-  subcategoryEditIds: new Set()
+  subcategoryEditIds: new Set(),
+  clockTimer: null
 };
 const pendingRequests = new Map();
 const viewTitles = {
@@ -114,6 +115,59 @@ function money(value) {
 }
 function plural(count, singular, pluralWord) { return count + " " + (count === 1 ? singular : (pluralWord || singular + "s")); }
 function normalize(value) { return String(value || "").toLowerCase().trim(); }
+function safeClockHighlight(value) { return /^#[0-9a-f]{6}$/i.test(String(value || "")) ? String(value).toLowerCase() : "#f0a7cb"; }
+function mixHex(color, target, amount) {
+  const source = safeClockHighlight(color).slice(1), destination = target.replace("#", "");
+  const mixed = [0, 2, 4].map(function (index) {
+    const start = parseInt(source.slice(index, index + 2), 16), end = parseInt(destination.slice(index, index + 2), 16);
+    return Math.round(start + (end - start) * amount).toString(16).padStart(2, "0");
+  });
+  return "#" + mixed.join("");
+}
+function setClockHighlightProperties(target, value) {
+  if (!target) return;
+  const color = safeClockHighlight(value), rgb = [1, 3, 5].map(function (index) { return parseInt(color.slice(index, index + 2), 16); });
+  target.style.setProperty("--clock-highlight", color);
+  target.style.setProperty("--clock-highlight-soft", mixHex(color, "#ffffff", .72));
+  target.style.setProperty("--clock-highlight-pale", mixHex(color, "#ffffff", .88));
+  target.style.setProperty("--clock-highlight-deep", mixHex(color, "#1f1630", .68));
+  target.style.setProperty("--clock-highlight-shadow", "rgba(" + rgb.join(",") + ",.32)");
+}
+function dashboardClockHighlight() { return safeClockHighlight(state.data && state.data.settings && state.data.settings.dashboardClockHighlight); }
+function applyDashboardClockTheme() { setClockHighlightProperties(document.documentElement, dashboardClockHighlight()); }
+function previewDashboardClockHighlight(value) {
+  const preview = $("clockHighlightPreview");
+  if (!preview) return;
+  setClockHighlightProperties(preview, value);
+}
+function ordinalSuffix(day) {
+  const mod100 = day % 100;
+  if (mod100 >= 11 && mod100 <= 13) return "th";
+  return day % 10 === 1 ? "st" : day % 10 === 2 ? "nd" : day % 10 === 3 ? "rd" : "th";
+}
+function dashboardTimeZone() { return (state.data && state.data.settings && state.data.settings.timezone) || "Asia/Kolkata"; }
+function dateTimeParts(date) {
+  try {
+    const parts = new Intl.DateTimeFormat("en-US", { timeZone: dashboardTimeZone(), weekday: "long", day: "numeric", month: "short", year: "numeric", hour: "numeric", minute: "2-digit", hour12: true }).formatToParts(date);
+    return parts.reduce(function (result, part) { if (part.type !== "literal") result[part.type] = part.value; return result; }, {});
+  } catch (error) {
+    const parts = new Intl.DateTimeFormat("en-US", { timeZone: "Asia/Kolkata", weekday: "long", day: "numeric", month: "short", year: "numeric", hour: "numeric", minute: "2-digit", hour12: true }).formatToParts(date);
+    return parts.reduce(function (result, part) { if (part.type !== "literal") result[part.type] = part.value; return result; }, {});
+  }
+}
+function updateDashboardClock() {
+  const clock = $("dashboardDateTime");
+  if (!clock || !state.data) return;
+  const now = new Date(), parts = dateTimeParts(now), day = Number(parts.day) || now.getDate();
+  clock.textContent = "◆ " + day + ordinalSuffix(day) + "-" + parts.month + "-" + parts.year + " (" + parts.weekday + ") | " + parts.hour + ":" + parts.minute + " " + String(parts.dayPeriod || "").toUpperCase();
+  clock.dateTime = now.toISOString();
+}
+function startDashboardClock() {
+  stopDashboardClock();
+  updateDashboardClock();
+  state.clockTimer = setInterval(updateDashboardClock, 1000);
+}
+function stopDashboardClock() { if (state.clockTimer) clearInterval(state.clockTimer); state.clockTimer = null; }
 
 function init() {
   const now = new Date();
@@ -192,6 +246,7 @@ function showApp() {
 }
 function showLogin() {
   stopIdleTimer();
+  stopDashboardClock();
   clearTimeout(state.stickyLauncherTimer);
   document.body.classList.remove("sticky-drawer-open");
   $("stickyBoard").classList.add("hidden");
@@ -528,6 +583,7 @@ function bindForms() {
   $("stickyQuickForm").addEventListener("submit", saveQuickStickyNote);
   $("createBackupNow").addEventListener("click", createBackupNow);
   $("memberRole").addEventListener("change", syncMemberAccessRole);
+  $("settingDashboardClockHighlight").addEventListener("input", function (event) { previewDashboardClockHighlight(event.target.value); });
 }
 
 function bindFilters() {
@@ -1050,6 +1106,7 @@ async function saveSettings(event) {
     familyName: $("settingFamilyName").value.trim(),
     currency: $("settingCurrency").value,
     timezone: $("settingTimezone").value.trim(),
+    dashboardClockHighlight: safeClockHighlight($("settingDashboardClockHighlight").value),
     memoryPhotoLimit: Number($("settingMemoryPhotoLimit").value),
     memoryUploadPolicy: $("settingMemoryUploadPolicy").value,
     memoryPrintPages: Number($("settingMemoryPrintPages").value)
@@ -1180,6 +1237,8 @@ async function resetMemberPin(id) {
 
 function renderAll() {
   const settings = state.data.settings || {};
+  applyDashboardClockTheme();
+  startDashboardClock();
   document.title = (settings.familyName || "Our Family Hub") + " · Family Dashboard";
   $("sidebarFamilyName").textContent = settings.familyName || "Our Family Hub";
   $("loginFamilyName").textContent = settings.familyName || "Our Family Hub";
@@ -1231,7 +1290,7 @@ function renderHome() {
   const targetSaved = state.data.targets.reduce(function (sum,x) { return sum + Number(x.currentAmount || 0); }, 0);
   const targetPct = targetTotal ? Math.min(100, Math.round(targetSaved / targetTotal * 100)) : 0;
   const upcoming = upcomingDates(30);
-  const hour = new Date().getHours(); const greeting = hour < 12 ? "Good morning" : hour < 17 ? "Good afternoon" : "Good evening";
+  const greetingParts = dateTimeParts(new Date()); let hour = Number(greetingParts.hour) || 0; if (String(greetingParts.dayPeriod).toUpperCase() === "PM" && hour < 12) hour += 12; if (String(greetingParts.dayPeriod).toUpperCase() === "AM" && hour === 12) hour = 0; const greeting = hour < 12 ? "Good morning" : hour < 17 ? "Good afternoon" : "Good evening";
   $("welcomeHeading").textContent = greeting + ", " + state.data.user.name.split(" ")[0] + ".";
   $("monthSpend").textContent = money(expenseTotal); $("monthExpenseCount").textContent = plural(monthExpenses.length, "entry", "entries");
   $("monthIncome").textContent = money(incomeTotal); $("monthIncomeCount").textContent = plural(monthIncome.length, "entry", "entries");
@@ -1383,6 +1442,7 @@ function renderCalendar() {
 
 function renderAdmin() {
   $("settingFamilyName").value=state.data.settings.familyName||""; $("settingCurrency").value=state.data.settings.currency||"INR"; $("settingTimezone").value=state.data.settings.timezone||"Asia/Kolkata";
+  $("settingDashboardClockHighlight").value=dashboardClockHighlight(); previewDashboardClockHighlight(dashboardClockHighlight());
   $("settingMemoryPhotoLimit").value=memoryPhotoLimit();
   $("settingMemoryUploadPolicy").value=state.data.settings.memoryUploadPolicy==="MEMBERS_WITH_ACCESS"?"MEMBERS_WITH_ACCESS":"ADMIN_ONLY";
   $("settingMemoryPrintPages").value=String(memoryPrintPages());

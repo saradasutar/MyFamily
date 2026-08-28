@@ -6,7 +6,7 @@
   <meta name="theme-color" content="#5743a8">
   <meta name="description" content="Private family dashboard for expenses, goals, important dates and photos.">
   <title>Our Family Hub</title>
-  <link rel="stylesheet" href="styles.css?v=1.0.19">
+  <link rel="stylesheet" href="styles.css?v=1.0.20">
 </head>
 <body>
   <div class="ambient ambient-one"></div>
@@ -39,8 +39,8 @@
         </label>
         <div class="login-options">
           <label class="remember-row"><input id="rememberUsername" type="checkbox" checked> Save username on this device</label>
-          <span class="version-pair"><b id="loginFrontendVersion">FE v1.0.19</b><b id="loginBackendVersion">BE checking…</b></span>
-          <span id="loginVersion" class="legacy-version hidden" aria-hidden="true">Version 1.0.19</span>
+          <span class="version-pair"><b id="loginFrontendVersion">FE v1.0.20</b><b id="loginBackendVersion">BE checking…</b></span>
+          <span id="loginVersion" class="legacy-version hidden" aria-hidden="true">Version 1.0.20</span>
         </div>
         <button class="primary-button wide" type="submit">Sign in securely</button>
         <button id="repairSessionButton" class="repair-session-button" type="button">↻ Repair browser cache / session</button>
@@ -57,8 +57,8 @@
         <div class="brand-mark small">FH</div>
         <div>
           <strong id="sidebarFamilyName">Our Family Hub</strong>
-          <span class="sidebar-version-pair"><b id="sidebarFrontendVersion">FE v1.0.19</b><b id="sidebarBackendVersion">BE checking…</b></span>
-          <b id="sidebarVersion" class="legacy-version hidden" aria-hidden="true">v1.0.19</b>
+          <span class="sidebar-version-pair"><b id="sidebarFrontendVersion">FE v1.0.20</b><b id="sidebarBackendVersion">BE checking…</b></span>
+          <b id="sidebarVersion" class="legacy-version hidden" aria-hidden="true">v1.0.20</b>
         </div>
       </div>
       <nav class="main-nav" aria-label="Main navigation">
@@ -88,6 +88,7 @@
           <p id="todayLabel" class="eyebrow"></p>
           <h2 id="viewTitle">Family overview</h2>
         </div>
+        <time id="dashboardDateTime" class="dashboard-date-time" aria-label="Current date and time">◆ Loading date and time…</time>
         <div class="topbar-actions">
           <button id="globalSearchButton" class="search-pill">⌕ <span>Search</span></button>
           <div class="user-chip">
@@ -266,6 +267,11 @@
               <form id="settingsForm" class="stack-form compact-form">
                 <label>Family dashboard name<input id="settingFamilyName" required maxlength="60"></label>
                 <div class="two-fields"><label>Currency<select id="settingCurrency"><option value="INR">₹ INR</option><option value="USD">$ USD</option><option value="EUR">€ EUR</option><option value="GBP">£ GBP</option></select></label><label>Time zone<input id="settingTimezone" required placeholder="Asia/Kolkata"></label></div>
+                <div class="clock-highlight-setting">
+                  <label>Date/time highlight colour<input id="settingDashboardClockHighlight" type="color" value="#f0a7cb" aria-describedby="clockHighlightHelp"></label>
+                  <span id="clockHighlightPreview" class="clock-highlight-preview">◆ Date &amp; time preview</span>
+                  <small id="clockHighlightHelp">This administrator colour is used for the live date/time capsule on every member’s dashboard.</small>
+                </div>
                 <fieldset class="memory-admin-settings"><legend>Family Memories control</legend>
                   <label>Maximum photos<input id="settingMemoryPhotoLimit" type="number" min="1" max="24" step="1" required></label>
                   <label>Who can add photos<select id="settingMemoryUploadPolicy"><option value="ADMIN_ONLY">Administrators only</option><option value="MEMBERS_WITH_ACCESS">Members having Photos access</option></select></label>
@@ -573,7 +579,7 @@
   <div id="loadingOverlay" class="loading-overlay hidden"><div class="spinner"></div><p id="loadingText">Working…</p></div>
   <div id="toastRegion" class="toast-region" aria-live="polite"></div>
 
-  <script src="config.js?v=1.0.19"></script>
-  <script src="app.js?v=1.0.19"></script>
+  <script src="config.js?v=1.0.20"></script>
+  <script src="app.js?v=1.0.20"></script>
 </body>
 </html>

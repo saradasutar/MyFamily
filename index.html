@@ -6,7 +6,7 @@
   <meta name="theme-color" content="#5743a8">
   <meta name="description" content="Private family dashboard for expenses, goals, important dates and photos.">
   <title>Our Family Hub</title>
-  <link rel="stylesheet" href="styles.css?v=1.0.21">
+  <link rel="stylesheet" href="styles.css?v=1.0.22">
 </head>
 <body>
   <div class="ambient ambient-one"></div>
@@ -39,8 +39,8 @@
         </label>
         <div class="login-options">
           <label class="remember-row"><input id="rememberUsername" type="checkbox" checked> Save username on this device</label>
-          <span class="version-pair"><b id="loginFrontendVersion">FE v1.0.21</b><b id="loginBackendVersion">BE checking…</b></span>
-          <span id="loginVersion" class="legacy-version hidden" aria-hidden="true">Version 1.0.21</span>
+          <span class="version-pair"><b id="loginFrontendVersion">FE v1.0.22</b><b id="loginBackendVersion">BE checking…</b></span>
+          <span id="loginVersion" class="legacy-version hidden" aria-hidden="true">Version 1.0.22</span>
         </div>
         <button class="primary-button wide" type="submit">Sign in securely</button>
         <button id="repairSessionButton" class="repair-session-button" type="button">↻ Repair browser cache / session</button>
@@ -57,8 +57,8 @@
         <div class="brand-mark small">FH</div>
         <div>
           <strong id="sidebarFamilyName">Our Family Hub</strong>
-          <span class="sidebar-version-pair"><b id="sidebarFrontendVersion">FE v1.0.21</b><b id="sidebarBackendVersion">BE checking…</b></span>
-          <b id="sidebarVersion" class="legacy-version hidden" aria-hidden="true">v1.0.21</b>
+          <span class="sidebar-version-pair"><b id="sidebarFrontendVersion">FE v1.0.22</b><b id="sidebarBackendVersion">BE checking…</b></span>
+          <b id="sidebarVersion" class="legacy-version hidden" aria-hidden="true">v1.0.22</b>
         </div>
       </div>
       <nav class="main-nav" aria-label="Main navigation">
@@ -259,7 +259,10 @@
         <section id="view-admin" class="view">
           <div class="section-toolbar">
             <div><p class="section-intro">Manage the family name, users, roles and access.</p></div>
-            <button class="primary-button" data-open="memberDialog">＋ Add family member</button>
+            <div class="toolbar-actions">
+              <button id="changeMyPassword" class="secondary-button" type="button">🔑 Change my password</button>
+              <button class="primary-button" data-open="memberDialog">＋ Add family member</button>
+            </div>
           </div>
           <div class="admin-grid">
             <article class="panel settings-panel">
@@ -503,7 +506,7 @@
       <input id="memberId" type="hidden">
       <label>Full name<input id="memberName" required maxlength="70"></label>
       <div class="two-fields"><label>Username<input id="memberUsername" required maxlength="30" pattern="[A-Za-z0-9._-]+"></label><label>Email<input id="memberEmail" type="email" placeholder="For reminders"></label></div>
-      <div class="two-fields"><label>Role<select id="memberRole"><option value="MEMBER">Member</option><option value="ADMIN">Administrator</option></select></label><label>Password<input id="memberPassword" type="password" autocomplete="new-password" minlength="8" maxlength="64" placeholder="Required for a new member"><small>Use 8–64 characters with at least one letter and one number. Leave blank when editing to keep the current password.</small></label></div>
+      <div class="two-fields"><label>Role<select id="memberRole"><option value="MEMBER">Member</option><option value="ADMIN">Administrator</option></select></label><label>Password<input id="memberPassword" type="password" autocomplete="new-password" minlength="8" maxlength="64" placeholder="Required for a new member"><small>Required for a new member. For an existing member, use the dedicated Set/change password button.</small></label></div>
       <fieldset id="memberAccessFieldset"><legend>Can view and use</legend><div class="permission-grid">
         <label><input type="checkbox" name="memberPermission" value="EXPENSES" checked> Expenditure</label>
         <label><input type="checkbox" name="memberPermission" value="INCOME" checked> Income</label>
@@ -517,6 +520,19 @@
       </div><small>“Write sticky notes” separately controls Add, Edit, Complete, Restore and Delete. Administrators always have this permission.</small></fieldset>
       <label class="check-row"><input id="memberActive" type="checkbox" checked> Active account</label>
       <div class="modal-actions"><button type="button" class="secondary-button" data-close>Cancel</button><button type="submit" class="primary-button">Save member</button></div>
+    </form>
+  </dialog>
+
+  <dialog id="memberPasswordDialog" class="modal">
+    <form id="memberPasswordForm" method="dialog">
+      <div class="modal-head"><div><p class="eyebrow">ADMINISTRATOR CONTROL</p><h3>Set or change password</h3></div><button class="modal-close" type="button" data-close>×</button></div>
+      <input id="passwordMemberId" type="hidden">
+      <p class="setup-hint">Member: <strong id="passwordMemberName"></strong></p>
+      <label>New password<input id="adminMemberPassword" type="password" autocomplete="new-password" minlength="8" maxlength="64" required placeholder="Enter a password chosen by the administrator"><small>Use 8–64 characters with at least one letter and one number.</small></label>
+      <label>Confirm new password<input id="confirmAdminMemberPassword" type="password" autocomplete="new-password" minlength="8" maxlength="64" required placeholder="Enter the same password again"></label>
+      <div class="modal-actions"><button id="generateAdminMemberPassword" type="button" class="secondary-button">Generate secure password</button><button id="toggleAdminMemberPassword" type="button" class="secondary-button">Show password</button></div>
+      <p class="session-safety-note">After saving, the old password stops working and all existing sessions for this member are signed out.</p>
+      <div class="modal-actions"><button type="button" class="secondary-button" data-close>Cancel</button><button type="submit" class="primary-button">Save new password</button></div>
     </form>
   </dialog>
 
@@ -579,7 +595,7 @@
   <div id="loadingOverlay" class="loading-overlay hidden"><div class="spinner"></div><p id="loadingText">Working…</p></div>
   <div id="toastRegion" class="toast-region" aria-live="polite"></div>
 
-  <script src="config.js?v=1.0.21"></script>
-  <script src="app.js?v=1.0.21"></script>
+  <script src="config.js?v=1.0.22"></script>
+  <script src="app.js?v=1.0.22"></script>
 </body>
 </html>

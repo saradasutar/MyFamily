@@ -2,7 +2,7 @@
 
 const CONFIG = window.FAMILY_DASHBOARD_CONFIG || {};
 const PLACEHOLDER_URL = "PASTE_YOUR_APPS_SCRIPT_WEB_APP_URL_HERE";
-const FRONTEND_VERSION = "1.0.21";
+const FRONTEND_VERSION = "1.0.22";
 const SAVED_USERNAME_KEY = "familyDashboardUsername";
 const SESSION_TOKEN_KEY = "familyDashboardToken";
 const IDLE_TIMEOUT_MS = 5 * 60 * 1000;
@@ -408,6 +408,9 @@ function bindDialogs() {
     });
   });
   $("togglePassword").addEventListener("click", function () { $("loginPassword").type = $("loginPassword").type === "password" ? "text" : "password"; });
+  $("toggleAdminMemberPassword").addEventListener("click", toggleAdminMemberPasswordVisibility);
+  $("generateAdminMemberPassword").addEventListener("click", generateAdminMemberPassword);
+  $("changeMyPassword").addEventListener("click", function () { if (state.data && state.data.user) openMemberPasswordDialog(state.data.user.id); });
   $("notifyEveryone").addEventListener("change", function () { $("recipientChecks").classList.toggle("hidden", $("notifyEveryone").checked); });
   $("recurringNotifyEveryone").addEventListener("change", function () { $("recurringRecipientChecks").classList.toggle("hidden", $("recurringNotifyEveryone").checked); });
   $("photoFile").addEventListener("change", previewPhoto);
@@ -578,6 +581,7 @@ function bindForms() {
   $("experienceForm").addEventListener("submit", saveExperience);
   $("diaryForm").addEventListener("submit", saveDiary);
   $("memberForm").addEventListener("submit", saveMember);
+  $("memberPasswordForm").addEventListener("submit", saveAdminMemberPassword);
   $("settingsForm").addEventListener("submit", saveSettings);
   $("stickyNoteForm").addEventListener("submit", saveStickyNote);
   $("stickyQuickForm").addEventListener("submit", saveQuickStickyNote);
@@ -670,7 +674,7 @@ function bindActions() {
     if (action === "edit-diary") editDiary(id);
     if (action === "delete-diary") confirmDelete("deleteDiary", id, "Delete this diary entry?");
     if (action === "edit-member") editMember(id);
-    if (action === "reset-password") resetMemberPassword(id);
+    if (action === "set-password") openMemberPasswordDialog(id);
     if (action === "edit-sticky") editStickyNote(id);
     if (action === "delete-sticky") confirmDelete("deleteStickyNote", id, "Delete this sticky note permanently?");
     if (action === "complete-sticky") completeStickyNote(id);
@@ -1235,6 +1239,56 @@ function editMember(id) {
 }
 function setMemberPermissions(permissions) { all("input[name='memberPermission']").forEach(function (el) { el.checked = permissions.indexOf(el.value) >= 0; }); }
 function syncMemberAccessRole() { const admin = $("memberRole").value === "ADMIN"; if (admin) setMemberPermissions(["EXPENSES","INCOME","TARGETS","DATES","CALENDAR","PHOTOS","EXPERIENCES","DIARY","STICKY_WRITE"]); all("input[name='memberPermission']").forEach(function (el) { el.disabled = admin; }); }
+function openMemberPasswordDialog(id) {
+  const member = (state.data.adminMembers || []).find(function (item) { return item.id === id; });
+  if (!member) return;
+  $("memberPasswordForm").reset();
+  $("passwordMemberId").value = member.id;
+  $("passwordMemberName").textContent = member.name + " (@" + member.username + ")";
+  $("adminMemberPassword").type = "password";
+  $("confirmAdminMemberPassword").type = "password";
+  $("toggleAdminMemberPassword").textContent = "Show password";
+  openDialog("memberPasswordDialog");
+  setTimeout(function () { $("adminMemberPassword").focus(); }, 50);
+}
+function toggleAdminMemberPasswordVisibility() {
+  const show = $("adminMemberPassword").type === "password";
+  $("adminMemberPassword").type = show ? "text" : "password";
+  $("confirmAdminMemberPassword").type = show ? "text" : "password";
+  $("toggleAdminMemberPassword").textContent = show ? "Hide password" : "Show password";
+}
+function generateAdminMemberPassword() {
+  const alphabet = "ABCDEFGHJKLMNPQRSTUVWXYZabcdefghijkmnopqrstuvwxyz23456789";
+  const values = new Uint32Array(12);
+  crypto.getRandomValues(values);
+  let password = "F" + Array.from(values, function (value) { return alphabet[value % alphabet.length]; }).join("") + "7";
+  $("adminMemberPassword").value = password;
+  $("confirmAdminMemberPassword").value = password;
+  $("adminMemberPassword").type = "text";
+  $("confirmAdminMemberPassword").type = "text";
+  $("toggleAdminMemberPassword").textContent = "Hide password";
+}
+async function saveAdminMemberPassword(event) {
+  event.preventDefault();
+  const id = $("passwordMemberId").value;
+  const password = $("adminMemberPassword").value;
+  if (password !== $("confirmAdminMemberPassword").value) return toast("The two passwords do not match.", "error");
+  showLoading("Changing member password…");
+  try {
+    await api("setMemberPassword", { id: id, password: password });
+    if ($("memberPasswordDialog").open) $("memberPasswordDialog").close();
+    if (id === state.data.user.id) {
+      window.alert("Your administrator password was changed. Please sign in again with the new password.");
+      clearLocalSession();
+      showLogin();
+    } else {
+      await refreshData();
+      toast("Password changed. The member’s old password and sessions are no longer valid.", "success");
+    }
+  } catch (error) {
+    if (!handleSessionError(error)) toast(error.message, "error");
+  } finally { hideLoading(); }
+}
 async function resetMemberPassword(id) {
   if (!window.confirm("Generate a new temporary password for this member? Their old password will stop working and all existing sessions will be signed out.")) return;
   showLoading("Generating a temporary password…");
@@ -1455,7 +1509,7 @@ function renderAdmin() {
   $("settingMemoryPrintPages").value=String(memoryPrintPages());
   const configuredCategories=expenseCategoryConfig(), activeCategories=configuredCategories.filter(function(category){return category.active!==false;}); $("adminExpenseCategorySummary").textContent=plural(configuredCategories.length,"category","categories")+" · "+activeCategories.length+" active";
   const backup=state.data.backupStatus||{}; $("automaticBackupStatus").textContent=backup.automatic?"● Monthly backup enabled":"● Monthly backup needs setup"; $("automaticBackupStatus").classList.toggle("success",!!backup.automatic); $("lastBackupText").textContent=backup.lastBackupAt?("Last backup: "+new Date(backup.lastBackupAt).toLocaleString("en-IN")+(backup.lastBackupName?" · "+backup.lastBackupName:"")):"No backup created yet."; $("backupFolderLink").classList.toggle("hidden",!backup.folderUrl); if(backup.folderUrl)$("backupFolderLink").href=backup.folderUrl;
-  const labels={EXPENSES:"Exp",INCOME:"Income",TARGETS:"Targets",DATES:"Reminders",CALENDAR:"Calendar",PHOTOS:"Photos",EXPERIENCES:"Experiences",DIARY:"Diary",STICKY_WRITE:"Write sticky notes"}; const items=state.data.adminMembers||[]; $("memberCount").textContent=plural(items.length,"person","people"); $("memberList").innerHTML=items.map(function(x){const access=x.role==="ADMIN"?"All sections · Write sticky notes":(x.permissions||[]).map(function(key){return labels[key]||key;}).join(", ")||"No sections";return '<div class="member-row"><span class="avatar">'+h(x.name.charAt(0).toUpperCase())+'</span><div><strong>'+h(x.name)+'</strong><small>@'+h(x.username)+'</small></div><div><strong>'+h(x.email||"No email")+'</strong><small>Access: '+h(access)+'</small></div><span class="role-chip">'+(x.role==="ADMIN"?"ADMIN":"MEMBER")+'</span><span class="active-chip '+(!x.active?'inactive':'')+'">'+(x.active?'● Active':'● Inactive')+'</span><div class="member-actions"><button class="tiny-button" data-action="edit-member" data-id="'+h(x.id)+'">Edit</button><button class="tiny-button" data-action="reset-password" data-id="'+h(x.id)+'">New password</button></div></div>';}).join("");
+  const labels={EXPENSES:"Exp",INCOME:"Income",TARGETS:"Targets",DATES:"Reminders",CALENDAR:"Calendar",PHOTOS:"Photos",EXPERIENCES:"Experiences",DIARY:"Diary",STICKY_WRITE:"Write sticky notes"}; const items=state.data.adminMembers||[]; $("memberCount").textContent=plural(items.length,"person","people"); $("memberList").innerHTML=items.map(function(x){const access=x.role==="ADMIN"?"All sections · Write sticky notes":(x.permissions||[]).map(function(key){return labels[key]||key;}).join(", ")||"No sections";return '<div class="member-row"><span class="avatar">'+h(x.name.charAt(0).toUpperCase())+'</span><div><strong>'+h(x.name)+'</strong><small>@'+h(x.username)+'</small></div><div><strong>'+h(x.email||"No email")+'</strong><small>Access: '+h(access)+'</small></div><span class="role-chip">'+(x.role==="ADMIN"?"ADMIN":"MEMBER")+'</span><span class="active-chip '+(!x.active?'inactive':'')+'">'+(x.active?'● Active':'● Inactive')+'</span><div class="member-actions"><button class="tiny-button" data-action="edit-member" data-id="'+h(x.id)+'">Edit</button><button class="tiny-button" data-action="set-password" data-id="'+h(x.id)+'">Set/change password</button></div></div>';}).join("");
 }
 
 function renderStickyNotes() {

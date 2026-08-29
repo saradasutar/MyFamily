@@ -297,7 +297,7 @@ table { width: 100%; border-collapse: collapse; min-width: 790px; }th, td { padd
   .sticky-resize-handle { display:none; }.sticky-move-label { display:none; }
 }
 
-/* v1.0.21 right-side sticky-note utility drawer and write permission */
+/* v1.0.22 right-side sticky-note utility drawer and write permission */
 .sticky-readonly-notice { margin:14px 16px 0; padding:10px 12px; border:1px solid #d9d0ff; border-radius:12px; background:#f4f1ff; color:#4d35aa; font-size:.72rem; font-weight:750; line-height:1.45; }
 .sticky-readonly-chip { display:inline-flex; align-items:center; min-height:30px; padding:5px 9px; border:1px solid #d7d0ec; border-radius:9px; background:#f4f1fa; color:#655a7d; font-size:.64rem; font-weight:800; }
 body.sticky-drawer-open { overflow:hidden; }

@@ -1,6 +1,6 @@
 {
-  "version": "19.4.22",
-  "build": "20260827-19422-signout1",
-  "frontend": "19.4.22",
+  "version": "19.4.24",
+  "build": "20260829-19424-summarydecimal1",
+  "frontend": "19.4.24",
   "backendExpected": "3.17.8"
 }

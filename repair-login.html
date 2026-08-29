@@ -24,7 +24,7 @@
   </main>
   <script>
     (function(){
-      var build='20260827-19422-signout1';
+      var build='20260829-19424-summarydecimal1';
       try{
         ['portfolio_token','portfolio_username','myfinance_last_activity_at','myfinance_last_hidden_at'].forEach(function(key){localStorage.removeItem(key);});
         localStorage.setItem('myfinance_current_build_id',build);
@@ -48,7 +48,7 @@
 
       var go=function(){
         document.getElementById('status').textContent='Repair complete · opening SarNi…';
-        setTimeout(function(){location.replace('./?v=19422-signout1&repaired='+Date.now());},250);
+        setTimeout(function(){location.replace('./?v=19424-summarydecimal1&repaired='+Date.now());},250);
       };
       Promise.race([Promise.all(tasks),new Promise(function(resolve){setTimeout(resolve,2200);})]).then(go,go);
     })();

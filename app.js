@@ -2,7 +2,7 @@
 
 const CONFIG = window.FAMILY_DASHBOARD_CONFIG || {};
 const PLACEHOLDER_URL = "PASTE_YOUR_APPS_SCRIPT_WEB_APP_URL_HERE";
-const FRONTEND_VERSION = "1.0.22";
+const FRONTEND_VERSION = "1.0.23";
 const SAVED_USERNAME_KEY = "familyDashboardUsername";
 const SESSION_TOKEN_KEY = "familyDashboardToken";
 const IDLE_TIMEOUT_MS = 5 * 60 * 1000;
@@ -338,7 +338,32 @@ async function repairBrowserSession() {
   const url = new URL(window.location.href); url.searchParams.set("fresh", String(Date.now())); window.location.replace(url.toString());
 }
 function loadSavedUsername() { const saved = localStorage.getItem(SAVED_USERNAME_KEY) || ""; $("loginUsername").value = saved; $("rememberUsername").checked = !!saved || $("rememberUsername").checked; }
-function normalizeBootstrapData(data) { const result = data || {}; ["members","expenses","recurringExpenses","income","targets","importantDates","photos","experiences","diary","stickyNotes"].forEach(function (key) { if (!Array.isArray(result[key])) result[key] = []; }); if (!result.settings) result.settings = {}; if (!Array.isArray(result.expenseCategories) || !result.expenseCategories.length) result.expenseCategories = fallbackExpenseCategories(); return result; }
+function normalizeBootstrapData(data) { const result = data || {}; ["members","expenses","recurringExpenses","majorPlans","majorPlanPhases","income","targets","importantDates","photos","experiences","diary","stickyNotes"].forEach(function (key) { if (!Array.isArray(result[key])) result[key] = []; }); if (!result.settings) result.settings = {}; if (!Array.isArray(result.expenseCategories) || !result.expenseCategories.length) result.expenseCategories = fallbackExpenseCategories(); return result; }
+
+function majorPlanById(id) { return (state.data && state.data.majorPlans || []).find(function (item) { return item.id === id; }); }
+function majorPlanPhaseById(id) { return (state.data && state.data.majorPlanPhases || []).find(function (item) { return item.id === id; }); }
+function majorPlanPhases(planId, includeArchived) { return (state.data && state.data.majorPlanPhases || []).filter(function (item) { return item.majorPlanId === planId && (includeArchived || item.active !== false); }).sort(function (a,b) { return Number(a.sortOrder || 0) - Number(b.sortOrder || 0); }); }
+function activeMajorPlans() { return (state.data && state.data.majorPlans || []).filter(function (item) { return String(item.status || "ACTIVE").toUpperCase() === "ACTIVE"; }); }
+function majorPlanName(id) { const plan=majorPlanById(id); return plan ? plan.name : ""; }
+function majorPlanPhaseName(id) { const phase=majorPlanPhaseById(id); return phase ? phase.name : ""; }
+function majorPlanOptions(selected, includeClosed) {
+  const plans=(state.data && state.data.majorPlans || []).filter(function(item){return includeClosed || String(item.status||"ACTIVE").toUpperCase()==="ACTIVE";}).slice();
+  if (selected && !plans.some(function(item){return item.id===selected;})) { const selectedPlan=majorPlanById(selected); if(selectedPlan)plans.push(selectedPlan); }
+  return '<option value="">Not linked to a major plan</option>'+plans.map(function(item){return '<option value="'+h(item.id)+'"'+(item.id===selected?' selected':'')+'>'+h(item.name)+(String(item.status||"ACTIVE").toUpperCase()!=="ACTIVE"?' · '+h(item.status):'')+'</option>';}).join("");
+}
+function majorPlanPhaseOptions(planId, selected, includeArchived) {
+  const phases=majorPlanPhases(planId,includeArchived);
+  if(selected&&!phases.some(function(item){return item.id===selected;})){const phase=majorPlanPhaseById(selected);if(phase&&phase.majorPlanId===planId)phases.push(phase);}
+  return '<option value="">No phase</option>'+phases.map(function(item){return '<option value="'+h(item.id)+'"'+(item.id===selected?' selected':'')+'>'+h(item.name)+'</option>';}).join("");
+}
+function fillMajorPlanLinkSelects(planSelect, phaseSelect, selectedPlanId, selectedPhaseId, includeClosed) {
+  if(!planSelect||!phaseSelect)return;
+  planSelect.innerHTML=majorPlanOptions(selectedPlanId,includeClosed);
+  planSelect.value=selectedPlanId||"";
+  phaseSelect.innerHTML=majorPlanPhaseOptions(planSelect.value,selectedPhaseId,includeClosed);
+  phaseSelect.value=selectedPhaseId||"";
+  phaseSelect.disabled=!planSelect.value;
+}
 
 function expenseCategoryConfig() { return state.data && Array.isArray(state.data.expenseCategories) && state.data.expenseCategories.length ? state.data.expenseCategories : fallbackExpenseCategories(); }
 function activeExpenseCategories() { return expenseCategoryConfig().filter(function (category) { return category.active !== false; }); }
@@ -417,6 +442,11 @@ function bindDialogs() {
   $("expenseEntryType").addEventListener("change", syncExpenseEntryType);
   $("expenseCategory").addEventListener("change", function () { populateSubcategoryOptions("expenseCategory", "expenseSubcategory", "expenseSubcategoryOptions", true); });
   $("recurringExpenseCategory").addEventListener("change", function () { populateSubcategoryOptions("recurringExpenseCategory", "recurringExpenseSubcategory", "recurringExpenseSubcategoryOptions", true); });
+  $("expenseMajorPlan").addEventListener("change", function () { fillMajorPlanLinkSelects($("expenseMajorPlan"), $("expenseMajorPlanPhase"), $("expenseMajorPlan").value, "", false); });
+  $("recurringExpenseMajorPlan").addEventListener("change", function () { fillMajorPlanLinkSelects($("recurringExpenseMajorPlan"), $("recurringExpenseMajorPlanPhase"), $("recurringExpenseMajorPlan").value, "", false); });
+  $("addMajorPlanPhase").addEventListener("click", function () { addMajorPlanPhaseRow(); });
+  $("majorPlanAmount").addEventListener("input", updateMajorPlanPhaseBudgetSummary);
+  $("majorPlanPhaseList").addEventListener("input", updateMajorPlanPhaseBudgetSummary);
   $("expenseCategoryAddForm").addEventListener("submit", addExpenseCategoryDraft);
   $("saveExpenseCategories").addEventListener("click", saveExpenseCategories);
 }
@@ -425,15 +455,16 @@ function prepareNewDialog(id) {
   const defaults = {
     expenseDialog: ["expenseForm", "expenseId", "expenseDate"], recurringExpenseDialog: ["recurringExpenseForm", "recurringExpenseId", "recurringExpenseDueDate"], incomeDialog: ["incomeForm", "incomeId", "incomeDate"],
     dateDialog: ["dateForm", "importantDateId", "importantDateValue"], memberDialog: ["memberForm", "memberId", null],
-    experienceDialog: ["experienceForm", "experienceId", "experienceDate"], diaryDialog: ["diaryForm", "diaryId", "diaryDate"]
+    experienceDialog: ["experienceForm", "experienceId", "experienceDate"], diaryDialog: ["diaryForm", "diaryId", "diaryDate"], majorPlanDialog: ["majorPlanForm", "majorPlanId", "majorPlanStartDate"]
   };
   if (defaults[id]) {
     $(defaults[id][0]).reset();
     $(defaults[id][1]).value = "";
     if (defaults[id][2]) $(defaults[id][2]).value = todayIso();
   }
-  if (id === "expenseDialog") { $("expenseRecurringId").value = ""; $("expenseMarkPaidId").value = ""; $("expenseRecurringNote").textContent = ""; $("expenseRecurringNote").classList.add("hidden"); $("expenseEntryType").disabled = false; $("expenseEntryType").value = "REGULAR"; fillExpenseCategorySelect($("expenseCategory"), activeExpenseCategories().some(function(category){return category.name==="Home";}) ? "Home" : ""); populateSubcategoryOptions("expenseCategory", "expenseSubcategory", "expenseSubcategoryOptions", true); $("expenseDialogTitle").textContent = "Add paid expenditure"; syncExpenseEntryType(); }
-  if (id === "recurringExpenseDialog") { $("recurringExpenseDialogTitle").textContent = "Add regular payment"; fillExpenseCategorySelect($("recurringExpenseCategory"), activeExpenseCategories().some(function(category){return category.name==="Utilities";}) ? "Utilities" : ""); populateSubcategoryOptions("recurringExpenseCategory", "recurringExpenseSubcategory", "recurringExpenseSubcategoryOptions", true); $("recurringNotifyEveryone").checked = true; $("recurringRecipientChecks").classList.add("hidden"); renderRecurringRecipientChecks([]); }
+  if (id === "expenseDialog") { $("expenseRecurringId").value = ""; $("expenseMarkPaidId").value = ""; $("expenseRecurringNote").textContent = ""; $("expenseRecurringNote").classList.add("hidden"); $("expenseEntryType").disabled = false; $("expenseEntryType").value = "REGULAR"; fillExpenseCategorySelect($("expenseCategory"), activeExpenseCategories().some(function(category){return category.name==="Home";}) ? "Home" : ""); populateSubcategoryOptions("expenseCategory", "expenseSubcategory", "expenseSubcategoryOptions", true); fillMajorPlanLinkSelects($("expenseMajorPlan"),$("expenseMajorPlanPhase"),"","",false); $("expenseDialogTitle").textContent = "Add paid expenditure"; syncExpenseEntryType(); }
+  if (id === "recurringExpenseDialog") { $("recurringExpenseDialogTitle").textContent = "Add regular payment"; fillExpenseCategorySelect($("recurringExpenseCategory"), activeExpenseCategories().some(function(category){return category.name==="Utilities";}) ? "Utilities" : ""); populateSubcategoryOptions("recurringExpenseCategory", "recurringExpenseSubcategory", "recurringExpenseSubcategoryOptions", true); fillMajorPlanLinkSelects($("recurringExpenseMajorPlan"),$("recurringExpenseMajorPlanPhase"),"","",false); $("recurringNotifyEveryone").checked = true; $("recurringRecipientChecks").classList.add("hidden"); renderRecurringRecipientChecks([]); }
+  if (id === "majorPlanDialog") { $("majorPlanDialogTitle").textContent="Create major plan"; $("majorPlanStartDate").value=todayIso(); const target=new Date(); target.setFullYear(target.getFullYear()+1); $("majorPlanTargetDate").value=[target.getFullYear(),String(target.getMonth()+1).padStart(2,"0"),String(target.getDate()).padStart(2,"0")].join("-"); fillMemberSelect($("majorPlanOwner"),"ALL",true); $("majorPlanPhaseList").innerHTML=""; ["Planning / approvals","Main work","Finishing"].forEach(function(name){addMajorPlanPhaseRow({name:name,proposedAmount:""});}); updateMajorPlanPhaseBudgetSummary(); }
   if (id === "bulkExpenseDialog") $("bulkExpenseForm").reset();
   if (id === "incomeDialog") { $("incomeDialogTitle").textContent = "Add income"; fillMemberSelect($("incomeReceivedBy"), state.data.user.id); }
   if (id === "targetDialog") { $("targetForm").reset(); $("targetDueDate").value = todayIso(); fillMemberSelect($("targetOwner"), state.data.user.id, true); }
@@ -570,6 +601,7 @@ function bindForms() {
   $("loginForm").addEventListener("submit", login);
   $("expenseForm").addEventListener("submit", saveExpense);
   $("recurringExpenseForm").addEventListener("submit", saveRecurringExpense);
+  $("majorPlanForm").addEventListener("submit", saveMajorPlan);
   $("bulkExpenseForm").addEventListener("submit", importOldExpenses);
   $("expensePrintForm").addEventListener("submit", printExpenseRange);
   $("viewExpenseReport").addEventListener("click", viewExpenseRange);
@@ -591,7 +623,8 @@ function bindForms() {
 }
 
 function bindFilters() {
-  ["expenseMonth", "expenseStatusFilter", "expenseCategoryFilter", "expenseSubcategoryFilter", "expenseSendToFilter", "expenseAccountFilter", "expenseSearch"].forEach(function (id) { $(id).addEventListener("input", renderExpenses); });
+  ["expenseMonth", "expenseStatusFilter", "expenseCategoryFilter", "expenseSubcategoryFilter", "expenseMajorPlanFilter", "expenseSendToFilter", "expenseAccountFilter", "expenseSearch"].forEach(function (id) { $(id).addEventListener("input", renderExpenses); });
+  $("majorPlanStatusFilter").addEventListener("input", renderMajorPlans);
   ["incomeMonth", "incomeCategoryFilter", "incomeMemberFilter", "incomeSearch"].forEach(function (id) { $(id).addEventListener("input", renderIncome); });
   ["dateTypeFilter", "dateSearch"].forEach(function (id) { $(id).addEventListener("input", renderDates); });
   $("photoSearch").addEventListener("input", renderPhotos);
@@ -599,7 +632,7 @@ function bindFilters() {
   ["experienceYear", "experienceSearch"].forEach(function (id) { $(id).addEventListener("input", renderExperiences); });
   ["diaryMonth", "diaryWriterFilter", "diarySearch"].forEach(function (id) { $(id).addEventListener("input", renderDiary); });
   $("globalSearch").addEventListener("input", renderGlobalSearch);
-  $("exportExpenses").addEventListener("click", function () { exportCsv("family-expenditure.csv", filteredExpenses(), ["amount", "date", "status", "category", "subcategory", "sentTo", "fromAccount", "reason"], ["Amt (Rs.)", "Date", "Status", "Category", "Subcategory", "Send to", "From Acct", "Reason"]); });
+  $("exportExpenses").addEventListener("click", function () { exportCsv("family-expenditure.csv", filteredExpenses().map(function(item){return Object.assign({},item,{majorPlanName:majorPlanName(item.majorPlanId),majorPlanPhaseName:majorPlanPhaseName(item.majorPlanPhaseId)});}), ["amount", "date", "status", "category", "subcategory", "majorPlanName", "majorPlanPhaseName", "sentTo", "fromAccount", "reason"], ["Amt (Rs.)", "Date", "Status", "Category", "Subcategory", "Major plan", "Phase", "Send to", "From Acct", "Reason"]); });
   $("exportIncome").addEventListener("click", function () { exportCsv("family-income.csv", filteredIncome(), ["date", "source", "category", "receivedByName", "receivingMode", "amount"]); });
   $("printExpenses").addEventListener("click", function () { prepareExpensePrintDialog(); openDialog("expensePrintDialog"); });
   $("printIncome").addEventListener("click", function () { window.print(); });
@@ -607,7 +640,7 @@ function bindFilters() {
 }
 
 function bindExpenseColumnResize() {
-  const table = $("expenseTable"), columns = all("col", table), defaults = [125,115,105,145,145,170,170,300,180,98];
+  const table = $("expenseTable"), columns = all("col", table), defaults = [125,115,105,145,145,170,170,300,190,180,98];
   if (!table || !columns.length) return;
   let saved = [];
   try { saved = JSON.parse(localStorage.getItem(EXPENSE_COLUMN_WIDTHS_KEY) || "[]"); } catch (error) { saved = []; }
@@ -661,6 +694,14 @@ function bindActions() {
     if (action === "pay-recurring-expense") openRecurringPayment(id);
     if (action === "edit-recurring-expense") editRecurringExpense(id);
     if (action === "delete-recurring-expense") confirmDelete("deleteRecurringExpense", id, "Remove this regular payment schedule? Past paid expenditure will remain.");
+    if (action === "add-major-plan-expense") openMajorPlanExpense(id, false, button.dataset.phase || "");
+    if (action === "add-major-plan-preplanned") openMajorPlanExpense(id, true);
+    if (action === "edit-major-plan") editMajorPlan(id);
+    if (action === "print-major-plan") openMajorPlanReport(id, false);
+    if (action === "complete-major-plan") setMajorPlanStatus(id, "COMPLETED", "Complete this major plan? New linked expenditure will be stopped until it is reopened.");
+    if (action === "reopen-major-plan" || action === "restore-major-plan") setMajorPlanStatus(id, "ACTIVE", "Reopen this major plan for new expenditure?");
+    if (action === "archive-major-plan") setMajorPlanStatus(id, "ARCHIVED", "Archive this completed major plan? Its expenditure and reports will remain saved.");
+    if (action === "remove-major-plan-phase") removeMajorPlanPhaseRow(button);
     if (action === "edit-income") editIncome(id);
     if (action === "delete-income") confirmDelete("deleteIncome", id, "Delete this income entry?");
     if (action === "contribute") openContribution(id);
@@ -700,10 +741,15 @@ function bindActions() {
     }
   });
   document.addEventListener("change", function (event) {
-    if (!event.target.classList.contains("inline-expense-category")) return;
     const row = event.target.closest("tr");
-    const subcategory = row && row.querySelector(".inline-expense-subcategory");
-    if (subcategory) subcategory.innerHTML = expenseSubcategoryOptions(event.target.value, "", false);
+    if (event.target.classList.contains("inline-expense-category")) {
+      const subcategory = row && row.querySelector(".inline-expense-subcategory");
+      if (subcategory) subcategory.innerHTML = expenseSubcategoryOptions(event.target.value, "", false);
+    }
+    if (event.target.classList.contains("inline-expense-major-plan")) {
+      const phase = row && row.querySelector(".inline-expense-major-plan-phase");
+      if (phase) { phase.innerHTML=majorPlanPhaseOptions(event.target.value,"",false); phase.disabled=!event.target.value; }
+    }
   });
 }
 
@@ -801,6 +847,38 @@ async function logout() {
   try { if (token) sendLogoutBeacon(token); } catch (e) { /* local logout still succeeds */ }
 }
 
+function addMajorPlanPhaseRow(phase) {
+  const item=phase||{};
+  const row=document.createElement("div");
+  row.className="major-plan-phase-row"+(item.active===false?" archived":" ");
+  row.dataset.phaseId=item.id||"";
+  row.innerHTML='<span class="phase-drag" title="Phase order follows this list">↕</span><label>Phase name<input class="major-plan-phase-name" maxlength="80" required value="'+h(item.name||"")+'" placeholder="e.g. Foundation"></label><label>Phase budget<input class="major-plan-phase-amount" type="number" min="0" step="0.01" value="'+h(item.proposedAmount||"")+'" placeholder="0"></label><label class="phase-active-label"><input class="major-plan-phase-active" type="checkbox"'+(item.active===false?'':' checked')+'> Active</label><button class="danger-button" type="button" data-action="remove-major-plan-phase">'+(item.id?'Archive':'Remove')+'</button>';
+  $("majorPlanPhaseList").appendChild(row);
+  row.querySelector(".major-plan-phase-active").addEventListener("change",function(event){row.classList.toggle("archived",!event.target.checked);updateMajorPlanPhaseBudgetSummary();});
+  updateMajorPlanPhaseBudgetSummary();
+}
+function removeMajorPlanPhaseRow(button) {
+  const row=button.closest(".major-plan-phase-row"); if(!row)return;
+  if(row.dataset.phaseId){const active=row.querySelector(".major-plan-phase-active");active.checked=false;row.classList.add("archived");button.textContent="Archived";button.disabled=true;}
+  else row.remove();
+  updateMajorPlanPhaseBudgetSummary();
+}
+function updateMajorPlanPhaseBudgetSummary() {
+  if(!$("majorPlanPhaseBudgetSummary"))return;
+  const budget=Number($("majorPlanAmount").value||0);
+  const total=all(".major-plan-phase-row",$("majorPlanPhaseList")).filter(function(row){return row.querySelector(".major-plan-phase-active").checked;}).reduce(function(sum,row){return sum+Number(row.querySelector(".major-plan-phase-amount").value||0);},0);
+  const unallocated=budget-total;
+  $("majorPlanPhaseBudgetSummary").classList.toggle("over-budget",unallocated<0);
+  $("majorPlanPhaseBudgetSummary").textContent="Active phase budgets: "+money(total)+(budget?" · "+(unallocated>=0?"Unallocated "+money(unallocated):"Over budget by "+money(Math.abs(unallocated))):"");
+}
+async function saveMajorPlan(event) {
+  event.preventDefault();
+  const phases=all(".major-plan-phase-row",$("majorPlanPhaseList")).map(function(row){return {id:row.dataset.phaseId||"",name:row.querySelector(".major-plan-phase-name").value.trim(),proposedAmount:row.querySelector(".major-plan-phase-amount").value,active:row.querySelector(".major-plan-phase-active").checked};});
+  if(!phases.length||phases.some(function(phase){return !phase.name;}))return toast("Add at least one named project phase.","error");
+  const id=$("majorPlanId").value;
+  await mutate("saveMajorPlan",{id:id,name:$("majorPlanName").value.trim(),proposedAmount:$("majorPlanAmount").value,startDate:$("majorPlanStartDate").value,targetDate:$("majorPlanTargetDate").value,ownerId:$("majorPlanOwner").value,notes:$("majorPlanNotes").value.trim(),phases:phases},id?"Major plan updated.":"Major plan created. Add paid or preplanned expenditure from its card.","majorPlanDialog","Saving major plan…");
+}
+
 async function saveExpense(event) {
   event.preventDefault();
   const recurringId = $("expenseRecurringId").value;
@@ -810,7 +888,8 @@ async function saveExpense(event) {
     id: recurringId || plannedId || $("expenseId").value, date: $("expenseDate").value, amount: $("expenseAmount").value,
     category: $("expenseCategory").value, subcategory: $("expenseSubcategory").value.trim(),
     sentTo: $("expenseSendTo").value.trim(), fromAccount: $("expenseFromAccount").value.trim(),
-    reason: $("expenseReason").value.trim(), entryType: recurringId ? "RECURRING" : $("expenseEntryType").value
+    reason: $("expenseReason").value.trim(), entryType: recurringId ? "RECURRING" : $("expenseEntryType").value,
+    majorPlanId: $("expenseMajorPlan").value, majorPlanPhaseId: $("expenseMajorPlanPhase").value
   }, recurringId ? "Payment recorded and the next due date was calculated." : plannedId ? "Preplanned expenditure marked as paid." : "Expenditure saved.", "expenseDialog");
 }
 
@@ -826,7 +905,7 @@ async function saveRecurringExpense(event) {
     category: $("recurringExpenseCategory").value, subcategory: $("recurringExpenseSubcategory").value.trim(),
     sentTo: $("recurringExpenseSendTo").value.trim(), fromAccount: $("recurringExpenseFromAccount").value.trim(),
     reason: $("recurringExpenseReason").value.trim(), remindDays: $("recurringExpenseRemind").value,
-    recipientIds: recipients.join(",")
+    recipientIds: recipients.join(","), majorPlanId: $("recurringExpenseMajorPlan").value, majorPlanPhaseId: $("recurringExpenseMajorPlanPhase").value
   }, id ? "Regular payment updated." : "Regular payment added.", "recurringExpenseDialog");
 }
 
@@ -859,9 +938,11 @@ function prepareExpensePrintDialog() {
   $("expensePrintAccount").innerHTML = '<option value="">All accounts</option>' + accounts.map(function (value) { return '<option value="'+h(value)+'">'+h(value)+'</option>'; }).join("");
   $("expensePrintCategory").innerHTML = '<option value="">All categories</option>' + categories.map(function (value) { return '<option value="'+h(value)+'">'+h(value)+'</option>'; }).join("");
   $("expensePrintSubcategory").innerHTML = '<option value="">All subcategories</option>' + subcategories.map(function (value) { return '<option value="'+h(value)+'">'+h(value)+'</option>'; }).join("");
+  $("expensePrintMajorPlan").innerHTML = '<option value="">All major plans</option>' + (state.data.majorPlans||[]).map(function (plan) { return '<option value="'+h(plan.id)+'">'+h(plan.name)+'</option>'; }).join("");
   $("expensePrintStatus").value = $("expenseStatusFilter").value || "";
   $("expensePrintCategory").value = $("expenseCategoryFilter").value || "";
   $("expensePrintSubcategory").value = $("expenseSubcategoryFilter").value || "";
+  $("expensePrintMajorPlan").value = $("expenseMajorPlanFilter").value || "";
   $("expensePrintSendTo").value = $("expenseSendToFilter").value || "";
   $("expensePrintAccount").value = $("expenseAccountFilter").value || "";
   $("expensePrintSearch").value = $("expenseSearch").value || "";
@@ -872,26 +953,26 @@ function printExpenseRange(event) { event.preventDefault(); openExpenseRangeOutp
 
 function openExpenseRangeOutput(autoPrint) {
   const from = $("expensePrintFrom").value, to = $("expensePrintTo").value;
-  const status = $("expensePrintStatus").value, category = $("expensePrintCategory").value, subcategory = $("expensePrintSubcategory").value;
+  const status = $("expensePrintStatus").value, category = $("expensePrintCategory").value, subcategory = $("expensePrintSubcategory").value, majorPlanId=$("expensePrintMajorPlan").value;
   const recipient = $("expensePrintSendTo").value, account = $("expensePrintAccount").value, query = normalize($("expensePrintSearch").value);
   const density = ["comfortable","compact","minimum"].indexOf($("expensePrintDensity").value) >= 0 ? $("expensePrintDensity").value : "comfortable";
   if (!from || !to) return toast("Choose both From date and To date.", "error");
   if (from > to) return toast("From date cannot be later than To date.", "error");
   const items = state.data.expenses.map(normalizeExpense).filter(function (item) {
     const date = String(item.date || "").slice(0,10);
-    return date >= from && date <= to && (!status || item.status === status) && (!category || item.category === category) && (!subcategory || item.subcategory === subcategory) && (!recipient || item.sentTo === recipient) && (!account || item.fromAccount === account) && (!query || normalize([item.status,item.category,item.subcategory,item.sentTo,item.fromAccount,item.reason,item.date].join(" ")).includes(query));
+    return date >= from && date <= to && (!status || item.status === status) && (!category || item.category === category) && (!subcategory || item.subcategory === subcategory) && (!majorPlanId || item.majorPlanId===majorPlanId) && (!recipient || item.sentTo === recipient) && (!account || item.fromAccount === account) && (!query || normalize([item.status,item.category,item.subcategory,majorPlanName(item.majorPlanId),majorPlanPhaseName(item.majorPlanPhaseId),item.sentTo,item.fromAccount,item.reason,item.date].join(" ")).includes(query));
   }).sort(function (a,b) { return String(a.date).localeCompare(String(b.date)); });
   if (!items.length) return toast("No expenditure was found in the selected period.", "error");
 
   const paidTotal = items.filter(function(item){return item.status==="PAID";}).reduce(function (sum,item) { return sum + Number(item.amount || 0); }, 0);
   const plannedTotal = items.filter(function(item){return item.status==="PLANNED";}).reduce(function (sum,item) { return sum + Number(item.amount || 0); }, 0);
   const familyName = (state.data.settings && state.data.settings.familyName) || "Our Family Hub";
-  const appliedFilters = [status ? "Status: " + (status==="PLANNED"?"Preplanned":"Paid") : "", category ? "Category: " + category : "", subcategory ? "Subcategory: " + subcategory : "", recipient ? "Send to: " + recipient : "", account ? "From account: " + account : "", query ? "Search: " + $("expensePrintSearch").value.trim() : ""].filter(Boolean);
+  const appliedFilters = [status ? "Status: " + (status==="PLANNED"?"Preplanned":"Paid") : "", category ? "Category: " + category : "", subcategory ? "Subcategory: " + subcategory : "", majorPlanId ? "Major plan: "+majorPlanName(majorPlanId):"", recipient ? "Send to: " + recipient : "", account ? "From account: " + account : "", query ? "Search: " + $("expensePrintSearch").value.trim() : ""].filter(Boolean);
   const filterLine = appliedFilters.length ? '<p class="filters">'+h(appliedFilters.join(" · "))+'</p>' : "";
   const densityOptions = '<option value="density-comfortable"'+(density==="comfortable"?' selected':'')+'>Comfortable</option><option value="density-compact"'+(density==="compact"?' selected':'')+'>Compact</option><option value="density-minimum"'+(density==="minimum"?' selected':'')+'>Minimum width</option>';
-  const reportResizeScript = "<script>(function(){var table=document.getElementById('expenseReportTable'),cols=Array.from(table.querySelectorAll('col')),drag=null,presets={comfortable:[45,120,110,100,135,135,165,165,300],compact:[38,100,92,85,115,115,145,145,250],minimum:[32,82,78,72,95,95,120,120,205]};function applyWidths(widths){var total=0;cols.forEach(function(col,i){var width=Math.max(32,Math.min(620,Number(widths[i])||100));col.style.width=width+'px';total+=width;});table.style.width=total+'px';}window.setReportDensity=function(value){var name=String(value).replace('density-','');document.body.className='density-'+name;applyWidths(presets[name]||presets.comfortable);};document.addEventListener('pointerdown',function(event){var handle=event.target.closest('.report-resizer');if(!handle)return;event.preventDefault();var index=Number(handle.dataset.col);drag={index:index,startX:event.clientX,startWidth:parseFloat(cols[index].style.width)||100,handle:handle};handle.classList.add('dragging');});document.addEventListener('pointermove',function(event){if(!drag)return;event.preventDefault();var widths=cols.map(function(col){return parseFloat(col.style.width)||100;});widths[drag.index]=drag.startWidth+event.clientX-drag.startX;applyWidths(widths);});document.addEventListener('pointerup',function(){if(!drag)return;drag.handle.classList.remove('dragging');drag=null;});window.setReportDensity('density-"+density+"');})();<\/script>";
+  const reportResizeScript = "<script>(function(){var table=document.getElementById('expenseReportTable'),cols=Array.from(table.querySelectorAll('col')),drag=null,presets={comfortable:[45,120,110,100,135,135,165,140,140,165,300],compact:[38,100,92,85,115,115,140,115,115,145,250],minimum:[32,82,78,72,95,95,115,95,95,120,205]};function applyWidths(widths){var total=0;cols.forEach(function(col,i){var width=Math.max(32,Math.min(620,Number(widths[i])||100));col.style.width=width+'px';total+=width;});table.style.width=total+'px';}window.setReportDensity=function(value){var name=String(value).replace('density-','');document.body.className='density-'+name;applyWidths(presets[name]||presets.comfortable);};document.addEventListener('pointerdown',function(event){var handle=event.target.closest('.report-resizer');if(!handle)return;event.preventDefault();var index=Number(handle.dataset.col);drag={index:index,startX:event.clientX,startWidth:parseFloat(cols[index].style.width)||100,handle:handle};handle.classList.add('dragging');});document.addEventListener('pointermove',function(event){if(!drag)return;event.preventDefault();var widths=cols.map(function(col){return parseFloat(col.style.width)||100;});widths[drag.index]=drag.startWidth+event.clientX-drag.startX;applyWidths(widths);});document.addEventListener('pointerup',function(){if(!drag)return;drag.handle.classList.remove('dragging');drag=null;});window.setReportDensity('density-"+density+"');})();<\/script>";
   const rows = items.map(function (item,index) {
-    return "<tr class='"+h(item.status.toLowerCase())+"'><td class='serial'>"+(index+1)+"</td><td class='number'>"+h(money(item.amount))+"</td><td>"+h(formatDate(item.date))+"</td><td>"+h(item.status==="PLANNED"?"Preplanned":"Paid")+"</td><td>"+h(item.category)+"</td><td>"+h(item.subcategory)+"</td><td><strong>"+h(item.sentTo)+"</strong></td><td>"+h(item.fromAccount)+"</td><td class='reason'>"+h(item.reason)+"</td></tr>";
+    return "<tr class='"+h(item.status.toLowerCase())+"'><td class='serial'>"+(index+1)+"</td><td class='number'>"+h(money(item.amount))+"</td><td>"+h(formatDate(item.date))+"</td><td>"+h(item.status==="PLANNED"?"Preplanned":"Paid")+"</td><td>"+h(item.category)+"</td><td>"+h(item.subcategory)+"</td><td>"+h(majorPlanName(item.majorPlanId)||"—")+"</td><td>"+h(majorPlanPhaseName(item.majorPlanPhaseId)||"—")+"</td><td><strong>"+h(item.sentTo)+"</strong></td><td>"+h(item.fromAccount)+"</td><td class='reason'>"+h(item.reason)+"</td></tr>";
   }).join("");
   const reportWindow = window.open("", "familyExpenseReport", "width=1150,height=820");
   if (!reportWindow) return toast("Allow pop-ups for this page to view or print the selected expenditure.", "error");
@@ -899,7 +980,7 @@ function openExpenseRangeOutput(autoPrint) {
   reportWindow.document.open();
   reportWindow.document.write("<!doctype html><html><head><meta charset='utf-8'><title>Expenditure "+h(from)+" to "+h(to)+"</title><style>"+
     "@page{size:A4 landscape;margin:9mm}*{box-sizing:border-box}body{margin:0;color:#25243b;background:#f5f3fb;font:12px Arial,sans-serif}.report{max-width:1400px;margin:0 auto;padding:24px;background:white;min-height:100vh;overflow:auto}.screen-actions{position:sticky;top:0;z-index:5;display:flex;align-items:center;justify-content:flex-end;gap:8px;margin:-12px -12px 18px;padding:10px;background:rgba(255,255,255,.94);border-bottom:1px solid #e5e2ee}.screen-actions label{display:flex;align-items:center;gap:6px;color:#55566d;font-size:11px;font-weight:700}.screen-actions select,.screen-actions button{border:0;border-radius:9px;padding:9px 12px;font-weight:700}.screen-actions select{background:#f1eff7}.screen-actions button{cursor:pointer}.screen-actions .print{color:white;background:#6752c7}.screen-actions .close{color:#4d4e67;background:#efedf5}h1{margin:0 0 5px;font-size:24px}.family{color:#6752c7;font-size:12px;font-weight:700;letter-spacing:1px;text-transform:uppercase}.period{margin:0;color:#66687d}.filters{margin:5px 0 0;color:#5f537f;font-size:11px;font-weight:700}.summary{display:flex;gap:14px;margin:16px 0;padding:11px 14px;border:1px solid #dedbe9;border-radius:10px;background:#f7f5ff;font-weight:700}.summary strong{color:#4b389e}table{border-collapse:collapse;table-layout:fixed}th,td{padding:8px 7px;border:1px solid #dddce7;text-align:left;vertical-align:top;overflow-wrap:anywhere}th{position:relative;color:#3e3a62;background:#e9e4fb;font-size:10px;text-transform:uppercase}tbody tr:nth-child(odd){background:#fff}tbody tr:nth-child(even){background:#edf6ff}tbody tr.planned{background:#fff8dc}.serial{text-align:center}.number{text-align:right;font-variant-numeric:tabular-nums}.reason{line-height:1.4}.report-resizer{position:absolute;right:-5px;top:0;width:11px;height:100%;z-index:2;cursor:col-resize;touch-action:none}.report-resizer:after{content:'';position:absolute;left:5px;top:20%;width:2px;height:60%;background:#b7afd0;border-radius:2px}.report-resizer:hover:after,.report-resizer.dragging:after{background:#6752c7}.density-compact{font-size:10px}.density-compact th,.density-compact td{padding:5px 4px}.density-minimum{font-size:8px}.density-minimum th,.density-minimum td{padding:3px;line-height:1.15}.density-minimum th{font-size:8px}.foot{margin-top:12px;color:#858699;font-size:10px;text-align:right}@media print{body{background:white;-webkit-print-color-adjust:exact;print-color-adjust:exact}.report{max-width:none;padding:0;overflow:visible}.screen-actions{display:none}.report-resizer{display:none}}"+
-    "</style></head><body class='density-"+h(density)+"'><main class='report'><div class='screen-actions'><label>Column width <select onchange=\"setReportDensity(this.value)\">"+densityOptions+"</select></label><button class='close' type='button' onclick='window.close()'>Close view</button><button class='print' type='button' onclick='window.print()'>Print this report</button></div><div class='family'>"+h(familyName)+"</div><h1>Expenditure statement</h1><p class='period'>From "+h(formatDate(from))+" to "+h(formatDate(to))+"</p>"+filterLine+"<div class='summary'><span>"+h(plural(items.length,"entry","entries"))+"</span><span>Paid: <strong>"+h(money(paidTotal))+"</strong></span>"+(plannedTotal?"<span>Preplanned: <strong>"+h(money(plannedTotal))+"</strong></span>":"")+"</div><table id='expenseReportTable'><colgroup>"+Array(9).fill("<col>").join("")+"</colgroup><thead><tr>"+["Sl.","Amt (Rs.)","Date","Status","Category","Subcategory","Send to","From Acct","Reason"].map(function(label,index){return "<th>"+h(label)+"<span class='report-resizer' data-col='"+index+"'></span></th>";}).join("")+"</tr></thead><tbody>"+rows+"</tbody></table><p class='foot'>Prepared "+h(new Date().toLocaleString("en-IN"))+" · FE v"+h(FRONTEND_VERSION)+" · BE v"+h(state.data.backendVersion||state.backendVersion||"—")+"</p></main>"+reportResizeScript+autoPrintScript+"</body></html>");
+    "</style></head><body class='density-"+h(density)+"'><main class='report'><div class='screen-actions'><label>Column width <select onchange=\"setReportDensity(this.value)\">"+densityOptions+"</select></label><button class='close' type='button' onclick='window.close()'>Close view</button><button class='print' type='button' onclick='window.print()'>Print this report</button></div><div class='family'>"+h(familyName)+"</div><h1>Expenditure statement</h1><p class='period'>From "+h(formatDate(from))+" to "+h(formatDate(to))+"</p>"+filterLine+"<div class='summary'><span>"+h(plural(items.length,"entry","entries"))+"</span><span>Paid: <strong>"+h(money(paidTotal))+"</strong></span>"+(plannedTotal?"<span>Preplanned: <strong>"+h(money(plannedTotal))+"</strong></span>":"")+"</div><table id='expenseReportTable'><colgroup>"+Array(11).fill("<col>").join("")+"</colgroup><thead><tr>"+["Sl.","Amt (Rs.)","Date","Status","Category","Subcategory","Major plan","Phase","Send to","From Acct","Reason"].map(function(label,index){return "<th>"+h(label)+"<span class='report-resizer' data-col='"+index+"'></span></th>";}).join("")+"</tr></thead><tbody>"+rows+"</tbody></table><p class='foot'>Prepared "+h(new Date().toLocaleString("en-IN"))+" · FE v"+h(FRONTEND_VERSION)+" · BE v"+h(state.data.backendVersion||state.backendVersion||"—")+"</p></main>"+reportResizeScript+autoPrintScript+"</body></html>");
   reportWindow.document.close();
   $("expensePrintDialog").close();
 }
@@ -1144,21 +1225,30 @@ async function confirmDelete(action, id, message) { if (window.confirm(message))
 
 function editExpense(id) {
   const item = state.data.expenses.find(function (x) { return x.id === id; }); if (!item) return;
-  const expense = normalizeExpense(item); prepareNewDialog("expenseDialog"); $("expenseId").value = expense.id; $("expenseEntryType").value = expense.status === "PLANNED" ? "PREPLANNED" : (expense.entryType === "PREPLANNED" ? "PREPLANNED" : "REGULAR"); $("expenseDate").value = expense.date; $("expenseAmount").value = expense.amount; fillExpenseCategorySelect($("expenseCategory"), expense.category); fillExpenseSubcategorySelect($("expenseSubcategory"), expense.category, expense.subcategory); $("expenseSendTo").value = expense.sentTo; $("expenseFromAccount").value = expense.fromAccount; $("expenseReason").value = expense.reason; $("expenseDialogTitle").textContent = "Edit expenditure"; syncExpenseEntryType(); openDialog("expenseDialog");
+  const expense = normalizeExpense(item); prepareNewDialog("expenseDialog"); $("expenseId").value = expense.id; $("expenseEntryType").value = expense.status === "PLANNED" ? "PREPLANNED" : (expense.entryType === "PREPLANNED" ? "PREPLANNED" : "REGULAR"); $("expenseDate").value = expense.date; $("expenseAmount").value = expense.amount; fillExpenseCategorySelect($("expenseCategory"), expense.category); fillExpenseSubcategorySelect($("expenseSubcategory"), expense.category, expense.subcategory); fillMajorPlanLinkSelects($("expenseMajorPlan"),$("expenseMajorPlanPhase"),expense.majorPlanId||"",expense.majorPlanPhaseId||"",true); $("expenseSendTo").value = expense.sentTo; $("expenseFromAccount").value = expense.fromAccount; $("expenseReason").value = expense.reason; $("expenseDialogTitle").textContent = "Edit expenditure"; syncExpenseEntryType(); openDialog("expenseDialog");
 }
 function openPlannedPayment(id) {
   const item = state.data.expenses.find(function (x) { return x.id === id; }); if (!item) return;
-  const expense = normalizeExpense(item); prepareNewDialog("expenseDialog"); $("expenseMarkPaidId").value = expense.id; $("expenseEntryType").value = "REGULAR"; $("expenseEntryType").disabled = true; $("expenseDate").value = todayIso(); $("expenseAmount").value = expense.amount; fillExpenseCategorySelect($("expenseCategory"), expense.category); fillExpenseSubcategorySelect($("expenseSubcategory"), expense.category, expense.subcategory); $("expenseSendTo").value = expense.sentTo; $("expenseFromAccount").value = expense.fromAccount; $("expenseReason").value = expense.reason; $("expenseDialogTitle").textContent = "Mark preplanned expenditure as paid"; $("expenseRecurringNote").textContent = "Planned for " + formatDate(expense.date) + ". Confirm the actual payment date and amount."; $("expenseRecurringNote").classList.remove("hidden"); syncExpenseEntryType(); openDialog("expenseDialog");
+  const expense = normalizeExpense(item); prepareNewDialog("expenseDialog"); $("expenseMarkPaidId").value = expense.id; $("expenseEntryType").value = "REGULAR"; $("expenseEntryType").disabled = true; $("expenseDate").value = todayIso(); $("expenseAmount").value = expense.amount; fillExpenseCategorySelect($("expenseCategory"), expense.category); fillExpenseSubcategorySelect($("expenseSubcategory"), expense.category, expense.subcategory); fillMajorPlanLinkSelects($("expenseMajorPlan"),$("expenseMajorPlanPhase"),expense.majorPlanId||"",expense.majorPlanPhaseId||"",true); $("expenseSendTo").value = expense.sentTo; $("expenseFromAccount").value = expense.fromAccount; $("expenseReason").value = expense.reason; $("expenseDialogTitle").textContent = "Mark preplanned expenditure as paid"; $("expenseRecurringNote").textContent = "Planned for " + formatDate(expense.date) + ". Confirm the actual payment date and amount."; $("expenseRecurringNote").classList.remove("hidden"); syncExpenseEntryType(); openDialog("expenseDialog");
 }
 function openRecurringPayment(id) {
   const item = state.data.recurringExpenses.find(function (x) { return x.id === id; }); if (!item) return;
-  prepareNewDialog("expenseDialog"); $("expenseRecurringId").value = item.id; $("expenseEntryType").value = "REGULAR"; $("expenseEntryType").disabled = true; $("expenseDate").value = todayIso(); $("expenseAmount").value = Number(item.estimatedAmount || 0) || ""; fillExpenseCategorySelect($("expenseCategory"), item.category); fillExpenseSubcategorySelect($("expenseSubcategory"), item.category, item.subcategory || "General"); $("expenseSendTo").value = item.sentTo; $("expenseFromAccount").value = item.fromAccount; $("expenseReason").value = item.reason; $("expenseDialogTitle").textContent = "Mark “" + item.title + "” as paid"; $("expenseRecurringNote").textContent = "Due " + formatDate(item.nextDueDate) + ". You can change the actual amount or payment details before saving."; $("expenseRecurringNote").classList.remove("hidden"); syncExpenseEntryType(); openDialog("expenseDialog");
+  prepareNewDialog("expenseDialog"); $("expenseRecurringId").value = item.id; $("expenseEntryType").value = "REGULAR"; $("expenseEntryType").disabled = true; $("expenseDate").value = todayIso(); $("expenseAmount").value = Number(item.estimatedAmount || 0) || ""; fillExpenseCategorySelect($("expenseCategory"), item.category); fillExpenseSubcategorySelect($("expenseSubcategory"), item.category, item.subcategory || "General"); fillMajorPlanLinkSelects($("expenseMajorPlan"),$("expenseMajorPlanPhase"),item.majorPlanId||"",item.majorPlanPhaseId||"",true); $("expenseSendTo").value = item.sentTo; $("expenseFromAccount").value = item.fromAccount; $("expenseReason").value = item.reason; $("expenseDialogTitle").textContent = "Mark “" + item.title + "” as paid"; $("expenseRecurringNote").textContent = "Due " + formatDate(item.nextDueDate) + ". You can change the actual amount or payment details before saving."; $("expenseRecurringNote").classList.remove("hidden"); syncExpenseEntryType(); openDialog("expenseDialog");
 }
 function editRecurringExpense(id) {
   const item = state.data.recurringExpenses.find(function (x) { return x.id === id; }); if (!item) return;
-  prepareNewDialog("recurringExpenseDialog"); $("recurringExpenseId").value = item.id; $("recurringExpenseTitle").value = item.title; $("recurringExpenseAmount").value = Number(item.estimatedAmount || 0) || ""; $("recurringExpenseFrequency").value = item.frequency; $("recurringExpenseDueDate").value = item.nextDueDate; fillExpenseCategorySelect($("recurringExpenseCategory"), item.category); fillExpenseSubcategorySelect($("recurringExpenseSubcategory"), item.category, item.subcategory || "General"); $("recurringExpenseSendTo").value = item.sentTo; $("recurringExpenseFromAccount").value = item.fromAccount; $("recurringExpenseReason").value = item.reason; $("recurringExpenseRemind").value = item.remindDays || "7,1,0";
+  prepareNewDialog("recurringExpenseDialog"); $("recurringExpenseId").value = item.id; $("recurringExpenseTitle").value = item.title; $("recurringExpenseAmount").value = Number(item.estimatedAmount || 0) || ""; $("recurringExpenseFrequency").value = item.frequency; $("recurringExpenseDueDate").value = item.nextDueDate; fillExpenseCategorySelect($("recurringExpenseCategory"), item.category); fillExpenseSubcategorySelect($("recurringExpenseSubcategory"), item.category, item.subcategory || "General"); fillMajorPlanLinkSelects($("recurringExpenseMajorPlan"),$("recurringExpenseMajorPlanPhase"),item.majorPlanId||"",item.majorPlanPhaseId||"",true); $("recurringExpenseSendTo").value = item.sentTo; $("recurringExpenseFromAccount").value = item.fromAccount; $("recurringExpenseReason").value = item.reason; $("recurringExpenseRemind").value = item.remindDays || "7,1,0";
   const ids = String(item.recipientIds || "ALL").split(","); const everyone = ids.indexOf("ALL") >= 0; $("recurringNotifyEveryone").checked = everyone; $("recurringRecipientChecks").classList.toggle("hidden", everyone); renderRecurringRecipientChecks(ids); $("recurringExpenseDialogTitle").textContent = "Edit regular payment"; openDialog("recurringExpenseDialog");
 }
+function openMajorPlanExpense(id, planned, phaseId) {
+  const plan=majorPlanById(id); if(!plan||String(plan.status||"ACTIVE").toUpperCase()!=="ACTIVE")return toast("Reopen this major plan before adding expenditure.","error");
+  prepareNewDialog("expenseDialog"); $("expenseEntryType").value=planned?"PREPLANNED":"REGULAR"; fillMajorPlanLinkSelects($("expenseMajorPlan"),$("expenseMajorPlanPhase"),plan.id,phaseId||"",false); syncExpenseEntryType(); $("expenseDialogTitle").textContent=(planned?"Add preplanned expenditure · ":"Add paid expenditure · ")+plan.name+(phaseId?" · "+majorPlanPhaseName(phaseId):""); openDialog("expenseDialog");
+}
+function editMajorPlan(id) {
+  const plan=majorPlanById(id); if(!plan||!isAdmin())return;
+  prepareNewDialog("majorPlanDialog"); $("majorPlanId").value=plan.id; $("majorPlanName").value=plan.name; $("majorPlanAmount").value=plan.proposedAmount; $("majorPlanStartDate").value=plan.startDate; $("majorPlanTargetDate").value=plan.targetDate; fillMemberSelect($("majorPlanOwner"),plan.ownerId||"ALL",true); $("majorPlanNotes").value=plan.notes||""; $("majorPlanPhaseList").innerHTML=""; majorPlanPhases(plan.id,true).forEach(addMajorPlanPhaseRow); $("majorPlanDialogTitle").textContent="Edit major plan"; updateMajorPlanPhaseBudgetSummary(); openDialog("majorPlanDialog");
+}
+async function setMajorPlanStatus(id,status,message) { if(!isAdmin()||!window.confirm(message))return; await mutate("setMajorPlanStatus",{id:id,status:status},status==="COMPLETED"?"Major plan completed and preserved in history.":status==="ARCHIVED"?"Major plan archived.":"Major plan reopened."); }
 function editIncome(id) {
   const item = state.data.income.find(function (x) { return x.id === id; }); if (!item) return;
   prepareNewDialog("incomeDialog"); $("incomeId").value = item.id; $("incomeDate").value = item.date; $("incomeAmount").value = item.amount; $("incomeSource").value = item.source; $("incomeCategory").value = item.category; fillMemberSelect($("incomeReceivedBy"), item.receivedBy); $("incomeMode").value = item.receivingMode; $("incomeDialogTitle").textContent = "Edit income"; openDialog("incomeDialog");
@@ -1308,9 +1398,10 @@ function renderAll() {
   $("userAvatar").textContent = state.data.user.name.charAt(0).toUpperCase();
   $("adminNav").classList.toggle("hidden", !isAdmin());
   $("manageExpenseCategoriesQuick").classList.toggle("hidden", !isAdmin());
+  $("createMajorPlan").classList.toggle("hidden", !isAdmin());
   if (!isAdmin() && state.view === "admin") goTo("home");
   applyAccessUI();
-  populateFilters(); renderHome(); renderExpenses(); renderRecurringExpenses(); renderIncome(); renderTargets(); renderDates(); renderPhotos(); renderExperiences(); renderDiary(); renderCalendar(); renderStickyNotes(); if (isAdmin()) renderAdmin();
+  populateFilters(); renderHome(); renderMajorPlans(); renderExpenses(); renderRecurringExpenses(); renderIncome(); renderTargets(); renderDates(); renderPhotos(); renderExperiences(); renderDiary(); renderCalendar(); renderStickyNotes(); if (isAdmin()) renderAdmin();
 }
 function applyAccessUI() {
   all("[data-module]").forEach(function (el) { el.classList.toggle("hidden", !hasModuleAccess(el.dataset.module)); });
@@ -1330,7 +1421,9 @@ function populateFilters() {
   const subcategories = Array.from(new Set(configuredSubcategories.concat(state.data.expenses.map(function (x) { return normalizeExpense(x).subcategory; })).filter(Boolean)));
   const incomeCats = Array.from(new Set(state.data.income.map(function (x) { return x.category; }))).sort();
   fillOptions($("expenseSendToFilter"), recipients, "All recipients"); fillOptions($("expenseAccountFilter"), accounts, "All accounts"); fillOptions($("expenseCategoryFilter"), categories, "All categories"); fillOptions($("expenseSubcategoryFilter"), subcategories, "All subcategories"); fillOptions($("incomeCategoryFilter"), incomeCats, "All categories");
+  const currentPlanFilter=$("expenseMajorPlanFilter").value; $("expenseMajorPlanFilter").innerHTML='<option value="">All major plans</option>'+(state.data.majorPlans||[]).map(function(plan){return '<option value="'+h(plan.id)+'">'+h(plan.name)+(String(plan.status||"ACTIVE").toUpperCase()==="ARCHIVED"?' · Archived':'')+'</option>';}).join(""); if(majorPlanById(currentPlanFilter))$("expenseMajorPlanFilter").value=currentPlanFilter;
   fillExpenseCategorySelect($("expenseCategory"), $("expenseCategory").value); fillExpenseCategorySelect($("recurringExpenseCategory"), $("recurringExpenseCategory").value);
+  fillMajorPlanLinkSelects($("expenseMajorPlan"),$("expenseMajorPlanPhase"),$("expenseMajorPlan").value,$("expenseMajorPlanPhase").value,false); fillMajorPlanLinkSelects($("recurringExpenseMajorPlan"),$("recurringExpenseMajorPlanPhase"),$("recurringExpenseMajorPlan").value,$("recurringExpenseMajorPlanPhase").value,false);
   fillMemberSelect($("incomeReceivedBy"), $("incomeReceivedBy").value || state.data.user.id); fillMemberSelect($("targetOwner"), $("targetOwner").value || state.data.user.id, true);
   renderRecipientChecks([]); renderRecurringRecipientChecks([]);
   const years = Array.from(new Set(state.data.experiences.map(function (x) { return String(x.experienceDate).slice(0,4); }))).filter(Boolean).sort().reverse(); const selectedYear = $("experienceYear").value; fillOptions($("experienceYear"), years, "All years"); $("experienceYear").value = years.indexOf(selectedYear) >= 0 ? selectedYear : "";
@@ -1380,7 +1473,45 @@ function renderActivity() {
 }
 
 function normalizeExpense(item) { const entryType=String(item.entryType||"REGULAR").toUpperCase(); return Object.assign({}, item, { sentTo: item.sentTo || item.description || "", fromAccount: item.fromAccount || item.paymentMode || "", reason: item.reason || item.description || "", entryType: entryType, category: item.category || (entryType==="OLD"?"Old expenditure":entryType==="RECURRING"?"Regular payment":"Other"), subcategory: item.subcategory || "General", status: String(item.status || (entryType==="PREPLANNED"?"PLANNED":"PAID")).toUpperCase() }); }
-function filteredExpenses() { const month=$("expenseMonth").value,status=$("expenseStatusFilter").value,category=$("expenseCategoryFilter").value,subcategory=$("expenseSubcategoryFilter").value,recipient=$("expenseSendToFilter").value,account=$("expenseAccountFilter").value,q=normalize($("expenseSearch").value); return state.data.expenses.map(normalizeExpense).filter(function(x){return (!month||String(x.date).slice(0,7)===month)&&(!status||x.status===status)&&(!category||x.category===category)&&(!subcategory||x.subcategory===subcategory)&&(!recipient||x.sentTo===recipient)&&(!account||x.fromAccount===account)&&(!q||normalize([x.status,x.category,x.subcategory,x.sentTo,x.fromAccount,x.reason,x.date].join(" ")).includes(q));}); }
+function majorPlanTotals(plan) {
+  const entries=(state.data.expenses||[]).map(normalizeExpense).filter(function(item){return item.majorPlanId===plan.id;});
+  const paid=entries.filter(function(item){return item.status==="PAID";}).reduce(function(sum,item){return sum+Number(item.amount||0);},0);
+  const planned=entries.filter(function(item){return item.status==="PLANNED";}).reduce(function(sum,item){return sum+Number(item.amount||0);},0);
+  const budget=Number(plan.proposedAmount||0);
+  return {entries:entries,paid:paid,planned:planned,budget:budget,remaining:budget-paid,committedRemaining:budget-paid-planned,pct:budget?Math.round(paid/budget*100):0};
+}
+function renderMajorPlans() {
+  const filter=$("majorPlanStatusFilter").value;
+  const allPlans=(state.data.majorPlans||[]);
+  const plans=allPlans.filter(function(plan){const status=String(plan.status||"ACTIVE").toUpperCase();return filter?status===filter:status!=="ARCHIVED";});
+  const active=allPlans.filter(function(plan){return String(plan.status||"ACTIVE").toUpperCase()==="ACTIVE";});
+  const totals=active.reduce(function(result,plan){const calc=majorPlanTotals(plan);result.budget+=calc.budget;result.paid+=calc.paid;result.planned+=calc.planned;return result;},{budget:0,paid:0,planned:0});
+  $("majorPlanCount").textContent=plural(plans.length,"plan");
+  $("majorPlanSummary").innerHTML=active.length?'<span><small>Active plans</small><strong>'+active.length+'</strong></span><span><small>Proposed</small><strong>'+h(money(totals.budget))+'</strong></span><span><small>Paid actual</small><strong>'+h(money(totals.paid))+'</strong></span><span><small>Preplanned</small><strong>'+h(money(totals.planned))+'</strong></span>':'';
+  $("majorPlanGrid").innerHTML=plans.map(function(plan){
+    const status=String(plan.status||"ACTIVE").toUpperCase(),calc=majorPlanTotals(plan),bar=Math.max(0,Math.min(100,calc.pct));
+    const phases=majorPlanPhases(plan.id,true);
+    const phaseRows=phases.map(function(phase){const linked=calc.entries.filter(function(item){return item.majorPlanPhaseId===phase.id;}),actual=linked.filter(function(item){return item.status==="PAID";}).reduce(function(sum,item){return sum+Number(item.amount||0);},0),planned=linked.filter(function(item){return item.status==="PLANNED";}).reduce(function(sum,item){return sum+Number(item.amount||0);},0),phaseBudget=Number(phase.proposedAmount||0),phasePct=phaseBudget?Math.round(actual/phaseBudget*100):0;return '<div class="major-plan-phase-progress'+(phase.active===false?' archived':'')+'"><div><strong>'+h(phase.name)+'</strong>'+(phase.active===false?'<em>Archived phase</em>':'')+(status==="ACTIVE"&&phase.active!==false?'<button class="phase-add-expense" data-action="add-major-plan-expense" data-id="'+h(plan.id)+'" data-phase="'+h(phase.id)+'">＋ Add here</button>':'')+'</div><span>'+h(money(actual))+' paid</span><span>'+h(money(planned))+' planned</span><span>'+h(phaseBudget?phasePct+'% of '+money(phaseBudget):'No phase budget')+'</span></div>';}).join("");
+    let actions='<button class="tiny-button" data-action="print-major-plan" data-id="'+h(plan.id)+'">▧ View / print</button>';
+    if(status==="ACTIVE")actions='<button class="primary-button" data-action="add-major-plan-expense" data-id="'+h(plan.id)+'">＋ Paid expense</button><button class="tiny-button" data-action="add-major-plan-preplanned" data-id="'+h(plan.id)+'">◷ Preplanned</button>'+actions+(isAdmin()?'<button class="tiny-button" data-action="edit-major-plan" data-id="'+h(plan.id)+'">Edit plan</button><button class="tiny-button complete-plan" data-action="complete-major-plan" data-id="'+h(plan.id)+'">✓ Complete</button>':'');
+    else if(status==="COMPLETED"&&isAdmin())actions+='<button class="tiny-button" data-action="reopen-major-plan" data-id="'+h(plan.id)+'">Reopen</button><button class="danger-button" data-action="archive-major-plan" data-id="'+h(plan.id)+'">Archive</button>';
+    else if(status==="ARCHIVED"&&isAdmin())actions+='<button class="tiny-button" data-action="restore-major-plan" data-id="'+h(plan.id)+'">Restore</button>';
+    return '<article class="major-plan-card status-'+h(status.toLowerCase())+'"><header><div><span class="major-plan-status">'+h(status)+'</span><h4>'+h(plan.name)+'</h4><p>'+h(formatDate(plan.startDate))+' → '+h(formatDate(plan.targetDate))+' · '+h(plan.ownerId==="ALL"?"Whole family":memberName(plan.ownerId))+'</p></div><strong>'+h(money(calc.budget))+'</strong></header><div class="major-plan-progress-track"><i style="width:'+bar+'%"></i></div><div class="major-plan-metrics"><span><small>Paid actual</small><strong>'+h(money(calc.paid))+'</strong></span><span><small>Preplanned</small><strong>'+h(money(calc.planned))+'</strong></span><span><small>Remaining</small><strong>'+h(money(calc.remaining))+'</strong></span><span class="'+(calc.committedRemaining<0?'over-budget':'')+'"><small>After commitments</small><strong>'+h(money(calc.committedRemaining))+'</strong></span><span><small>Used</small><strong>'+h(calc.pct)+'%</strong></span></div>'+(plan.notes?'<p class="major-plan-notes">'+h(plan.notes)+'</p>':'')+'<details class="major-plan-phase-details" open><summary>Phase progress · '+h(plural(phases.length,"phase"))+'</summary><div>'+phaseRows+'</div></details><div class="major-plan-actions">'+actions+'</div><footer>'+h(plural(calc.entries.length,"linked expense","linked expenses"))+' · These records are included once in Family Expenditure.</footer></article>';
+  }).join("");
+  $("majorPlanEmpty").classList.toggle("hidden",plans.length>0);
+}
+function openMajorPlanReport(id,autoPrint) {
+  const plan=majorPlanById(id); if(!plan)return;
+  const calc=majorPlanTotals(plan),phases=majorPlanPhases(plan.id,true),familyName=(state.data.settings&&state.data.settings.familyName)||"Our Family Hub";
+  const phaseRows=phases.map(function(phase,index){const linked=calc.entries.filter(function(item){return item.majorPlanPhaseId===phase.id;}),paid=linked.filter(function(item){return item.status==="PAID";}).reduce(function(sum,item){return sum+Number(item.amount||0);},0),planned=linked.filter(function(item){return item.status==="PLANNED";}).reduce(function(sum,item){return sum+Number(item.amount||0);},0),budget=Number(phase.proposedAmount||0);return '<tr><td>'+(index+1)+'</td><td><strong>'+h(phase.name)+'</strong></td><td class="number">'+h(money(budget))+'</td><td class="number">'+h(money(paid))+'</td><td class="number">'+h(money(planned))+'</td><td class="number">'+h(money(budget-paid))+'</td></tr>';}).join("");
+  const expenseRows=calc.entries.slice().sort(function(a,b){return String(a.date).localeCompare(String(b.date));}).map(function(item,index){return '<tr class="'+h(item.status.toLowerCase())+'"><td>'+(index+1)+'</td><td>'+h(formatDate(item.date))+'</td><td>'+h(item.status==="PLANNED"?"Preplanned":"Paid")+'</td><td>'+h(majorPlanPhaseName(item.majorPlanPhaseId)||"Unassigned")+'</td><td>'+h(item.category)+' · '+h(item.subcategory)+'</td><td>'+h(item.sentTo)+'</td><td>'+h(item.fromAccount)+'</td><td>'+h(item.reason)+'</td><td class="number"><strong>'+h(money(item.amount))+'</strong></td></tr>';}).join("");
+  const reportWindow=window.open("","majorPlanReport","width=1180,height=850"); if(!reportWindow)return toast("Allow pop-ups to view or print this major-plan report.","error");
+  const autoPrintScript=autoPrint?"<script>window.onload=function(){setTimeout(function(){window.print();},200)};<\/script>":"";
+  reportWindow.document.open();
+  reportWindow.document.write("<!doctype html><html><head><meta charset='utf-8'><title>"+h(plan.name)+" · Major Plan</title><style>@page{size:A4 landscape;margin:9mm}*{box-sizing:border-box}body{margin:0;background:#f3f1f8;color:#24243a;font:11px Arial,sans-serif;-webkit-print-color-adjust:exact;print-color-adjust:exact}.report{max-width:1200px;margin:auto;padding:24px;background:#fff;min-height:100vh}.actions{position:sticky;top:0;display:flex;justify-content:flex-end;gap:8px;padding:8px;background:#fff;border-bottom:1px solid #ddd}.actions button{border:0;border-radius:8px;padding:9px 14px;font-weight:700;cursor:pointer}.print{background:#6752c7;color:white}h1{margin:5px 0;font-size:25px}.family{color:#6752c7;font-weight:800;letter-spacing:1px}.meta{color:#69697e}.status{display:inline-block;padding:4px 8px;border-radius:99px;background:#eeeafa;color:#554198;font-weight:800}.summary{display:grid;grid-template-columns:repeat(5,1fr);gap:8px;margin:16px 0}.summary span{padding:10px;border:1px solid #dedbe9;border-radius:10px;background:#f8f7fc}.summary small{display:block;color:#737287}.summary strong{display:block;margin-top:4px;font-size:15px}h2{margin:18px 0 8px;font-size:16px}table{width:100%;border-collapse:collapse;table-layout:fixed}th,td{border:1px solid #dedde7;padding:6px;vertical-align:top;overflow-wrap:anywhere}th{background:#e9e4fb;text-transform:uppercase;font-size:9px}tbody tr:nth-child(even){background:#edf6ff}tr.planned{background:#fff7d7}.number{text-align:right}.notes{padding:10px;border-left:4px solid #6752c7;background:#f7f5ff}.foot{text-align:right;color:#858597;margin-top:12px}@media print{body{background:#fff}.report{padding:0;max-width:none}.actions{display:none}}</style></head><body><main class='report'><div class='actions'><button onclick='window.close()'>Close view</button><button class='print' onclick='window.print()'>Print project report</button></div><div class='family'>"+h(familyName)+" · MAJOR EXPENDITURE PLAN</div><h1>"+h(plan.name)+"</h1><p class='meta'><span class='status'>"+h(String(plan.status||"ACTIVE").toUpperCase())+"</span> · "+h(formatDate(plan.startDate))+" to "+h(formatDate(plan.targetDate))+" · Owner: "+h(plan.ownerId==="ALL"?"Whole family":memberName(plan.ownerId))+"</p>"+(plan.notes?"<p class='notes'>"+h(plan.notes)+"</p>":"")+"<section class='summary'><span><small>Proposed</small><strong>"+h(money(calc.budget))+"</strong></span><span><small>Paid actual</small><strong>"+h(money(calc.paid))+"</strong></span><span><small>Preplanned</small><strong>"+h(money(calc.planned))+"</strong></span><span><small>Remaining</small><strong>"+h(money(calc.remaining))+"</strong></span><span><small>Budget used</small><strong>"+h(calc.pct)+"%</strong></span></section><h2>Phase summary</h2><table><thead><tr><th>Sl.</th><th>Phase</th><th>Budget</th><th>Paid</th><th>Preplanned</th><th>Remaining</th></tr></thead><tbody>"+phaseRows+"</tbody></table><h2>Linked expenditure details</h2><table><thead><tr><th>Sl.</th><th>Date</th><th>Status</th><th>Phase</th><th>Category</th><th>Send to</th><th>From account</th><th>Reason</th><th>Amount</th></tr></thead><tbody>"+(expenseRows||"<tr><td colspan='9'>No linked expenditure yet.</td></tr>")+"</tbody></table><p class='foot'>Each linked record is counted once in Family Expenditure · FE v"+h(FRONTEND_VERSION)+" · BE v"+h(state.data.backendVersion||"—")+"</p></main>"+autoPrintScript+"</body></html>");
+  reportWindow.document.close();
+}
+function filteredExpenses() { const month=$("expenseMonth").value,status=$("expenseStatusFilter").value,category=$("expenseCategoryFilter").value,subcategory=$("expenseSubcategoryFilter").value,majorPlanId=$("expenseMajorPlanFilter").value,recipient=$("expenseSendToFilter").value,account=$("expenseAccountFilter").value,q=normalize($("expenseSearch").value); return state.data.expenses.map(normalizeExpense).filter(function(x){return (!month||String(x.date).slice(0,7)===month)&&(!status||x.status===status)&&(!category||x.category===category)&&(!subcategory||x.subcategory===subcategory)&&(!majorPlanId||x.majorPlanId===majorPlanId)&&(!recipient||x.sentTo===recipient)&&(!account||x.fromAccount===account)&&(!q||normalize([x.status,x.category,x.subcategory,majorPlanName(x.majorPlanId),majorPlanPhaseName(x.majorPlanPhaseId),x.sentTo,x.fromAccount,x.reason,x.date].join(" ")).includes(q));}); }
 function startInlineExpenseEdit(id) {
   state.inlineExpenseId = id;
   renderExpenses();
@@ -1396,22 +1527,24 @@ function renderInlineExpenseRow(item) {
     '<td><input class="inline-expense-input" data-inline-field="sentTo" maxlength="100" value="'+h(item.sentTo)+'" aria-label="Send to"></td>'+
     '<td><input class="inline-expense-input" data-inline-field="fromAccount" maxlength="100" value="'+h(item.fromAccount)+'" aria-label="From account"></td>'+
     '<td><textarea class="inline-expense-input inline-expense-reason" data-inline-field="reason" rows="2" maxlength="500" aria-label="Reason">'+h(item.reason)+'</textarea></td>'+
+    '<td><div class="inline-project-fields"><select class="inline-expense-input inline-expense-major-plan" data-inline-field="majorPlanId" aria-label="Major plan">'+majorPlanOptions(item.majorPlanId||"",true)+'</select><select class="inline-expense-input inline-expense-major-plan-phase" data-inline-field="majorPlanPhaseId" aria-label="Project phase"'+(item.majorPlanId?'':' disabled')+'>'+majorPlanPhaseOptions(item.majorPlanId||"",item.majorPlanPhaseId||"",true)+'</select></div></td>'+
     '<td><span class="editing-row-label">Editing in row</span></td>'+
     '<td class="row-edit-cell"><div class="inline-save-actions"><button class="tiny-button save-row-button" data-action="inline-save-expense" data-id="'+h(item.id)+'">✓ Save</button><button class="tiny-button" data-action="inline-cancel-expense" data-id="'+h(item.id)+'">Cancel</button></div></td></tr>';
 }
 function renderExpenseDisplayRow(item) {
-  return '<tr class="expense-'+h(item.status.toLowerCase())+'"><td class="number"><strong>'+h(money(item.amount))+'</strong></td><td>'+h(formatDate(item.date))+'</td><td><span class="expense-status '+h(item.status.toLowerCase())+'">'+(item.status==="PLANNED"?'PREPLANNED':'PAID')+'</span></td><td><strong>'+h(item.category)+'</strong></td><td>'+h(item.subcategory)+'</td><td><strong>'+h(item.sentTo)+'</strong></td><td>'+h(item.fromAccount)+'</td><td class="expense-reason">'+h(item.reason)+'</td><td><div class="row-actions">'+(item.status==="PLANNED"?'<button class="tiny-button paid-button" data-action="mark-planned-paid" data-id="'+h(item.id)+'">✓ Paid</button>':'')+'<button class="tiny-button" data-action="edit-expense" data-id="'+h(item.id)+'" title="Edit in a larger form">↗ Form</button>'+(mayDelete(item)?'<button class="danger-button" data-action="delete-expense" data-id="'+h(item.id)+'">×</button>':"")+'</div></td><td class="row-edit-cell"><button class="row-edit-primary" data-action="inline-edit-expense" data-id="'+h(item.id)+'">✎ Edit</button></td></tr>';
+  const plan=majorPlanName(item.majorPlanId),phase=majorPlanPhaseName(item.majorPlanPhaseId);
+  return '<tr class="expense-'+h(item.status.toLowerCase())+'"><td class="number"><strong>'+h(money(item.amount))+'</strong></td><td>'+h(formatDate(item.date))+'</td><td><span class="expense-status '+h(item.status.toLowerCase())+'">'+(item.status==="PLANNED"?'PREPLANNED':'PAID')+'</span></td><td><strong>'+h(item.category)+'</strong></td><td>'+h(item.subcategory)+'</td><td><strong>'+h(item.sentTo)+'</strong></td><td>'+h(item.fromAccount)+'</td><td class="expense-reason">'+h(item.reason)+'</td><td>'+(plan?'<span class="major-plan-link-chip">'+h(plan)+(phase?'<small>'+h(phase)+'</small>':'')+'</span>':'<span class="muted">—</span>')+'</td><td><div class="row-actions">'+(item.status==="PLANNED"?'<button class="tiny-button paid-button" data-action="mark-planned-paid" data-id="'+h(item.id)+'">✓ Paid</button>':'')+'<button class="tiny-button" data-action="edit-expense" data-id="'+h(item.id)+'" title="Edit in a larger form">↗ Form</button>'+(mayDelete(item)?'<button class="danger-button" data-action="delete-expense" data-id="'+h(item.id)+'">×</button>':"")+'</div></td><td class="row-edit-cell"><button class="row-edit-primary" data-action="inline-edit-expense" data-id="'+h(item.id)+'">✎ Edit</button></td></tr>';
 }
 async function saveInlineExpenseRow(button) {
   const row = button.closest("tr"), id = button.dataset.id;
   const original = state.data.expenses.find(function (item) { return item.id === id; });
   if (!row || !original) return;
   const value = function (field) { const input = row.querySelector('[data-inline-field="'+field+'"]'); return input ? input.value.trim() : ""; };
-  const amount = value("amount"), date = value("date"), category = value("category"), subcategory = value("subcategory"), sentTo = value("sentTo"), fromAccount = value("fromAccount"), reason = value("reason");
+  const amount = value("amount"), date = value("date"), category = value("category"), subcategory = value("subcategory"), sentTo = value("sentTo"), fromAccount = value("fromAccount"), reason = value("reason"), majorPlanId=value("majorPlanId"), majorPlanPhaseId=value("majorPlanPhaseId");
   if (!date || !category || !subcategory || !sentTo || !fromAccount || !reason || !(Number(amount) > 0)) return toast("Complete every row field and enter an amount greater than zero.", "error");
   const normalized = normalizeExpense(original);
   state.inlineExpenseId = "";
-  const result = await mutate("updateExpense", { id: id, date: date, amount: amount, category: category, subcategory: subcategory, sentTo: sentTo, fromAccount: fromAccount, reason: reason, entryType: normalized.status === "PLANNED" ? "PREPLANNED" : normalized.entryType, recurringId: normalized.recurringId || "" }, "Expenditure row updated.", null, "Saving expenditure row…");
+  const result = await mutate("updateExpense", { id: id, date: date, amount: amount, category: category, subcategory: subcategory, sentTo: sentTo, fromAccount: fromAccount, reason: reason, entryType: normalized.status === "PLANNED" ? "PREPLANNED" : normalized.entryType, recurringId: normalized.recurringId || "", majorPlanId:majorPlanId, majorPlanPhaseId:majorPlanPhaseId }, "Expenditure row updated.", null, "Saving expenditure row…");
   if (!result) { state.inlineExpenseId = id; renderExpenses(); }
 }
 function renderExpenses() {
@@ -1432,7 +1565,8 @@ function renderRecurringExpenses() {
     else if (days === 1) { statusClass = "soon"; statusText = "Due tomorrow"; }
     else if (days <= 7) { statusClass = "soon"; statusText = "Due in " + days + " days"; }
     const amount = Number(item.estimatedAmount || 0) > 0 ? money(item.estimatedAmount) : "Enter amount when paid";
-    return '<div class="recurring-card '+statusClass+'"><div class="recurring-card-top"><div><span class="frequency-chip">↻ '+h(item.frequency === "YEARLY" ? "Yearly" : "Monthly")+'</span><h4>'+h(item.title)+'</h4></div><span class="due-chip">'+h(statusText)+'</span></div><strong class="recurring-amount">'+h(amount)+'</strong><p><span class="expense-category-chip">'+h(item.category||"Other")+' · '+h(item.subcategory||"General")+'</span><br>'+h(item.sentTo)+' · '+h(item.fromAccount)+'</p><small>'+h(item.reason)+'</small>'+(item.lastPaidDate?'<em>Last paid '+h(formatDate(item.lastPaidDate))+'</em>':'')+'<div class="recurring-actions"><button class="primary-button" data-action="pay-recurring-expense" data-id="'+h(item.id)+'">✓ Mark as paid</button><button class="tiny-button" data-action="edit-recurring-expense" data-id="'+h(item.id)+'">Edit</button>'+(mayDelete(item)?'<button class="danger-button" data-action="delete-recurring-expense" data-id="'+h(item.id)+'">Remove</button>':'')+'</div></div>';
+    const project=majorPlanName(item.majorPlanId),phase=majorPlanPhaseName(item.majorPlanPhaseId);
+    return '<div class="recurring-card '+statusClass+'"><div class="recurring-card-top"><div><span class="frequency-chip">↻ '+h(item.frequency === "YEARLY" ? "Yearly" : "Monthly")+'</span><h4>'+h(item.title)+'</h4></div><span class="due-chip">'+h(statusText)+'</span></div><strong class="recurring-amount">'+h(amount)+'</strong><p><span class="expense-category-chip">'+h(item.category||"Other")+' · '+h(item.subcategory||"General")+'</span>'+(project?'<span class="major-plan-link-chip compact">'+h(project)+(phase?'<small>'+h(phase)+'</small>':'')+'</span>':'')+'<br>'+h(item.sentTo)+' · '+h(item.fromAccount)+'</p><small>'+h(item.reason)+'</small>'+(item.lastPaidDate?'<em>Last paid '+h(formatDate(item.lastPaidDate))+'</em>':'')+'<div class="recurring-actions"><button class="primary-button" data-action="pay-recurring-expense" data-id="'+h(item.id)+'">✓ Mark as paid</button><button class="tiny-button" data-action="edit-recurring-expense" data-id="'+h(item.id)+'">Edit</button>'+(mayDelete(item)?'<button class="danger-button" data-action="delete-recurring-expense" data-id="'+h(item.id)+'">Remove</button>':'')+'</div></div>';
   }).join("");
   $("recurringExpenseEmpty").innerHTML = "No regular payment added. Choose <strong>Add regular payment</strong> to add one now or later.";
   $("recurringExpenseEmpty").classList.toggle("hidden", items.length > 0);
@@ -1621,8 +1755,9 @@ function endStickyResize() {
 
 function renderGlobalSearch() {
   const q=normalize($("globalSearch").value); if(q.length<2){$("globalSearchResults").innerHTML='<p class="muted">Type at least 2 characters to search all family records.</p>';return;} let results=[];
-  state.data.expenses.forEach(function(x){const expense=normalizeExpense(x);if(normalize([expense.status,expense.category,expense.subcategory,expense.sentTo,expense.fromAccount,expense.reason].join(" ")).includes(q))results.push({view:"expenses",icon:expense.status==="PLANNED"?"◷":"₹",title:expense.reason||expense.sentTo,meta:(expense.status==="PLANNED"?"Preplanned · ":"")+expense.category+" · "+money(x.amount)+" · "+formatDate(x.date)});});
+  state.data.expenses.forEach(function(x){const expense=normalizeExpense(x);if(normalize([expense.status,expense.category,expense.subcategory,majorPlanName(expense.majorPlanId),majorPlanPhaseName(expense.majorPlanPhaseId),expense.sentTo,expense.fromAccount,expense.reason].join(" ")).includes(q))results.push({view:"expenses",icon:expense.status==="PLANNED"?"◷":"₹",title:expense.reason||expense.sentTo,meta:(expense.status==="PLANNED"?"Preplanned · ":"")+expense.category+(expense.majorPlanId?" · "+majorPlanName(expense.majorPlanId):"")+" · "+money(x.amount)+" · "+formatDate(x.date)});});
   state.data.recurringExpenses.forEach(function(x){if(normalize([x.title,x.sentTo,x.fromAccount,x.reason,x.frequency].join(" ")).includes(q))results.push({view:"expenses",icon:"↻",title:x.title,meta:(x.frequency==="YEARLY"?"Yearly":"Monthly")+" payment · due "+formatDate(x.nextDueDate)});});
+  state.data.majorPlans.forEach(function(x){if(normalize([x.name,x.notes,x.status,memberName(x.ownerId)].join(" ")).includes(q))results.push({view:"expenses",icon:"▣",title:x.name,meta:"Major plan · "+String(x.status||"ACTIVE")+" · "+money(x.proposedAmount)});});
   state.data.income.forEach(function(x){if(normalize([x.source,x.category,memberName(x.receivedBy)].join(" ")).includes(q))results.push({view:"income",icon:"↗",title:x.source,meta:money(x.amount)+" · "+formatDate(x.date)});});
   state.data.targets.forEach(function(x){if(normalize([x.title,x.category,x.notes].join(" ")).includes(q))results.push({view:"targets",icon:"◎",title:x.title,meta:"Target · "+money(x.targetAmount)});});
   state.data.importantDates.forEach(function(x){if(normalize([x.title,x.eventType,x.notes].join(" ")).includes(q))results.push({view:"dates",icon:"◫",title:x.title,meta:x.eventType+" · "+formatDate(x.nextOccurrence)});});

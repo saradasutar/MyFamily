@@ -2,7 +2,7 @@
 
 const CONFIG = window.FAMILY_DASHBOARD_CONFIG || {};
 const PLACEHOLDER_URL = "PASTE_YOUR_APPS_SCRIPT_WEB_APP_URL_HERE";
-const FRONTEND_VERSION = "1.0.23";
+const FRONTEND_VERSION = "1.0.24";
 const SAVED_USERNAME_KEY = "familyDashboardUsername";
 const SESSION_TOKEN_KEY = "familyDashboardToken";
 const IDLE_TIMEOUT_MS = 5 * 60 * 1000;
@@ -115,6 +115,15 @@ function money(value) {
 }
 function plural(count, singular, pluralWord) { return count + " " + (count === 1 ? singular : (pluralWord || singular + "s")); }
 function normalize(value) { return String(value || "").toLowerCase().trim(); }
+function debounce(callback, delay) {
+  let timer = null;
+  return function () {
+    const args = arguments, context = this;
+    clearTimeout(timer);
+    timer = setTimeout(function () { callback.apply(context, args); }, delay || 120);
+  };
+}
+function prefersReducedMotion() { return !!(window.matchMedia && window.matchMedia("(prefers-reduced-motion: reduce)").matches); }
 function safeClockHighlight(value) { return /^#[0-9a-f]{6}$/i.test(String(value || "")) ? String(value).toLowerCase() : "#f0a7cb"; }
 function mixHex(color, target, amount) {
   const source = safeClockHighlight(color).slice(1), destination = target.replace("#", "");
@@ -164,13 +173,17 @@ function updateDashboardClock() {
 }
 function startDashboardClock() {
   stopDashboardClock();
-  updateDashboardClock();
-  state.clockTimer = setInterval(updateDashboardClock, 1000);
+  const tick = function () {
+    updateDashboardClock();
+    state.clockTimer = setTimeout(tick, 60050 - (Date.now() % 60000));
+  };
+  tick();
 }
-function stopDashboardClock() { if (state.clockTimer) clearInterval(state.clockTimer); state.clockTimer = null; }
+function stopDashboardClock() { if (state.clockTimer) clearTimeout(state.clockTimer); state.clockTimer = null; }
 
 function init() {
   const now = new Date();
+  all("button:not([type])").forEach(function (button) { button.type = "button"; });
   renderVersionLabels();
   loadSavedUsername();
   $("todayLabel").textContent = now.toLocaleDateString("en-IN", { weekday: "long", day: "numeric", month: "long" }).toUpperCase();
@@ -414,11 +427,11 @@ function goTo(view) {
   if (view === "admin" && !isAdmin()) return;
   if (viewModules[view] && !hasModuleAccess(viewModules[view])) return toast("Your administrator has not enabled this section for your account.", "error");
   state.view = view;
-  all(".view").forEach(function (el) { el.classList.toggle("active", el.id === "view-" + view); });
-  all(".nav-button").forEach(function (el) { el.classList.toggle("active", el.dataset.view === view); });
+  all(".view").forEach(function (el) { const active = el.id === "view-" + view; el.classList.toggle("active", active); el.setAttribute("aria-hidden", active ? "false" : "true"); });
+  all(".nav-button").forEach(function (el) { const active = el.dataset.view === view; el.classList.toggle("active", active); if (active) el.setAttribute("aria-current", "page"); else el.removeAttribute("aria-current"); });
   $("viewTitle").textContent = viewTitles[view] || "Family Dashboard";
-  if (view === "calendar") renderCalendar();
-  window.scrollTo({ top: 0, behavior: "smooth" });
+  renderView(view);
+  window.scrollTo({ top: 0, behavior: prefersReducedMotion() ? "auto" : "smooth" });
 }
 
 function bindDialogs() {
@@ -623,15 +636,21 @@ function bindForms() {
 }
 
 function bindFilters() {
-  ["expenseMonth", "expenseStatusFilter", "expenseCategoryFilter", "expenseSubcategoryFilter", "expenseMajorPlanFilter", "expenseSendToFilter", "expenseAccountFilter", "expenseSearch"].forEach(function (id) { $(id).addEventListener("input", renderExpenses); });
+  const expenseSearchRender = debounce(renderExpenses, 120), incomeSearchRender = debounce(renderIncome, 120), dateSearchRender = debounce(renderDates, 120), photoSearchRender = debounce(renderPhotos, 120), experienceSearchRender = debounce(renderExperiences, 120), diarySearchRender = debounce(renderDiary, 120), globalSearchRender = debounce(renderGlobalSearch, 120);
+  ["expenseMonth", "expenseStatusFilter", "expenseCategoryFilter", "expenseSubcategoryFilter", "expenseMajorPlanFilter", "expenseSendToFilter", "expenseAccountFilter"].forEach(function (id) { $(id).addEventListener("input", renderExpenses); });
+  $("expenseSearch").addEventListener("input", expenseSearchRender);
   $("majorPlanStatusFilter").addEventListener("input", renderMajorPlans);
-  ["incomeMonth", "incomeCategoryFilter", "incomeMemberFilter", "incomeSearch"].forEach(function (id) { $(id).addEventListener("input", renderIncome); });
-  ["dateTypeFilter", "dateSearch"].forEach(function (id) { $(id).addEventListener("input", renderDates); });
-  $("photoSearch").addEventListener("input", renderPhotos);
+  ["incomeMonth", "incomeCategoryFilter", "incomeMemberFilter"].forEach(function (id) { $(id).addEventListener("input", renderIncome); });
+  $("incomeSearch").addEventListener("input", incomeSearchRender);
+  $("dateTypeFilter").addEventListener("input", renderDates);
+  $("dateSearch").addEventListener("input", dateSearchRender);
+  $("photoSearch").addEventListener("input", photoSearchRender);
   $("printMemories").addEventListener("click", openMemoryPrintView);
-  ["experienceYear", "experienceSearch"].forEach(function (id) { $(id).addEventListener("input", renderExperiences); });
-  ["diaryMonth", "diaryWriterFilter", "diarySearch"].forEach(function (id) { $(id).addEventListener("input", renderDiary); });
-  $("globalSearch").addEventListener("input", renderGlobalSearch);
+  $("experienceYear").addEventListener("input", renderExperiences);
+  $("experienceSearch").addEventListener("input", experienceSearchRender);
+  ["diaryMonth", "diaryWriterFilter"].forEach(function (id) { $(id).addEventListener("input", renderDiary); });
+  $("diarySearch").addEventListener("input", diarySearchRender);
+  $("globalSearch").addEventListener("input", globalSearchRender);
   $("exportExpenses").addEventListener("click", function () { exportCsv("family-expenditure.csv", filteredExpenses().map(function(item){return Object.assign({},item,{majorPlanName:majorPlanName(item.majorPlanId),majorPlanPhaseName:majorPlanPhaseName(item.majorPlanPhaseId)});}), ["amount", "date", "status", "category", "subcategory", "majorPlanName", "majorPlanPhaseName", "sentTo", "fromAccount", "reason"], ["Amt (Rs.)", "Date", "Status", "Category", "Subcategory", "Major plan", "Phase", "Send to", "From Acct", "Reason"]); });
   $("exportIncome").addEventListener("click", function () { exportCsv("family-income.csv", filteredIncome(), ["date", "source", "category", "receivedByName", "receivingMode", "amount"]); });
   $("printExpenses").addEventListener("click", function () { prepareExpensePrintDialog(); openDialog("expensePrintDialog"); });
@@ -1401,7 +1420,22 @@ function renderAll() {
   $("createMajorPlan").classList.toggle("hidden", !isAdmin());
   if (!isAdmin() && state.view === "admin") goTo("home");
   applyAccessUI();
-  populateFilters(); renderHome(); renderMajorPlans(); renderExpenses(); renderRecurringExpenses(); renderIncome(); renderTargets(); renderDates(); renderPhotos(); renderExperiences(); renderDiary(); renderCalendar(); renderStickyNotes(); if (isAdmin()) renderAdmin();
+  populateFilters();
+  renderView(state.view);
+  renderStickyNotes();
+}
+function renderView(view) {
+  if (!state.data) return;
+  if (view === "home") renderHome();
+  if (view === "expenses") { renderMajorPlans(); renderExpenses(); renderRecurringExpenses(); }
+  if (view === "income") renderIncome();
+  if (view === "targets") renderTargets();
+  if (view === "dates") renderDates();
+  if (view === "calendar") renderCalendar();
+  if (view === "photos") renderPhotos();
+  if (view === "experiences") renderExperiences();
+  if (view === "diary") renderDiary();
+  if (view === "admin" && isAdmin()) renderAdmin();
 }
 function applyAccessUI() {
   all("[data-module]").forEach(function (el) { el.classList.toggle("hidden", !hasModuleAccess(el.dataset.module)); });
@@ -1591,7 +1625,7 @@ function renderPhotos() {
   upload.title=count>=limit?"Delete a memory or ask the administrator to increase the limit.":"Add a family memory";
   print.classList.toggle("hidden",!allPhotos.length);
   $("photoDialogLimitText").textContent=count+" of "+limit+" memory photos are currently saved.";
-  $("photoGrid").innerHTML=items.map(function(x){return '<article class="photo-card"><figure data-action="view-photo" data-id="'+h(x.id)+'"><img src="'+h(x.thumbData)+'" alt="'+h(x.title)+'" loading="lazy">'+(mayDelete({createdBy:x.uploadedBy})?'<button class="photo-delete" data-action="delete-photo" data-id="'+h(x.id)+'" aria-label="Delete photo">×</button>':"")+'</figure><figcaption><h3>'+h(x.title)+'</h3>'+(x.caption?'<p>'+h(x.caption)+'</p>':"")+'<div class="photo-meta"><span>'+h(formatDate(x.takenDate||x.createdAt))+'</span><span>by '+h(memberName(x.uploadedBy))+'</span></div></figcaption></article>';}).join("");
+  $("photoGrid").innerHTML=items.map(function(x){return '<article class="photo-card"><figure data-action="view-photo" data-id="'+h(x.id)+'"><img src="'+h(x.thumbData)+'" alt="'+h(x.title)+'" loading="lazy" decoding="async">'+(mayDelete({createdBy:x.uploadedBy})?'<button class="photo-delete" type="button" data-action="delete-photo" data-id="'+h(x.id)+'" aria-label="Delete photo">×</button>':"")+'</figure><figcaption><h3>'+h(x.title)+'</h3>'+(x.caption?'<p>'+h(x.caption)+'</p>':"")+'<div class="photo-meta"><span>'+h(formatDate(x.takenDate||x.createdAt))+'</span><span>by '+h(memberName(x.uploadedBy))+'</span></div></figcaption></article>';}).join("");
   $("photoEmpty").classList.toggle("hidden",items.length>0);
 }
 
@@ -1788,10 +1822,12 @@ function api(action,payload) {
 }
 function receiveApiMessage(event) {
   let message=event.data; if(typeof message==="string"){try{message=JSON.parse(message);}catch(e){return;}} if(!message||message.familyDashboardResponse!==true||!message.requestId)return;
-  const request=pendingRequests.get(message.requestId); if(!request)return; cleanupRequest(message.requestId); if(message.ok)request.resolve(message.data);else request.reject(new Error(message.error||"The request failed."));
+  const request=pendingRequests.get(message.requestId); if(!request)return;
+  if (event.source && request.iframe.contentWindow && event.source !== request.iframe.contentWindow) return;
+  cleanupRequest(message.requestId); if(message.ok)request.resolve(message.data);else request.reject(new Error(message.error||"The request failed."));
 }
 function cleanupRequest(id){const req=pendingRequests.get(id);if(!req)return;clearTimeout(req.timeout);req.form.remove();req.iframe.remove();pendingRequests.delete(id);}
-function showLoading(text){$("loadingText").textContent=text||"Working…";$("loadingOverlay").classList.remove("hidden");}
-function hideLoading(){$("loadingOverlay").classList.add("hidden");}
-function toast(message,type){const el=document.createElement("div");el.className="toast "+(type||"");el.textContent=message;$("toastRegion").appendChild(el);setTimeout(function(){el.remove();},4200);}
+function showLoading(text){$("loadingText").textContent=text||"Working…";$("loadingOverlay").classList.remove("hidden");$("mainContent").setAttribute("aria-busy","true");}
+function hideLoading(){$("loadingOverlay").classList.add("hidden");$("mainContent").removeAttribute("aria-busy");}
+function toast(message,type){const el=document.createElement("div");el.className="toast "+(type||"");el.setAttribute("role",type==="error"?"alert":"status");el.textContent=message;$("toastRegion").appendChild(el);setTimeout(function(){el.remove();},4200);}
 function friendlyApiError(error){const message=(error&&error.message)||"The change could not be saved.";return /Unknown dashboard action/i.test(message)?"Backend update required. Deploy the latest Code.gs as a New version, then refresh this page.":message;}

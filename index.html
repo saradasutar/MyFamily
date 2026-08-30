@@ -4,11 +4,14 @@
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <meta name="theme-color" content="#5743a8">
+  <meta name="color-scheme" content="light">
   <meta name="description" content="Private family dashboard for expenses, goals, important dates and photos.">
   <title>Our Family Hub</title>
-  <link rel="stylesheet" href="styles.css?v=1.0.23">
+  <link rel="icon" href="favicon.svg?v=1.0.24" type="image/svg+xml">
+  <link rel="stylesheet" href="styles.css?v=1.0.24">
 </head>
 <body>
+  <a class="skip-link" href="#mainContent">Skip to dashboard content</a>
   <div class="ambient ambient-one"></div>
   <div class="ambient ambient-two"></div>
 
@@ -39,8 +42,8 @@
         </label>
         <div class="login-options">
           <label class="remember-row"><input id="rememberUsername" type="checkbox" checked> Save username on this device</label>
-          <span class="version-pair"><b id="loginFrontendVersion">FE v1.0.23</b><b id="loginBackendVersion">BE checking…</b></span>
-          <span id="loginVersion" class="legacy-version hidden" aria-hidden="true">Version 1.0.23</span>
+          <span class="version-pair"><b id="loginFrontendVersion">FE v1.0.24</b><b id="loginBackendVersion">BE checking…</b></span>
+          <span id="loginVersion" class="legacy-version hidden" aria-hidden="true">Version 1.0.24</span>
         </div>
         <button class="primary-button wide" type="submit">Sign in securely</button>
         <button id="repairSessionButton" class="repair-session-button" type="button">↻ Repair browser cache / session</button>
@@ -57,12 +60,12 @@
         <div class="brand-mark small">FH</div>
         <div>
           <strong id="sidebarFamilyName">Our Family Hub</strong>
-          <span class="sidebar-version-pair"><b id="sidebarFrontendVersion">FE v1.0.23</b><b id="sidebarBackendVersion">BE checking…</b></span>
-          <b id="sidebarVersion" class="legacy-version hidden" aria-hidden="true">v1.0.23</b>
+          <span class="sidebar-version-pair"><b id="sidebarFrontendVersion">FE v1.0.24</b><b id="sidebarBackendVersion">BE checking…</b></span>
+          <b id="sidebarVersion" class="legacy-version hidden" aria-hidden="true">v1.0.24</b>
         </div>
       </div>
       <nav class="main-nav" aria-label="Main navigation">
-        <button class="nav-button active" data-view="home"><span>⌂</span> Overview</button>
+        <button class="nav-button active" type="button" data-view="home" aria-current="page"><span>⌂</span> Overview</button>
         <button class="nav-button" data-view="expenses" data-module="EXPENSES"><span>₹</span> Expenditure</button>
         <button class="nav-button" data-view="income" data-module="INCOME"><span>↗</span> Income</button>
         <button class="nav-button" data-view="targets" data-module="TARGETS"><span>◎</span> Targets</button>
@@ -81,7 +84,7 @@
     </aside>
 
     <div id="sidebarShade" class="sidebar-shade"></div>
-    <main class="main-panel">
+    <main id="mainContent" class="main-panel" tabindex="-1">
       <header class="topbar">
         <button id="menuButton" class="menu-button" aria-label="Open menu">☰</button>
         <div>
@@ -615,10 +618,10 @@
     <div class="viewer-caption"><strong id="viewerTitle"></strong><span id="viewerMeta"></span><p id="viewerText"></p></div>
   </dialog>
 
-  <div id="loadingOverlay" class="loading-overlay hidden"><div class="spinner"></div><p id="loadingText">Working…</p></div>
-  <div id="toastRegion" class="toast-region" aria-live="polite"></div>
+  <div id="loadingOverlay" class="loading-overlay hidden" role="status" aria-live="polite" aria-atomic="true"><div class="spinner" aria-hidden="true"></div><p id="loadingText">Working…</p></div>
+  <div id="toastRegion" class="toast-region" role="status" aria-live="polite" aria-atomic="true"></div>
 
-  <script src="config.js?v=1.0.23"></script>
-  <script src="app.js?v=1.0.23"></script>
+  <script src="config.js?v=1.0.24" defer></script>
+  <script src="app.js?v=1.0.24" defer></script>
 </body>
 </html>

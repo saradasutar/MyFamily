@@ -2,7 +2,7 @@
 
 const CONFIG = window.FAMILY_DASHBOARD_CONFIG || {};
 const PLACEHOLDER_URL = "PASTE_YOUR_APPS_SCRIPT_WEB_APP_URL_HERE";
-const FRONTEND_VERSION = "1.0.24";
+const FRONTEND_VERSION = "1.0.25";
 const SAVED_USERNAME_KEY = "familyDashboardUsername";
 const SESSION_TOKEN_KEY = "familyDashboardToken";
 const IDLE_TIMEOUT_MS = 5 * 60 * 1000;
@@ -1823,7 +1823,13 @@ function api(action,payload) {
 function receiveApiMessage(event) {
   let message=event.data; if(typeof message==="string"){try{message=JSON.parse(message);}catch(e){return;}} if(!message||message.familyDashboardResponse!==true||!message.requestId)return;
   const request=pendingRequests.get(message.requestId); if(!request)return;
-  if (event.source && request.iframe.contentWindow && event.source !== request.iframe.contentWindow) return;
+  // Apps Script wraps HtmlService output in its own googleusercontent.com
+  // sandbox iframe. The valid reply therefore comes from a descendant of our
+  // target iframe, not from target.contentWindow itself. Validate the trusted
+  // Apps Script origin and the unguessable pending request ID instead.
+  const responseOrigin=String(event.origin||"");
+  const trustedAppsScriptOrigin=responseOrigin==="https://script.google.com"||/^https:\/\/[a-z0-9-]+-script\.googleusercontent\.com$/i.test(responseOrigin);
+  if(responseOrigin&&!trustedAppsScriptOrigin)return;
   cleanupRequest(message.requestId); if(message.ok)request.resolve(message.data);else request.reject(new Error(message.error||"The request failed."));
 }
 function cleanupRequest(id){const req=pendingRequests.get(id);if(!req)return;clearTimeout(req.timeout);req.form.remove();req.iframe.remove();pendingRequests.delete(id);}

@@ -590,7 +590,7 @@ body.sticky-drawer-open { overflow:hidden; }
   .major-plan-phase-progress { grid-template-columns:1fr; }
 }
 
-/* v1.0.24 experience layer: faster rendering, clearer focus and refined responsive density */
+/* v1.0.25 experience layer: faster rendering, reliable Apps Script bridge, clearer focus and refined responsive density */
 :root {
   --ink:#20233a;
   --muted:#60647a;

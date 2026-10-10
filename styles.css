@@ -590,7 +590,7 @@ body.sticky-drawer-open { overflow:hidden; }
   .major-plan-phase-progress { grid-template-columns:1fr; }
 }
 
-/* v1.0.26 experience layer: faster rendering, reliable Apps Script bridge, clearer focus and refined responsive density */
+/* v1.0.27 experience layer: faster rendering, reliable Apps Script bridge, clearer focus and refined responsive density */
 :root {
   --ink:#20233a;
   --muted:#60647a;
@@ -639,7 +639,7 @@ th { box-shadow:inset 0 -1px #e6e4ef; }
 .loading-overlay > * { filter:drop-shadow(0 8px 18px rgba(0,0,0,.16)); }
 .toast { border:1px solid rgba(255,255,255,.12); }
 
-/* v1.0.26 smart regular payments and English/Saka calendar */
+/* v1.0.27 smart regular payments and English/Saka calendar */
 .three-fields { display:grid; grid-template-columns:repeat(3,minmax(0,1fr)); gap:12px; }
 .recurring-toolbar { display:flex; align-items:end; gap:10px; flex-wrap:wrap; margin:12px 0; padding:11px; border:1px solid var(--line); border-radius:13px; background:#faf9fd; }
 .recurring-toolbar > label { min-width:150px; }
@@ -677,8 +677,21 @@ th { box-shadow:inset 0 -1px #e6e4ef; }
 .compact-check { display:grid; justify-items:center; gap:3px; color:var(--muted); font-size:.58rem; }
 .compact-check input { width:18px; height:18px; accent-color:var(--violet); }
 .calendar-day-pair { display:flex; align-items:center; justify-content:space-between; gap:5px; }
-.calendar-day-pair small { color:#7569a8; font-size:.55rem; font-weight:750; white-space:nowrap; }
-.dual-date-line { color:#5e4aa9 !important; font-weight:720; }
+#calendarMonthLabel { display:flex; align-items:center; justify-content:center; gap:9px; min-width:330px; }
+.gregorian-month-label { color:var(--ink); font-size:.8rem; font-weight:900; }
+.saka-month-label { display:inline-flex; align-items:center; gap:5px; padding:6px 10px; border:1px solid #efc361; border-radius:999px; color:#713d00; background:linear-gradient(135deg,#fff6d8,#ffe3a2); box-shadow:0 3px 10px rgba(184,112,15,.16); font-size:.66rem; font-weight:900; letter-spacing:.01em; }
+.saka-month-label small { color:#9d5b00; font-size:.47rem; letter-spacing:.08em; }
+.saka-day-chip { display:inline-flex; align-items:center; gap:3px; min-width:32px; justify-content:center; padding:3px 6px; border:1px solid #efc56d; border-radius:999px; color:#773f00; background:linear-gradient(135deg,#fff7dc,#ffe5aa); box-shadow:0 2px 7px rgba(178,107,12,.14); font-size:.54rem; font-weight:800; white-space:nowrap; font-variant-numeric:tabular-nums; }
+.saka-day-chip span { color:#9a5a00; font-size:.45rem; text-transform:uppercase; }
+.saka-day-chip b { font-size:.6rem; }
+.saka-day-chip em { color:#a66308; font-size:.44rem; font-style:normal; font-weight:900; }
+.other-month .saka-day-chip { opacity:.55; box-shadow:none; }
+.today .saka-day-chip { border-color:#d79624; background:linear-gradient(135deg,#fff0ba,#ffd27a); box-shadow:0 0 0 2px rgba(225,158,42,.13); }
+.dual-date-line { display:inline-flex; align-items:center; gap:8px; margin:5px 0 !important; padding:6px 10px 6px 7px; border:1px solid #efc56d; border-radius:10px; color:#713d00 !important; background:linear-gradient(135deg,#fff8e1,#ffe9b8); box-shadow:0 3px 10px rgba(178,107,12,.11); }
+.dual-date-line > span:last-child { display:grid; gap:1px; }
+.dual-date-line small { color:#a15c00; font-size:.48rem; font-weight:900; letter-spacing:.09em; }
+.dual-date-line strong { color:#713d00; font-size:.67rem; font-weight:850; }
+.saka-date-icon { width:26px; height:26px; display:grid; place-items:center; border-radius:8px; color:#fff; background:linear-gradient(135deg,#e9a02d,#b96a00); box-shadow:0 3px 8px rgba(151,82,0,.20); font-size:.68rem; font-weight:950; }
 .important-date-conversion,.calendar-conversion { margin:9px 0; padding:9px 11px; border-left:4px solid var(--violet); border-radius:8px; color:#514789; background:#f2efff; font-size:.7rem; font-weight:700; }
 
 @media (hover:hover) and (pointer:fine) {
@@ -699,6 +712,7 @@ th { box-shadow:inset 0 -1px #e6e4ef; }
   .content-area { padding-left:max(16px,env(safe-area-inset-left)); padding-right:max(16px,env(safe-area-inset-right)); padding-bottom:max(44px,env(safe-area-inset-bottom)); }
   .summary-grid { gap:11px; }
   .recurring-summary { grid-template-columns:repeat(2,minmax(130px,1fr)); }
+  #calendarMonthLabel { min-width:270px; flex-wrap:wrap; gap:5px; }
 }
 @media (max-width:640px) {
   .topbar { display:grid; grid-template-columns:auto minmax(0,1fr) auto; align-content:center; gap:7px 10px; min-height:0; padding-top:10px; padding-bottom:9px; }
@@ -723,6 +737,8 @@ th { box-shadow:inset 0 -1px #e6e4ef; }
   .recurring-summary { grid-template-columns:1fr 1fr; }
   .recurring-toolbar { align-items:stretch; }
   .recurring-toolbar > label,.recurring-toolbar .search-label { width:100%; flex-basis:100%; }
+  .calendar-controls { flex-wrap:wrap; }
+  #calendarMonthLabel { order:-1; width:100%; min-width:0; }
 }
 @media (max-width:430px) {
   .summary-grid { grid-template-columns:1fr; }
@@ -745,6 +761,7 @@ th { box-shadow:inset 0 -1px #e6e4ef; }
   .primary-button,.nav-button.active,.hero-card,.sticky-launcher { forced-color-adjust:auto; }
   .bar-fill,.progress-fill,.major-plan-progress-track i { background:Highlight; }
   .column-resizer::after { background:CanvasText; }
+  .saka-month-label,.saka-day-chip,.dual-date-line,.saka-date-icon { border:1px solid CanvasText; color:CanvasText; background:Canvas; box-shadow:none; }
 }
 
 @media print {

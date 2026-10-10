@@ -2,7 +2,7 @@
 
 const CONFIG = window.FAMILY_DASHBOARD_CONFIG || {};
 const PLACEHOLDER_URL = "PASTE_YOUR_APPS_SCRIPT_WEB_APP_URL_HERE";
-const FRONTEND_VERSION = "1.0.25";
+const FRONTEND_VERSION = "1.0.26";
 const SAVED_USERNAME_KEY = "familyDashboardUsername";
 const SESSION_TOKEN_KEY = "familyDashboardToken";
 const IDLE_TIMEOUT_MS = 5 * 60 * 1000;
@@ -28,6 +28,8 @@ const state = {
   stickySideOpenId: "",
   stickySideTimer: null,
   inlineExpenseId: "",
+  inlineRecurringId: "",
+  recurringEditAll: false,
   categoryDraft: [],
   categoryEditIds: new Set(),
   subcategoryEditIds: new Set(),
@@ -108,6 +110,45 @@ function dayParts(iso) {
   const months = ["JAN", "FEB", "MAR", "APR", "MAY", "JUN", "JUL", "AUG", "SEP", "OCT", "NOV", "DEC"];
   return { day: Number(p[2]) || "—", month: months[(Number(p[1]) || 1) - 1] };
 }
+const SAKA_MONTHS = ["Chaitra","Vaishakha","Jyeshtha","Ashadha","Shravana","Bhadra","Ashvina","Kartika","Agrahayana","Pausha","Magha","Phalguna"];
+function isGregorianLeapYear(year) { return year % 4 === 0 && (year % 100 !== 0 || year % 400 === 0); }
+function sakaMonthLengths(gregorianStartYear) { return [isGregorianLeapYear(gregorianStartYear) ? 31 : 30,31,31,31,31,31,30,30,30,30,30,30]; }
+function sakaIso(year,month,day) { return String(year).padStart(4,"0")+"-"+String(month).padStart(2,"0")+"-"+String(day).padStart(2,"0"); }
+function gregorianToSaka(iso) {
+  const valid=validIsoDate.apply(null,String(iso||"").split("-")); if(!valid)return null;
+  const date=new Date(valid+"T00:00:00Z"); let startYear=date.getUTCFullYear(); let start=new Date(Date.UTC(startYear,2,isGregorianLeapYear(startYear)?21:22));
+  if(date<start){startYear-=1;start=new Date(Date.UTC(startYear,2,isGregorianLeapYear(startYear)?21:22));}
+  let offset=Math.round((date-start)/86400000),month=1; const lengths=sakaMonthLengths(startYear);
+  while(month<=12&&offset>=lengths[month-1]){offset-=lengths[month-1];month++;}
+  return {year:startYear-78,month:month,day:offset+1,iso:sakaIso(startYear-78,month,offset+1)};
+}
+function sakaToGregorian(year,month,day,clamp) {
+  year=Number(year);month=Number(month);day=Number(day); if(!year||month<1||month>12)return "";
+  const gregorianYear=year+78,lengths=sakaMonthLengths(gregorianYear); if(clamp)day=Math.max(1,Math.min(day,lengths[month-1]));
+  if(day<1||day>lengths[month-1])return ""; let offset=day-1; for(let i=1;i<month;i++)offset+=lengths[i-1];
+  const date=new Date(Date.UTC(gregorianYear,2,isGregorianLeapYear(gregorianYear)?21:22)); date.setUTCDate(date.getUTCDate()+offset); return date.toISOString().slice(0,10);
+}
+function formatSakaDate(value) {
+  const saka=typeof value==="string"?gregorianToSaka(value):value; if(!saka)return "—";
+  return saka.day+" "+SAKA_MONTHS[saka.month-1]+" "+saka.year+" Saka";
+}
+function syncImportantDateCalendar() {
+  const system=$("importantDateCalendarSystem").value;
+  $("importantDateGregorianFields").classList.toggle("hidden",system==="SAKA");
+  $("importantDateSakaFields").classList.toggle("hidden",system!=="SAKA");
+  $("importantDateValue").required=system!=="SAKA";
+  ["importantDateSakaYear","importantDateSakaMonth","importantDateSakaDay"].forEach(function(id){$(id).required=system==="SAKA";});
+  updateImportantDateConversion();
+}
+function updateImportantDateConversion() {
+  const system=$("importantDateCalendarSystem").value; let gregorian="",saka=null;
+  if(system==="SAKA"){
+    gregorian=sakaToGregorian($("importantDateSakaYear").value,$("importantDateSakaMonth").value,$("importantDateSakaDay").value,false);
+    if(gregorian){saka=gregorianToSaka(gregorian);$("importantDateValue").value=gregorian;}
+  } else {gregorian=$("importantDateValue").value;saka=gregorianToSaka(gregorian);}
+  $("importantDateConversion").textContent=gregorian&&saka?("English: "+formatDate(gregorian)+" · Saka: "+formatSakaDate(saka)):(system==="SAKA"?"Enter a valid Saka date.":"Choose a date to see both calendar formats.");
+}
+function syncRecurringFrequency() { const custom=$("recurringExpenseFrequency").value==="CUSTOM"; $("recurringCustomIntervalLabel").classList.toggle("hidden",!custom); $("recurringExpenseIntervalMonths").required=custom; }
 function money(value) {
   const code = (state.data && state.data.settings && state.data.settings.currency) || "INR";
   try { return new Intl.NumberFormat("en-IN", { style: "currency", currency: code, maximumFractionDigits: 2 }).format(Number(value) || 0); }
@@ -455,6 +496,10 @@ function bindDialogs() {
   $("expenseEntryType").addEventListener("change", syncExpenseEntryType);
   $("expenseCategory").addEventListener("change", function () { populateSubcategoryOptions("expenseCategory", "expenseSubcategory", "expenseSubcategoryOptions", true); });
   $("recurringExpenseCategory").addEventListener("change", function () { populateSubcategoryOptions("recurringExpenseCategory", "recurringExpenseSubcategory", "recurringExpenseSubcategoryOptions", true); });
+  $("recurringExpenseFrequency").addEventListener("change", syncRecurringFrequency);
+  $("importantDateCalendarSystem").addEventListener("change", syncImportantDateCalendar);
+  $("importantDateValue").addEventListener("input", updateImportantDateConversion);
+  ["importantDateSakaYear","importantDateSakaMonth","importantDateSakaDay"].forEach(function(id){$(id).addEventListener("input",updateImportantDateConversion);$(id).addEventListener("change",updateImportantDateConversion);});
   $("expenseMajorPlan").addEventListener("change", function () { fillMajorPlanLinkSelects($("expenseMajorPlan"), $("expenseMajorPlanPhase"), $("expenseMajorPlan").value, "", false); });
   $("recurringExpenseMajorPlan").addEventListener("change", function () { fillMajorPlanLinkSelects($("recurringExpenseMajorPlan"), $("recurringExpenseMajorPlanPhase"), $("recurringExpenseMajorPlan").value, "", false); });
   $("addMajorPlanPhase").addEventListener("click", function () { addMajorPlanPhaseRow(); });
@@ -476,13 +521,13 @@ function prepareNewDialog(id) {
     if (defaults[id][2]) $(defaults[id][2]).value = todayIso();
   }
   if (id === "expenseDialog") { $("expenseRecurringId").value = ""; $("expenseMarkPaidId").value = ""; $("expenseRecurringNote").textContent = ""; $("expenseRecurringNote").classList.add("hidden"); $("expenseEntryType").disabled = false; $("expenseEntryType").value = "REGULAR"; fillExpenseCategorySelect($("expenseCategory"), activeExpenseCategories().some(function(category){return category.name==="Home";}) ? "Home" : ""); populateSubcategoryOptions("expenseCategory", "expenseSubcategory", "expenseSubcategoryOptions", true); fillMajorPlanLinkSelects($("expenseMajorPlan"),$("expenseMajorPlanPhase"),"","",false); $("expenseDialogTitle").textContent = "Add paid expenditure"; syncExpenseEntryType(); }
-  if (id === "recurringExpenseDialog") { $("recurringExpenseDialogTitle").textContent = "Add regular payment"; fillExpenseCategorySelect($("recurringExpenseCategory"), activeExpenseCategories().some(function(category){return category.name==="Utilities";}) ? "Utilities" : ""); populateSubcategoryOptions("recurringExpenseCategory", "recurringExpenseSubcategory", "recurringExpenseSubcategoryOptions", true); fillMajorPlanLinkSelects($("recurringExpenseMajorPlan"),$("recurringExpenseMajorPlanPhase"),"","",false); $("recurringNotifyEveryone").checked = true; $("recurringRecipientChecks").classList.add("hidden"); renderRecurringRecipientChecks([]); }
+  if (id === "recurringExpenseDialog") { $("recurringExpenseDialogTitle").textContent = "Add regular payment"; fillExpenseCategorySelect($("recurringExpenseCategory"), activeExpenseCategories().some(function(category){return category.name==="Utilities";}) ? "Utilities" : ""); populateSubcategoryOptions("recurringExpenseCategory", "recurringExpenseSubcategory", "recurringExpenseSubcategoryOptions", true); fillMajorPlanLinkSelects($("recurringExpenseMajorPlan"),$("recurringExpenseMajorPlanPhase"),"","",false); $("recurringExpenseFrequency").value="MONTHLY"; $("recurringExpenseIntervalMonths").value="1"; syncRecurringFrequency(); $("recurringNotifyEveryone").checked = true; $("recurringRecipientChecks").classList.add("hidden"); renderRecurringRecipientChecks([]); }
   if (id === "majorPlanDialog") { $("majorPlanDialogTitle").textContent="Create major plan"; $("majorPlanStartDate").value=todayIso(); const target=new Date(); target.setFullYear(target.getFullYear()+1); $("majorPlanTargetDate").value=[target.getFullYear(),String(target.getMonth()+1).padStart(2,"0"),String(target.getDate()).padStart(2,"0")].join("-"); fillMemberSelect($("majorPlanOwner"),"ALL",true); $("majorPlanPhaseList").innerHTML=""; ["Planning / approvals","Main work","Finishing"].forEach(function(name){addMajorPlanPhaseRow({name:name,proposedAmount:""});}); updateMajorPlanPhaseBudgetSummary(); }
   if (id === "bulkExpenseDialog") $("bulkExpenseForm").reset();
   if (id === "incomeDialog") { $("incomeDialogTitle").textContent = "Add income"; fillMemberSelect($("incomeReceivedBy"), state.data.user.id); }
   if (id === "targetDialog") { $("targetForm").reset(); $("targetDueDate").value = todayIso(); fillMemberSelect($("targetOwner"), state.data.user.id, true); }
   if (id === "contributionDialog") { $("contributionForm").reset(); $("contributionDate").value = todayIso(); }
-  if (id === "dateDialog") { $("dateDialogTitle").textContent = "Add important date"; $("notifyEveryone").checked = true; $("recipientChecks").classList.add("hidden"); renderRecipientChecks([]); }
+  if (id === "dateDialog") { $("dateDialogTitle").textContent = "Add important date"; $("importantDateCalendarSystem").value="GREGORIAN"; const saka=gregorianToSaka($("importantDateValue").value||todayIso()); if(saka){$("importantDateSakaYear").value=saka.year;$("importantDateSakaMonth").value=String(saka.month);$("importantDateSakaDay").value=saka.day;} syncImportantDateCalendar(); $("notifyEveryone").checked = true; $("recipientChecks").classList.add("hidden"); renderRecipientChecks([]); }
   if (id === "photoDialog") { $("photoForm").reset(); $("photoTakenDate").value = todayIso(); $("photoPreview").classList.add("hidden"); state.pendingPhoto = null; }
   if (id === "memberDialog") { $("memberDialogTitle").textContent = "Add family member"; $("memberActive").checked = true; $("memberPassword").required = true; setMemberPermissions(["EXPENSES","INCOME","TARGETS","DATES","CALENDAR","PHOTOS","EXPERIENCES","DIARY"]); syncMemberAccessRole(); }
   if (id === "experienceDialog") $("experienceDialogTitle").textContent = "Add experience";
@@ -636,10 +681,17 @@ function bindForms() {
 }
 
 function bindFilters() {
-  const expenseSearchRender = debounce(renderExpenses, 120), incomeSearchRender = debounce(renderIncome, 120), dateSearchRender = debounce(renderDates, 120), photoSearchRender = debounce(renderPhotos, 120), experienceSearchRender = debounce(renderExperiences, 120), diarySearchRender = debounce(renderDiary, 120), globalSearchRender = debounce(renderGlobalSearch, 120);
+  const expenseSearchRender = debounce(renderExpenses, 120), recurringSearchRender=debounce(renderRecurringExpenses,120), incomeSearchRender = debounce(renderIncome, 120), dateSearchRender = debounce(renderDates, 120), photoSearchRender = debounce(renderPhotos, 120), experienceSearchRender = debounce(renderExperiences, 120), diarySearchRender = debounce(renderDiary, 120), globalSearchRender = debounce(renderGlobalSearch, 120);
   ["expenseMonth", "expenseStatusFilter", "expenseCategoryFilter", "expenseSubcategoryFilter", "expenseMajorPlanFilter", "expenseSendToFilter", "expenseAccountFilter"].forEach(function (id) { $(id).addEventListener("input", renderExpenses); });
   $("expenseSearch").addEventListener("input", expenseSearchRender);
   $("majorPlanStatusFilter").addEventListener("input", renderMajorPlans);
+  $("recurringStatusFilter").addEventListener("input", renderRecurringExpenses);
+  $("recurringSearch").addEventListener("input", recurringSearchRender);
+  $("recurringEditAll").addEventListener("click",function(){toggleRecurringEditAll(true);});
+  $("recurringCancelAll").addEventListener("click",function(){toggleRecurringEditAll(false);});
+  $("recurringSaveAll").addEventListener("click",saveAllRecurringRows);
+  $("exportRecurringExpenses").addEventListener("click",function(){exportCsv("family-regular-payments.csv",recurringExportRows(),["active","title","category","subcategory","frequencyLabel","estimatedAmount","nextDueDate","sentTo","fromAccount","reason","majorPlanName","majorPlanPhaseName"],["Active","Payment","Category","Subcategory","Frequency","Expected amount","Next due","Send to","From account","Reason","Major plan","Phase"]);});
+  $("printRecurringExpenses").addEventListener("click",printRecurringExpenses);
   ["incomeMonth", "incomeCategoryFilter", "incomeMemberFilter"].forEach(function (id) { $(id).addEventListener("input", renderIncome); });
   $("incomeSearch").addEventListener("input", incomeSearchRender);
   $("dateTypeFilter").addEventListener("input", renderDates);
@@ -712,6 +764,10 @@ function bindActions() {
     if (action === "delete-expense") confirmDelete("deleteExpense", id, "Delete this expenditure entry?");
     if (action === "pay-recurring-expense") openRecurringPayment(id);
     if (action === "edit-recurring-expense") editRecurringExpense(id);
+    if (action === "inline-edit-recurring") startInlineRecurringEdit(id);
+    if (action === "inline-save-recurring") await saveInlineRecurringRow(button);
+    if (action === "inline-cancel-recurring") { state.inlineRecurringId=""; renderRecurringExpenses(); }
+    if (action === "duplicate-recurring-expense") duplicateRecurringExpense(id);
     if (action === "delete-recurring-expense") confirmDelete("deleteRecurringExpense", id, "Remove this regular payment schedule? Past paid expenditure will remain.");
     if (action === "add-major-plan-expense") openMajorPlanExpense(id, false, button.dataset.phase || "");
     if (action === "add-major-plan-preplanned") openMajorPlanExpense(id, true);
@@ -768,6 +824,18 @@ function bindActions() {
     if (event.target.classList.contains("inline-expense-major-plan")) {
       const phase = row && row.querySelector(".inline-expense-major-plan-phase");
       if (phase) { phase.innerHTML=majorPlanPhaseOptions(event.target.value,"",false); phase.disabled=!event.target.value; }
+    }
+    if (event.target.classList.contains("inline-recurring-category")) {
+      const subcategory=row&&row.querySelector(".inline-recurring-subcategory");
+      if(subcategory)subcategory.innerHTML=expenseSubcategoryOptions(event.target.value,"",false);
+    }
+    if (event.target.classList.contains("inline-recurring-frequency")) {
+      const custom=row&&row.querySelector(".recurring-custom-row");
+      if(custom)custom.classList.toggle("hidden",event.target.value!=="CUSTOM");
+    }
+    if (event.target.classList.contains("inline-recurring-major-plan")) {
+      const phase=row&&row.querySelector(".inline-recurring-major-plan-phase");
+      if(phase){phase.innerHTML=majorPlanPhaseOptions(event.target.value,"",true);phase.disabled=!event.target.value;}
     }
   });
 }
@@ -920,7 +988,7 @@ async function saveRecurringExpense(event) {
   const id = $("recurringExpenseId").value;
   await mutate(id ? "updateRecurringExpense" : "createRecurringExpense", {
     id: id, title: $("recurringExpenseTitle").value.trim(), estimatedAmount: $("recurringExpenseAmount").value,
-    frequency: $("recurringExpenseFrequency").value, nextDueDate: $("recurringExpenseDueDate").value,
+    frequency: $("recurringExpenseFrequency").value, intervalMonths: $("recurringExpenseIntervalMonths").value, nextDueDate: $("recurringExpenseDueDate").value,
     category: $("recurringExpenseCategory").value, subcategory: $("recurringExpenseSubcategory").value.trim(),
     sentTo: $("recurringExpenseSendTo").value.trim(), fromAccount: $("recurringExpenseFromAccount").value.trim(),
     reason: $("recurringExpenseReason").value.trim(), remindDays: $("recurringExpenseRemind").value,
@@ -1095,8 +1163,12 @@ async function saveImportantDate(event) {
   const everyone = $("notifyEveryone").checked;
   const recipients = everyone ? ["ALL"] : all("input[name='dateRecipient']:checked").map(function (el) { return el.value; });
   if (!recipients.length) return toast("Choose at least one email recipient.", "error");
+  const calendarSystem=$("importantDateCalendarSystem").value;
+  const sakaDate=sakaIso($("importantDateSakaYear").value,$("importantDateSakaMonth").value,$("importantDateSakaDay").value);
+  const eventDate=calendarSystem==="SAKA"?sakaToGregorian($("importantDateSakaYear").value,$("importantDateSakaMonth").value,$("importantDateSakaDay").value,false):$("importantDateValue").value;
+  if(!eventDate)return toast("Enter a valid date in the selected calendar.","error");
   await mutate($("importantDateId").value ? "updateImportantDate" : "createImportantDate", {
-    id: $("importantDateId").value, title: $("importantDateTitle").value.trim(), eventDate: $("importantDateValue").value,
+    id: $("importantDateId").value, title: $("importantDateTitle").value.trim(), eventDate: eventDate, calendarSystem: calendarSystem, calendarDate: calendarSystem==="SAKA"?sakaDate:eventDate,
     eventType: $("importantDateType").value, repeatYearly: $("importantDateRepeat").checked,
     remindDays: $("importantDateRemind").value, recipientIds: recipients.join(","), notes: $("importantDateNotes").value.trim()
   }, "Reminder saved.", "dateDialog");
@@ -1256,7 +1328,7 @@ function openRecurringPayment(id) {
 }
 function editRecurringExpense(id) {
   const item = state.data.recurringExpenses.find(function (x) { return x.id === id; }); if (!item) return;
-  prepareNewDialog("recurringExpenseDialog"); $("recurringExpenseId").value = item.id; $("recurringExpenseTitle").value = item.title; $("recurringExpenseAmount").value = Number(item.estimatedAmount || 0) || ""; $("recurringExpenseFrequency").value = item.frequency; $("recurringExpenseDueDate").value = item.nextDueDate; fillExpenseCategorySelect($("recurringExpenseCategory"), item.category); fillExpenseSubcategorySelect($("recurringExpenseSubcategory"), item.category, item.subcategory || "General"); fillMajorPlanLinkSelects($("recurringExpenseMajorPlan"),$("recurringExpenseMajorPlanPhase"),item.majorPlanId||"",item.majorPlanPhaseId||"",true); $("recurringExpenseSendTo").value = item.sentTo; $("recurringExpenseFromAccount").value = item.fromAccount; $("recurringExpenseReason").value = item.reason; $("recurringExpenseRemind").value = item.remindDays || "7,1,0";
+  prepareNewDialog("recurringExpenseDialog"); $("recurringExpenseId").value = item.id; $("recurringExpenseTitle").value = item.title; $("recurringExpenseAmount").value = Number(item.estimatedAmount || 0) || ""; $("recurringExpenseFrequency").value = item.frequency; $("recurringExpenseIntervalMonths").value=item.intervalMonths||1; syncRecurringFrequency(); $("recurringExpenseDueDate").value = item.nextDueDate; fillExpenseCategorySelect($("recurringExpenseCategory"), item.category); fillExpenseSubcategorySelect($("recurringExpenseSubcategory"), item.category, item.subcategory || "General"); fillMajorPlanLinkSelects($("recurringExpenseMajorPlan"),$("recurringExpenseMajorPlanPhase"),item.majorPlanId||"",item.majorPlanPhaseId||"",true); $("recurringExpenseSendTo").value = item.sentTo; $("recurringExpenseFromAccount").value = item.fromAccount; $("recurringExpenseReason").value = item.reason; $("recurringExpenseRemind").value = item.remindDays || "7,1,0";
   const ids = String(item.recipientIds || "ALL").split(","); const everyone = ids.indexOf("ALL") >= 0; $("recurringNotifyEveryone").checked = everyone; $("recurringRecipientChecks").classList.toggle("hidden", everyone); renderRecurringRecipientChecks(ids); $("recurringExpenseDialogTitle").textContent = "Edit regular payment"; openDialog("recurringExpenseDialog");
 }
 function openMajorPlanExpense(id, planned, phaseId) {
@@ -1275,7 +1347,7 @@ function editIncome(id) {
 function openContribution(id) { const target = state.data.targets.find(function (x) { return x.id === id; }); if (!target) return; prepareNewDialog("contributionDialog"); $("contributionTargetId").value = id; $("contributionTitle").textContent = "Add to “" + target.title + "”"; openDialog("contributionDialog"); }
 function editImportantDate(id) {
   const item = state.data.importantDates.find(function (x) { return x.id === id; }); if (!item) return;
-  prepareNewDialog("dateDialog"); $("importantDateId").value = item.id; $("importantDateTitle").value = item.title; $("importantDateValue").value = item.eventDate; $("importantDateType").value = item.eventType; $("importantDateRepeat").checked = item.repeatYearly; $("importantDateRemind").value = item.remindDays; $("importantDateNotes").value = item.notes || "";
+  prepareNewDialog("dateDialog"); $("importantDateId").value = item.id; $("importantDateTitle").value = item.title; $("importantDateValue").value = item.eventDate; $("importantDateCalendarSystem").value=item.calendarSystem==="SAKA"?"SAKA":"GREGORIAN"; const saka=item.calendarSystem==="SAKA"&&item.calendarDate?{year:Number(String(item.calendarDate).slice(0,4)),month:Number(String(item.calendarDate).slice(5,7)),day:Number(String(item.calendarDate).slice(8,10))}:gregorianToSaka(item.eventDate); if(saka){$("importantDateSakaYear").value=saka.year;$("importantDateSakaMonth").value=String(saka.month);$("importantDateSakaDay").value=saka.day;} syncImportantDateCalendar(); $("importantDateType").value = item.eventType; $("importantDateRepeat").checked = item.repeatYearly; $("importantDateRemind").value = item.remindDays; $("importantDateNotes").value = item.notes || "";
   const ids = String(item.recipientIds || "").split(","); const everyone = ids.indexOf("ALL") >= 0; $("notifyEveryone").checked = everyone; $("recipientChecks").classList.toggle("hidden", everyone); renderRecipientChecks(ids); $("dateDialogTitle").textContent = "Edit reminder"; openDialog("dateDialog");
 }
 function editStickyNote(id) {
@@ -1588,28 +1660,121 @@ function renderExpenses() {
   $("expenseRows").innerHTML=items.map(function(item){return item.id===state.inlineExpenseId?renderInlineExpenseRow(item):renderExpenseDisplayRow(item);}).join("");
   $("expenseEmpty").classList.toggle("hidden",items.length>0);
 }
+function recurringIsActive(item) { return !(item.active === false || String(item.active).toLowerCase() === "false"); }
+function recurringIntervalMonthsClient(item) {
+  const frequency=String(item.frequency||"MONTHLY").toUpperCase();
+  return frequency==="QUARTERLY"?3:frequency==="HALF_YEARLY"?6:frequency==="YEARLY"?12:frequency==="CUSTOM"?Math.max(1,Math.min(60,Number(item.intervalMonths)||1)):1;
+}
+function recurringFrequencyLabel(item) {
+  const frequency=String(item.frequency||"MONTHLY").toUpperCase();
+  if(frequency==="QUARTERLY")return "Quarterly";
+  if(frequency==="HALF_YEARLY")return "Half-yearly";
+  if(frequency==="YEARLY")return "Yearly";
+  if(frequency==="CUSTOM")return "Every "+recurringIntervalMonthsClient(item)+" months";
+  return "Monthly";
+}
+function recurringFrequencyOptions(selected) {
+  return [["MONTHLY","Monthly"],["QUARTERLY","Quarterly"],["HALF_YEARLY","Half-yearly"],["YEARLY","Yearly"],["CUSTOM","Custom months"]].map(function(option){return '<option value="'+option[0]+'" '+(selected===option[0]?'selected':'')+'>'+option[1]+'</option>';}).join("");
+}
+function addRecurringMonthsClient(iso,months) {
+  const parts=String(iso||"").slice(0,10).split("-").map(Number); if(parts.length!==3||!parts[0])return "";
+  const targetMonth=parts[1]-1+Number(months||1),year=parts[0]+Math.floor(targetMonth/12),month=((targetMonth%12)+12)%12;
+  const day=Math.min(parts[2],new Date(Date.UTC(year,month+1,0)).getUTCDate());
+  return [year,String(month+1).padStart(2,"0"),String(day).padStart(2,"0")].join("-");
+}
+function recurringForecastBetween(items,startIso,endIso) {
+  return items.filter(recurringIsActive).reduce(function(total,item){
+    const amount=Number(item.estimatedAmount||0); if(!(amount>0))return total;
+    let due=String(item.nextDueDate||"").slice(0,10),guard=0,interval=recurringIntervalMonthsClient(item);
+    while(due&&due<startIso&&guard++<240)due=addRecurringMonthsClient(due,interval);
+    while(due&&due<=endIso&&guard++<480){total+=amount;due=addRecurringMonthsClient(due,interval);}
+    return total;
+  },0);
+}
+function filteredRecurringExpenses() {
+  const status=$("recurringStatusFilter").value,q=normalize($("recurringSearch").value);
+  return (state.data.recurringExpenses||[]).filter(function(item){
+    const active=recurringIsActive(item),days=Number(item.daysUntil),frequency=String(item.frequency||"MONTHLY").toUpperCase();
+    const matchesStatus=!status||(status==="INACTIVE"&&!active)||(status==="OVERDUE"&&active&&days<0)||(status==="DUE"&&active&&days===0)||(status==="UPCOMING"&&active&&days>=0&&days<=30)||(status==="MONTHLY"&&frequency==="MONTHLY")||(status==="YEARLY"&&frequency==="YEARLY");
+    return matchesStatus&&(!q||normalize([item.title,item.category,item.subcategory,item.sentTo,item.fromAccount,item.reason,majorPlanName(item.majorPlanId)].join(" ")).includes(q));
+  });
+}
+function recurringDuePresentation(item) {
+  if(!recurringIsActive(item))return {className:"inactive",text:"Inactive"};
+  const days=Number(item.daysUntil); if(days<0)return {className:"overdue",text:plural(Math.abs(days),"day")+" overdue"};
+  if(days===0)return {className:"due",text:"Due today"};
+  if(days===1)return {className:"soon",text:"Due tomorrow"};
+  if(days<=7)return {className:"soon",text:"Due in "+days+" days"};
+  return {className:"scheduled",text:formatDate(item.nextDueDate)};
+}
+function renderRecurringInlineRow(item) {
+  const active=recurringIsActive(item),custom=String(item.frequency).toUpperCase()==="CUSTOM";
+  return '<tr class="recurring-edit-row" data-recurring-id="'+h(item.id)+'">'+
+    '<td><label class="compact-check"><input data-recurring-field="active" type="checkbox" '+(active?'checked':'')+'><span>'+(active?'On':'Off')+'</span></label></td>'+
+    '<td><input class="recurring-inline-input" data-recurring-field="title" maxlength="100" value="'+h(item.title)+'"><textarea class="recurring-inline-input recurring-inline-reason" data-recurring-field="reason" rows="2" maxlength="500">'+h(item.reason||"")+'</textarea></td>'+
+    '<td><select class="recurring-inline-input inline-recurring-category" data-recurring-field="category">'+expenseCategoryOptions(item.category,true)+'</select><select class="recurring-inline-input inline-recurring-subcategory" data-recurring-field="subcategory">'+expenseSubcategoryOptions(item.category,item.subcategory,true)+'</select></td>'+
+    '<td><select class="recurring-inline-input inline-recurring-frequency" data-recurring-field="frequency">'+recurringFrequencyOptions(String(item.frequency||"MONTHLY").toUpperCase())+'</select><label class="recurring-custom-row '+(custom?'':'hidden')+'">Months<input class="recurring-inline-input" data-recurring-field="intervalMonths" type="number" min="1" max="60" value="'+h(item.intervalMonths||1)+'"></label></td>'+
+    '<td><input class="recurring-inline-input number" data-recurring-field="estimatedAmount" type="number" min="0" step="0.01" value="'+h(item.estimatedAmount||"")+'"></td>'+
+    '<td><input class="recurring-inline-input" data-recurring-field="nextDueDate" type="date" value="'+h(String(item.nextDueDate||"").slice(0,10))+'"></td>'+
+    '<td><input class="recurring-inline-input" data-recurring-field="sentTo" maxlength="100" value="'+h(item.sentTo||"")+'"></td>'+
+    '<td><input class="recurring-inline-input" data-recurring-field="fromAccount" maxlength="100" value="'+h(item.fromAccount||"")+'"><input class="recurring-inline-input recurring-remind-input" data-recurring-field="remindDays" maxlength="40" value="'+h(item.remindDays||"7,1,0")+'" title="Reminder days"></td>'+
+    '<td><select class="recurring-inline-input inline-recurring-major-plan" data-recurring-field="majorPlanId">'+majorPlanOptions(item.majorPlanId||"",true)+'</select><select class="recurring-inline-input inline-recurring-major-plan-phase" data-recurring-field="majorPlanPhaseId" '+(item.majorPlanId?'':'disabled')+'>'+majorPlanPhaseOptions(item.majorPlanId||"",item.majorPlanPhaseId||"",true)+'</select></td>'+
+    '<td class="recurring-action-cell">'+(state.recurringEditAll?'<span class="editing-row-label">Bulk edit</span>':'<div class="inline-save-actions"><button class="tiny-button save-row-button" data-action="inline-save-recurring" data-id="'+h(item.id)+'">✓ Save</button><button class="tiny-button" data-action="inline-cancel-recurring">Cancel</button></div>')+'</td></tr>';
+}
+function renderRecurringViewRow(item) {
+  const due=recurringDuePresentation(item),active=recurringIsActive(item),project=majorPlanName(item.majorPlanId),phase=majorPlanPhaseName(item.majorPlanPhaseId);
+  return '<tr class="recurring-view-row '+h(due.className)+'"><td><span class="schedule-status '+(active?'active':'inactive')+'">'+(active?'Active':'Inactive')+'</span></td><td><strong>'+h(item.title)+'</strong><small>'+h(item.reason||"")+'</small></td><td><span class="expense-category-chip">'+h(item.category||"Other")+'</span><small>'+h(item.subcategory||"General")+'</small></td><td><span class="frequency-chip">↻ '+h(recurringFrequencyLabel(item))+'</span></td><td class="number"><strong>'+(Number(item.estimatedAmount||0)>0?h(money(item.estimatedAmount)):'<span class="muted">At payment</span>')+'</strong></td><td><span class="due-chip '+h(due.className)+'">'+h(due.text)+'</span><small>'+h(formatDate(item.nextDueDate))+(item.lastPaidDate?' · Last '+h(formatDate(item.lastPaidDate)):'')+'</small></td><td>'+h(item.sentTo||"—")+'</td><td>'+h(item.fromAccount||"—")+'</td><td>'+(project?'<span class="major-plan-link-chip compact">'+h(project)+(phase?'<small>'+h(phase)+'</small>':'')+'</span>':'<span class="muted">—</span>')+'</td><td class="recurring-action-cell"><div class="recurring-row-actions">'+(active?'<button class="primary-button" data-action="pay-recurring-expense" data-id="'+h(item.id)+'">✓ Paid</button>':'')+'<button class="row-edit-primary" data-action="inline-edit-recurring" data-id="'+h(item.id)+'">✎ Edit row</button><button class="tiny-button" data-action="edit-recurring-expense" data-id="'+h(item.id)+'">↗ Form</button><button class="tiny-button" data-action="duplicate-recurring-expense" data-id="'+h(item.id)+'">Duplicate</button>'+(mayDelete(item)?'<button class="danger-button" data-action="delete-recurring-expense" data-id="'+h(item.id)+'">Delete</button>':'')+'</div></td></tr>';
+}
 function renderRecurringExpenses() {
-  const items = state.data.recurringExpenses || [];
-  const overdue = items.filter(function (item) { return Number(item.daysUntil) < 0; }).length;
-  $("recurringExpenseCount").textContent = plural(items.length, "payment") + (overdue ? " · " + overdue + " overdue" : "");
-  $("recurringExpenseList").innerHTML = items.map(function (item) {
-    const days = Number(item.daysUntil); let statusClass = "scheduled", statusText = formatDate(item.nextDueDate);
-    if (days < 0) { statusClass = "overdue"; statusText = plural(Math.abs(days), "day") + " overdue"; }
-    else if (days === 0) { statusClass = "due"; statusText = "Due today"; }
-    else if (days === 1) { statusClass = "soon"; statusText = "Due tomorrow"; }
-    else if (days <= 7) { statusClass = "soon"; statusText = "Due in " + days + " days"; }
-    const amount = Number(item.estimatedAmount || 0) > 0 ? money(item.estimatedAmount) : "Enter amount when paid";
-    const project=majorPlanName(item.majorPlanId),phase=majorPlanPhaseName(item.majorPlanPhaseId);
-    return '<div class="recurring-card '+statusClass+'"><div class="recurring-card-top"><div><span class="frequency-chip">↻ '+h(item.frequency === "YEARLY" ? "Yearly" : "Monthly")+'</span><h4>'+h(item.title)+'</h4></div><span class="due-chip">'+h(statusText)+'</span></div><strong class="recurring-amount">'+h(amount)+'</strong><p><span class="expense-category-chip">'+h(item.category||"Other")+' · '+h(item.subcategory||"General")+'</span>'+(project?'<span class="major-plan-link-chip compact">'+h(project)+(phase?'<small>'+h(phase)+'</small>':'')+'</span>':'')+'<br>'+h(item.sentTo)+' · '+h(item.fromAccount)+'</p><small>'+h(item.reason)+'</small>'+(item.lastPaidDate?'<em>Last paid '+h(formatDate(item.lastPaidDate))+'</em>':'')+'<div class="recurring-actions"><button class="primary-button" data-action="pay-recurring-expense" data-id="'+h(item.id)+'">✓ Mark as paid</button><button class="tiny-button" data-action="edit-recurring-expense" data-id="'+h(item.id)+'">Edit</button>'+(mayDelete(item)?'<button class="danger-button" data-action="delete-recurring-expense" data-id="'+h(item.id)+'">Remove</button>':'')+'</div></div>';
-  }).join("");
-  $("recurringExpenseEmpty").innerHTML = "No regular payment added. Choose <strong>Add regular payment</strong> to add one now or later.";
-  $("recurringExpenseEmpty").classList.toggle("hidden", items.length > 0);
+  const allItems=state.data.recurringExpenses||[],items=filteredRecurringExpenses(),today=todayIso(),year=Number(today.slice(0,4)),month=Number(today.slice(5,7));
+  const monthEnd=new Date(Date.UTC(year,month,0)).toISOString().slice(0,10),yearEnd=year+"-12-31",monthStart=today.slice(0,7)+"-01",yearStart=year+"-01-01";
+  const active=allItems.filter(recurringIsActive),overdue=active.filter(function(item){return Number(item.daysUntil)<0;}),next30=active.filter(function(item){return Number(item.daysUntil)>=0&&Number(item.daysUntil)<=30;});
+  $("recurringExpenseCount").textContent=plural(allItems.length,"payment")+(overdue.length?" · "+overdue.length+" overdue":"");
+  $("recurringSummary").innerHTML='<article><small>Active schedules</small><strong>'+active.length+'</strong></article><article class="danger"><small>Overdue</small><strong>'+overdue.length+'</strong></article><article><small>Due in 30 days</small><strong>'+next30.length+'</strong></article><article><small>Expected this month</small><strong>'+h(money(recurringForecastBetween(allItems,monthStart,monthEnd)))+'</strong></article><article><small>Expected this year</small><strong>'+h(money(recurringForecastBetween(allItems,yearStart,yearEnd)))+'</strong></article>';
+  if(state.inlineRecurringId&&!items.some(function(item){return item.id===state.inlineRecurringId;}))state.inlineRecurringId="";
+  $("recurringExpenseList").innerHTML=items.map(function(item){return state.recurringEditAll||item.id===state.inlineRecurringId?renderRecurringInlineRow(item):renderRecurringViewRow(item);}).join("");
+  $("recurringEditAll").classList.toggle("hidden",state.recurringEditAll);
+  $("recurringCancelAll").classList.toggle("hidden",!state.recurringEditAll);
+  $("recurringSaveAll").classList.toggle("hidden",!state.recurringEditAll);
+  $("recurringExpenseEmpty").innerHTML=allItems.length?"No regular payment matches the selected filter.":"No regular payment added. Choose <strong>Add regular payment</strong> to add one now or later.";
+  $("recurringExpenseEmpty").classList.toggle("hidden",items.length>0);
+}
+function startInlineRecurringEdit(id) { state.recurringEditAll=false;state.inlineRecurringId=id;renderRecurringExpenses();setTimeout(function(){const row=document.querySelector('tr[data-recurring-id="'+CSS.escape(id)+'"]'),input=row&&row.querySelector('[data-recurring-field="title"]');if(input){input.focus();input.select();}},20); }
+function collectRecurringRow(row,item) {
+  const element=function(field){return row.querySelector('[data-recurring-field="'+field+'"]');},value=function(field){const input=element(field);return input?String(input.value||"").trim():"";};
+  const frequency=value("frequency"),intervalMonths=frequency==="CUSTOM"?Number(value("intervalMonths")):recurringIntervalMonthsClient({frequency:frequency});
+  const payload={id:item.id,active:element("active").checked,title:value("title"),estimatedAmount:value("estimatedAmount")||0,frequency:frequency,intervalMonths:intervalMonths,nextDueDate:value("nextDueDate"),category:value("category"),subcategory:value("subcategory"),sentTo:value("sentTo"),fromAccount:value("fromAccount"),reason:value("reason"),remindDays:value("remindDays")||"7,1,0",recipientIds:item.recipientIds||"ALL",majorPlanId:value("majorPlanId"),majorPlanPhaseId:value("majorPlanPhaseId")};
+  if(!payload.title||!payload.nextDueDate||!payload.category||!payload.subcategory||!payload.sentTo||!payload.fromAccount||!payload.reason)throw new Error("Complete all required fields in “"+(payload.title||"untitled payment")+"”.");
+  if(frequency==="CUSTOM"&&(!(intervalMonths>=1)||intervalMonths>60))throw new Error("Custom frequency must be between 1 and 60 months.");
+  return payload;
+}
+async function saveInlineRecurringRow(button) {
+  const row=button.closest("tr"),item=(state.data.recurringExpenses||[]).find(function(entry){return entry.id===button.dataset.id;});if(!row||!item)return;
+  let payload;try{payload=collectRecurringRow(row,item);}catch(error){return toast(error.message,"error");}
+  state.inlineRecurringId="";const result=await mutate("updateRecurringExpense",payload,"Regular payment row updated.",null,"Saving regular payment…");if(!result){state.inlineRecurringId=item.id;renderRecurringExpenses();}
+}
+function toggleRecurringEditAll(active) { state.recurringEditAll=!!active;state.inlineRecurringId="";renderRecurringExpenses(); }
+async function saveAllRecurringRows() {
+  const rows=all("tr[data-recurring-id]",$("recurringExpenseList"));if(!rows.length)return toast("No regular-payment rows are visible to save.","error");
+  let items;try{items=rows.map(function(row){const item=(state.data.recurringExpenses||[]).find(function(entry){return entry.id===row.dataset.recurringId;});return collectRecurringRow(row,item);});}catch(error){return toast(error.message,"error");}
+  state.recurringEditAll=false;const result=await mutate("bulkUpdateRecurringExpenses",{items:items},plural(items.length,"regular payment")+" updated.",null,"Saving all regular payments…");if(!result){state.recurringEditAll=true;renderRecurringExpenses();}
+}
+function duplicateRecurringExpense(id) {
+  const item=(state.data.recurringExpenses||[]).find(function(entry){return entry.id===id;});if(!item)return;
+  editRecurringExpense(id);$("recurringExpenseId").value="";$("recurringExpenseTitle").value=item.title+" copy";$("recurringExpenseDialogTitle").textContent="Duplicate regular payment";
+}
+function recurringExportRows() { return filteredRecurringExpenses().map(function(item){return Object.assign({},item,{active:recurringIsActive(item)?"Yes":"No",frequencyLabel:recurringFrequencyLabel(item),majorPlanName:majorPlanName(item.majorPlanId),majorPlanPhaseName:majorPlanPhaseName(item.majorPlanPhaseId)});}); }
+function printRecurringExpenses() {
+  const items=recurringExportRows();if(!items.length)return toast("No regular payments match the selected filter.","error");
+  const rows=items.map(function(item,index){const due=recurringDuePresentation(item);return '<tr><td>'+(index+1)+'</td><td>'+h(item.active)+'</td><td><strong>'+h(item.title)+'</strong><br><small>'+h(item.reason)+'</small></td><td>'+h(item.category)+' · '+h(item.subcategory)+'</td><td>'+h(item.frequencyLabel)+'</td><td class="number">'+h(Number(item.estimatedAmount||0)>0?money(item.estimatedAmount):"At payment")+'</td><td>'+h(formatDate(item.nextDueDate))+'<br><small>'+h(due.text)+'</small></td><td>'+h(item.sentTo)+'</td><td>'+h(item.fromAccount)+'</td><td>'+h(item.majorPlanName||"—")+'</td></tr>';}).join("");
+  const report=window.open("","regularPaymentReport","width=1180,height=850");if(!report)return toast("Allow pop-ups to open the regular-payment report.","error");
+  report.document.write("<!doctype html><html><head><meta charset='utf-8'><title>Regular Payments</title><style>body{font:12px Arial;color:#24233d;margin:0;background:#f5f4fa}.report{max-width:1200px;margin:auto;padding:24px}.actions{text-align:right;margin-bottom:14px}button{padding:8px 12px;border:1px solid #6651c7;border-radius:8px;background:white;color:#513da8;font-weight:bold;margin-left:6px}h1{margin:0 0 5px}.meta{color:#68677b}.summary{display:flex;gap:8px;flex-wrap:wrap;margin:15px 0}.summary span{padding:8px 11px;border-radius:9px;background:#ede9ff;font-weight:bold}table{width:100%;border-collapse:collapse}th,td{padding:7px;border:1px solid #dddbe8;vertical-align:top}th{background:#e9e4fb;text-align:left;font-size:10px;text-transform:uppercase}tbody tr:nth-child(even){background:#eef6ff}.number{text-align:right}@media print{body{background:#fff}.report{max-width:none;padding:0}.actions{display:none}}</style></head><body><main class='report'><div class='actions'><button onclick='window.close()'>Close</button><button onclick='window.print()'>Print</button></div><h1>Regular Payments</h1><p class='meta'>"+h((state.data.settings&&state.data.settings.familyName)||"Our Family Hub")+" · Printed "+h(formatDate(todayIso()))+"</p><section class='summary'><span>"+h(plural(items.length,"schedule"))+"</span><span>FE v"+h(FRONTEND_VERSION)+"</span><span>BE v"+h(state.data.backendVersion||"—")+"</span></section><table><thead><tr><th>#</th><th>Active</th><th>Payment</th><th>Category</th><th>Frequency</th><th>Expected</th><th>Next due</th><th>Send to</th><th>Account</th><th>Major plan</th></tr></thead><tbody>"+rows+"</tbody></table></main></body></html>");report.document.close();
 }
 function filteredIncome() { const month=$("incomeMonth").value,cat=$("incomeCategoryFilter").value,member=$("incomeMemberFilter").value,q=normalize($("incomeSearch").value); return state.data.income.filter(function(x){return (!month||String(x.date).slice(0,7)===month)&&(!cat||x.category===cat)&&(!member||x.receivedBy===member)&&(!q||normalize([x.source,x.category,x.receivingMode,memberName(x.receivedBy)].join(" ")).includes(q));}).map(function(x){return Object.assign({},x,{receivedByName:memberName(x.receivedBy)});}); }
 function renderIncome() { const items=filteredIncome(),total=items.reduce(function(s,x){return s+Number(x.amount||0);},0); $("incomeTotals").innerHTML='<span class="total-pill green">'+plural(items.length,"entry","entries")+'</span><span class="total-pill green">Total '+h(money(total))+'</span>'; $("incomeRows").innerHTML=items.map(function(x){return '<tr><td>'+h(formatDate(x.date))+'</td><td><strong>'+h(x.source)+'</strong></td><td>'+h(x.category)+'</td><td>'+h(x.receivedByName)+'</td><td>'+h(x.receivingMode)+'</td><td class="number"><strong>'+h(money(x.amount))+'</strong></td><td><div class="row-actions"><button class="tiny-button" data-action="edit-income" data-id="'+h(x.id)+'">Edit</button>'+(mayDelete(x)?'<button class="danger-button" data-action="delete-income" data-id="'+h(x.id)+'">×</button>':"")+'</div></td></tr>';}).join(""); $("incomeEmpty").classList.toggle("hidden",items.length>0); }
 
 function renderTargets() { const items=state.data.targets,total=items.reduce(function(s,x){return s+Number(x.targetAmount||0);},0),saved=items.reduce(function(s,x){return s+Number(x.currentAmount||0);},0); $("targetSummary").innerHTML=items.length?'<span class="total-pill">Total goal '+h(money(total))+'</span><span class="total-pill green">Progress '+h(money(saved))+'</span>':""; $("targetGrid").innerHTML=items.map(function(x){const pct=Number(x.targetAmount)?Math.min(100,Math.round(Number(x.currentAmount)/Number(x.targetAmount)*100)):0;return '<article class="target-card"><div class="target-top"><div><small>'+h(x.category)+' · '+h(x.ownerId==="ALL"?"Whole family":memberName(x.ownerId))+'</small><h3>'+h(x.title)+'</h3><small>Due '+h(formatDate(x.dueDate))+'</small></div><span class="target-icon">◎</span></div><div class="progress-track"><div class="progress-fill" style="width:'+pct+'%"></div></div><div class="target-numbers"><span><strong>'+h(money(x.currentAmount))+'</strong> saved</span><span>'+pct+'% of '+h(money(x.targetAmount))+'</span></div><div class="target-actions"><button class="primary-button" data-action="contribute" data-id="'+h(x.id)+'">＋ Add progress</button>'+(mayDelete(x)?'<button class="danger-button" data-action="delete-target" data-id="'+h(x.id)+'">Delete</button>':"")+'</div></article>';}).join(""); $("targetEmpty").classList.toggle("hidden",items.length>0); }
-function renderDates() { const type=$("dateTypeFilter").value,q=normalize($("dateSearch").value); const items=state.data.importantDates.filter(function(x){return (!type||x.eventType===type)&&(!q||normalize([x.title,x.eventType,x.notes].join(" ")).includes(q));}); $("dateGrid").innerHTML=items.map(function(x){const p=dayParts(x.nextOccurrence||x.eventDate); return '<article class="date-card"><div class="date-tile"><strong>'+p.day+'</strong><span>'+p.month+'</span></div><div><h3>'+h(x.title)+'</h3><p>'+h(x.eventType)+' · '+h(formatDate(x.nextOccurrence||x.eventDate))+'</p><p>Email: '+h(reminderText(x.remindDays))+'</p>'+(x.repeatYearly?'<span class="repeat-chip">↻ Every year</span>':"")+'</div><div class="row-actions"><button class="tiny-button" data-action="edit-date" data-id="'+h(x.id)+'">Edit</button>'+(mayDelete(x)?'<button class="danger-button" data-action="delete-date" data-id="'+h(x.id)+'">×</button>':"")+'</div></article>';}).join(""); $("dateEmpty").classList.toggle("hidden",items.length>0); }
+function renderDates() { const type=$("dateTypeFilter").value,q=normalize($("dateSearch").value); const items=state.data.importantDates.filter(function(x){return (!type||x.eventType===type)&&(!q||normalize([x.title,x.eventType,x.notes,x.calendarDate].join(" ")).includes(q));}); $("dateGrid").innerHTML=items.map(function(x){const occurrence=x.nextOccurrence||x.eventDate,p=dayParts(occurrence),saka=x.calendarSystem==="SAKA"&&x.calendarDate?{year:Number(String(x.calendarDate).slice(0,4)),month:Number(String(x.calendarDate).slice(5,7)),day:Number(String(x.calendarDate).slice(8,10))}:gregorianToSaka(x.eventDate); return '<article class="date-card"><div class="date-tile"><strong>'+p.day+'</strong><span>'+p.month+'</span></div><div><h3>'+h(x.title)+'</h3><p>'+h(x.eventType)+' · '+h(formatDate(occurrence))+'</p><p class="dual-date-line">Saka: '+h(formatSakaDate(saka))+'</p><p>Email: '+h(reminderText(x.remindDays))+'</p>'+(x.repeatYearly?'<span class="repeat-chip">↻ Every year in '+(x.calendarSystem==="SAKA"?'Saka':'English')+' calendar</span>':"")+'</div><div class="row-actions"><button class="tiny-button" data-action="edit-date" data-id="'+h(x.id)+'">Edit</button>'+(mayDelete(x)?'<button class="danger-button" data-action="delete-date" data-id="'+h(x.id)+'">×</button>':"")+'</div></article>';}).join(""); $("dateEmpty").classList.toggle("hidden",items.length>0); }
 function reminderText(days) { return String(days||"").split(",").map(function(d){return Number(d)===0?"same day":d+"d before";}).join(", "); }
 
 function renderPhotos() {
@@ -1658,14 +1823,14 @@ function renderDiary() { const month=$("diaryMonth").value,writer=$("diaryWriter
 
 function renderCalendar() {
   if (!state.data) return;
-  const year=state.calendarCursor.getFullYear(),month=state.calendarCursor.getMonth(); $("calendarMonthLabel").textContent=state.calendarCursor.toLocaleDateString("en-IN",{month:"long",year:"numeric"});
+  const year=state.calendarCursor.getFullYear(),month=state.calendarCursor.getMonth(); const monthStart=[year,String(month+1).padStart(2,"0"),"01"].join("-"); const monthEndDate=new Date(year,month+1,0),monthEnd=[monthEndDate.getFullYear(),String(monthEndDate.getMonth()+1).padStart(2,"0"),String(monthEndDate.getDate()).padStart(2,"0")].join("-"); const startSaka=gregorianToSaka(monthStart),endSaka=gregorianToSaka(monthEnd); $("calendarMonthLabel").textContent=state.calendarCursor.toLocaleDateString("en-IN",{month:"long",year:"numeric"})+" · "+SAKA_MONTHS[startSaka.month-1]+(startSaka.month!==endSaka.month?"–"+SAKA_MONTHS[endSaka.month-1]:"")+" "+endSaka.year+" Saka";
   const first=new Date(year,month,1),start=new Date(year,month,1-first.getDay()),today=todayIso(),cells=[];
-  for(let i=0;i<42;i++){const d=new Date(start);d.setDate(start.getDate()+i);const iso=[d.getFullYear(),String(d.getMonth()+1).padStart(2,"0"),String(d.getDate()).padStart(2,"0")].join("-");const events=[];
-    state.data.importantDates.forEach(function(x){let eventIso=x.eventDate;if(x.repeatYearly)eventIso=String(d.getFullYear())+String(x.eventDate).slice(4,10);if(eventIso===iso)events.push({type:"reminder",title:x.title});});
-    state.data.recurringExpenses.forEach(function(x){if(x.nextDueDate===iso)events.push({type:"recurring",title:"Payment: "+x.title});});
+  for(let i=0;i<42;i++){const d=new Date(start);d.setDate(start.getDate()+i);const iso=[d.getFullYear(),String(d.getMonth()+1).padStart(2,"0"),String(d.getDate()).padStart(2,"0")].join("-");const events=[],cellSaka=gregorianToSaka(iso);
+    state.data.importantDates.forEach(function(x){let match=x.eventDate===iso;if(x.repeatYearly){if(x.calendarSystem==="SAKA"){const saved=String(x.calendarDate||"").split("-").map(Number);match=saved[1]===cellSaka.month&&Math.min(saved[2],sakaMonthLengths(cellSaka.year+78)[cellSaka.month-1])===cellSaka.day;}else match=String(x.eventDate).slice(5)===iso.slice(5);}if(match)events.push({type:"reminder",title:x.title});});
+    state.data.recurringExpenses.forEach(function(x){if(recurringIsActive(x)&&x.nextDueDate===iso)events.push({type:"recurring",title:"Payment: "+x.title});});
     state.data.expenses.map(normalizeExpense).forEach(function(x){if(x.status==="PLANNED"&&x.date===iso)events.push({type:"recurring",title:"Preplanned: "+(x.reason||x.category)});});
     state.data.experiences.forEach(function(x){if(x.experienceDate===iso)events.push({type:"experience",title:x.title});}); state.data.diary.forEach(function(x){if(x.diaryDate===iso)events.push({type:"diary",title:x.title});});
-    cells.push('<div class="calendar-cell '+(d.getMonth()!==month?'other-month ':'')+(iso===today?'today':'')+'"><span class="calendar-day">'+d.getDate()+'</span><div class="calendar-events">'+events.slice(0,4).map(function(e){return '<button class="calendar-event '+e.type+'" title="'+h(e.title)+'">'+h(e.title)+'</button>';}).join("")+(events.length>4?'<span class="calendar-event">+'+(events.length-4)+' more</span>':"")+'</div></div>');
+    cells.push('<div class="calendar-cell '+(d.getMonth()!==month?'other-month ':'')+(iso===today?'today':'')+'"><div class="calendar-day-pair"><span class="calendar-day">'+d.getDate()+'</span><small title="'+h(formatSakaDate(cellSaka))+'">'+(cellSaka.day===1?h(SAKA_MONTHS[cellSaka.month-1].slice(0,3))+" ":"")+cellSaka.day+' S</small></div><div class="calendar-events">'+events.slice(0,4).map(function(e){return '<button class="calendar-event '+e.type+'" title="'+h(e.title)+'">'+h(e.title)+'</button>';}).join("")+(events.length>4?'<span class="calendar-event">+'+(events.length-4)+' more</span>':"")+'</div></div>');
   } $("calendarGrid").innerHTML=cells.join("");
 }
 

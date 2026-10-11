@@ -2,7 +2,7 @@
 
 const CONFIG = window.FAMILY_DASHBOARD_CONFIG || {};
 const PLACEHOLDER_URL = "PASTE_YOUR_APPS_SCRIPT_WEB_APP_URL_HERE";
-const FRONTEND_VERSION = "1.0.29";
+const FRONTEND_VERSION = "1.0.30";
 const SAVED_USERNAME_KEY = "familyDashboardUsername";
 const SESSION_TOKEN_KEY = "familyDashboardToken";
 const IDLE_TIMEOUT_MS = 5 * 60 * 1000;
@@ -109,6 +109,7 @@ function canUploadMemories() {
   if (isAdmin()) return true;
   return !!(state.data && state.data.settings && state.data.settings.memoryUploadPolicy === "MEMBERS_WITH_ACCESS" && hasModuleAccess("PHOTOS"));
 }
+function expenseSharingEnabled() { return !!(state.data && state.data.settings && (state.data.settings.expenseSettlementEnabled === true || String(state.data.settings.expenseSettlementEnabled).toLowerCase() === "true")); }
 function formatDate(iso) {
   if (!iso) return "—";
   const parts = String(iso).slice(0, 10).split("-");
@@ -403,7 +404,7 @@ async function repairBrowserSession() {
   const url = new URL(window.location.href); url.searchParams.set("fresh", String(Date.now())); window.location.replace(url.toString());
 }
 function loadSavedUsername() { const saved = localStorage.getItem(SAVED_USERNAME_KEY) || ""; $("loginUsername").value = saved; $("rememberUsername").checked = !!saved || $("rememberUsername").checked; }
-function normalizeBootstrapData(data) { const result = data || {}; ["members","expenses","recurringExpenses","majorPlans","majorPlanPhases","income","targets","importantDates","photos","experiences","diary","stickyNotes"].forEach(function (key) { if (!Array.isArray(result[key])) result[key] = []; }); if (!result.settings) result.settings = {}; if (!Array.isArray(result.expenseCategories) || !result.expenseCategories.length) result.expenseCategories = fallbackExpenseCategories(); return result; }
+function normalizeBootstrapData(data) { const result = data || {}; ["members","expenses","recurringExpenses","settlements","majorPlans","majorPlanPhases","income","targets","importantDates","photos","experiences","diary","stickyNotes"].forEach(function (key) { if (!Array.isArray(result[key])) result[key] = []; }); if (!result.settings) result.settings = {}; if (!Array.isArray(result.expenseCategories) || !result.expenseCategories.length) result.expenseCategories = fallbackExpenseCategories(); return result; }
 
 function majorPlanById(id) { return (state.data && state.data.majorPlans || []).find(function (item) { return item.id === id; }); }
 function majorPlanPhaseById(id) { return (state.data && state.data.majorPlanPhases || []).find(function (item) { return item.id === id; }); }
@@ -506,6 +507,11 @@ function bindDialogs() {
   $("photoFile").addEventListener("change", previewPhoto);
   $("expenseEntryType").addEventListener("change", syncExpenseEntryType);
   $("expenseCategory").addEventListener("change", function () { populateSubcategoryOptions("expenseCategory", "expenseSubcategory", "expenseSubcategoryOptions", true); });
+  $("expenseSplitMethod").addEventListener("change", syncExpenseSharingFields);
+  $("expensePaidByMember").addEventListener("change", syncExpenseSharingFields);
+  $("expenseMember").addEventListener("change", syncExpenseSharingFields);
+  $("expenseAmount").addEventListener("input", updateExpenseShareTotal);
+  $("expenseShareMembers").addEventListener("change", syncExpenseSharingFields);
   $("recurringExpenseCategory").addEventListener("change", function () { populateSubcategoryOptions("recurringExpenseCategory", "recurringExpenseSubcategory", "recurringExpenseSubcategoryOptions", true); });
   $("recurringExpenseFrequency").addEventListener("change", syncRecurringFrequency);
   $("importantDateCalendarSystem").addEventListener("change", syncImportantDateCalendar);
@@ -531,7 +537,7 @@ function prepareNewDialog(id) {
     $(defaults[id][1]).value = "";
     if (defaults[id][2]) $(defaults[id][2]).value = todayIso();
   }
-  if (id === "expenseDialog") { $("expenseRecurringId").value = ""; $("expenseMarkPaidId").value = ""; $("expenseRecurringNote").textContent = ""; $("expenseRecurringNote").classList.add("hidden"); $("expenseEntryType").disabled = false; $("expenseEntryType").value = "REGULAR"; fillMemberSelect($("expenseMember"), state.data.user.id, true); fillExpenseCategorySelect($("expenseCategory"), activeExpenseCategories().some(function(category){return category.name==="Home";}) ? "Home" : ""); populateSubcategoryOptions("expenseCategory", "expenseSubcategory", "expenseSubcategoryOptions", true); fillMajorPlanLinkSelects($("expenseMajorPlan"),$("expenseMajorPlanPhase"),"","",false); $("expenseDialogTitle").textContent = "Add paid expenditure"; syncExpenseEntryType(); }
+  if (id === "expenseDialog") { $("expenseRecurringId").value = ""; $("expenseMarkPaidId").value = ""; $("expenseRecurringNote").textContent = ""; $("expenseRecurringNote").classList.add("hidden"); $("expenseEntryType").disabled = false; $("expenseEntryType").value = "REGULAR"; fillMemberSelect($("expenseMember"), state.data.user.id, true); fillExpenseCategorySelect($("expenseCategory"), activeExpenseCategories().some(function(category){return category.name==="Home";}) ? "Home" : ""); populateSubcategoryOptions("expenseCategory", "expenseSubcategory", "expenseSubcategoryOptions", true); fillMajorPlanLinkSelects($("expenseMajorPlan"),$("expenseMajorPlanPhase"),"","",false); resetExpenseSharingForm(); $("expenseDialogTitle").textContent = "Add paid expenditure"; syncExpenseEntryType(); }
   if (id === "recurringExpenseDialog") { $("recurringExpenseDialogTitle").textContent = "Add regular payment"; fillMemberSelect($("recurringExpenseMember"), state.data.user.id, true); fillExpenseCategorySelect($("recurringExpenseCategory"), activeExpenseCategories().some(function(category){return category.name==="Utilities";}) ? "Utilities" : ""); populateSubcategoryOptions("recurringExpenseCategory", "recurringExpenseSubcategory", "recurringExpenseSubcategoryOptions", true); fillMajorPlanLinkSelects($("recurringExpenseMajorPlan"),$("recurringExpenseMajorPlanPhase"),"","",false); $("recurringExpenseFrequency").value="MONTHLY"; $("recurringExpenseIntervalMonths").value="1"; syncRecurringFrequency(); $("recurringNotifyEveryone").checked = true; $("recurringRecipientChecks").classList.add("hidden"); renderRecurringRecipientChecks([]); }
   if (id === "majorPlanDialog") { $("majorPlanDialogTitle").textContent="Create major plan"; $("majorPlanStartDate").value=todayIso(); const target=new Date(); target.setFullYear(target.getFullYear()+1); $("majorPlanTargetDate").value=[target.getFullYear(),String(target.getMonth()+1).padStart(2,"0"),String(target.getDate()).padStart(2,"0")].join("-"); fillMemberSelect($("majorPlanOwner"),"ALL",true); $("majorPlanPhaseList").innerHTML=""; ["Planning / approvals","Main work","Finishing"].forEach(function(name){addMajorPlanPhaseRow({name:name,proposedAmount:""});}); updateMajorPlanPhaseBudgetSummary(); }
   if (id === "bulkExpenseDialog") $("bulkExpenseForm").reset();
@@ -552,6 +558,43 @@ function syncExpenseEntryType() {
   const label = $("expenseDateLabel");
   if (label && label.firstChild) label.firstChild.nodeValue = planned ? "Planned date" : "Date paid";
   if (!specialPayment) $("expenseDialogTitle").textContent = planned ? ($("expenseId").value ? "Edit preplanned expenditure" : "Add preplanned expenditure") : ($("expenseId").value ? "Edit expenditure" : "Add paid expenditure");
+}
+
+function resetExpenseSharingForm(expense) {
+  const item=expense||{}, enabled=expenseSharingEnabled();
+  $("expenseSharingFieldset").classList.toggle("hidden",!enabled);
+  fillMemberSelect($("expensePaidByMember"),item.paidByMemberId||state.data.user.id,false);
+  $("expenseSplitMethod").value=enabled&&["EQUAL","CUSTOM"].indexOf(String(item.splitMethod||"").toUpperCase())>=0?String(item.splitMethod).toUpperCase():"PERSONAL";
+  const selected=String(item.sharedWithIds||"").split(",").filter(Boolean), shares=parseExpenseShares(item.shareAmounts);
+  $("expenseShareMembers").innerHTML=(state.data.members||[]).map(function(member){return '<label class="expense-share-member">'+memberAvatarMarkup(member.id,"tiny")+'<input type="checkbox" name="expenseShareMember" value="'+h(member.id)+'" '+(selected.indexOf(member.id)>=0?'checked':'')+'><span>'+h(member.name)+'</span></label>';}).join("");
+  renderExpenseCustomShares(shares);
+  syncExpenseSharingFields();
+}
+function parseExpenseShares(value) { if(value&&typeof value==="object")return value; try{return JSON.parse(String(value||"{}"));}catch(error){return {};} }
+function selectedExpenseShareMembers() { return all('input[name="expenseShareMember"]:checked',$("expenseShareMembers")).map(function(input){return input.value;}); }
+function syncExpenseSharingFields() {
+  if(!expenseSharingEnabled())return;
+  const method=$("expenseSplitMethod").value, shared=method!=="PERSONAL";
+  $("expenseShareMembers").classList.toggle("hidden",!shared);
+  if(shared&&!selectedExpenseShareMembers().length){
+    const preferred=[$("expensePaidByMember").value,$("expenseMember").value].filter(function(id,index,list){return id&&id!=="ALL"&&list.indexOf(id)===index;});
+    all('input[name="expenseShareMember"]',$("expenseShareMembers")).forEach(function(input,index){input.checked=preferred.indexOf(input.value)>=0||preferred.length<2&&index<2;});
+  }
+  renderExpenseCustomShares();
+  $("expenseCustomShares").classList.toggle("hidden",method!=="CUSTOM");
+  updateExpenseShareTotal();
+}
+function renderExpenseCustomShares(seed) {
+  const old=seed||{}; all("input[data-share-member]",$("expenseCustomShares")).forEach(function(input){old[input.dataset.shareMember]=input.value;});
+  $("expenseCustomShares").innerHTML=selectedExpenseShareMembers().map(function(id){return '<label>'+memberIdentityMarkup(id,true)+'<input type="number" min="0" step="0.01" data-share-member="'+h(id)+'" value="'+h(old[id]||"")+'" placeholder="0.00"></label>';}).join("")+'<p id="expenseShareTotal" class="expense-share-total"></p>';
+  all("input[data-share-member]",$("expenseCustomShares")).forEach(function(input){input.addEventListener("input",updateExpenseShareTotal);});
+}
+function updateExpenseShareTotal() { const output=$("expenseShareTotal"); if(!output)return; const total=all("input[data-share-member]",$("expenseCustomShares")).reduce(function(sum,input){return sum+(Number(input.value)||0);},0),amount=Number($("expenseAmount").value)||0; output.textContent="Custom shares: "+money(total)+" of "+money(amount); output.classList.toggle("invalid",Math.abs(total-amount)>0.01); }
+function expenseSharingPayload() {
+  if(!expenseSharingEnabled())return {paidByMemberId:state.data.user.id,sharedWithIds:"",splitMethod:"PERSONAL",shareAmounts:""};
+  const method=$("expenseSplitMethod").value, ids=method==="PERSONAL"?[]:selectedExpenseShareMembers(), shares={};
+  if(method==="CUSTOM")all("input[data-share-member]",$("expenseCustomShares")).forEach(function(input){shares[input.dataset.shareMember]=Number(input.value)||0;});
+  return {paidByMemberId:$("expensePaidByMember").value,sharedWithIds:ids,splitMethod:method,shareAmounts:shares};
 }
 
 function populateSubcategoryOptions(categoryId, inputId, listId, chooseFirst) {
@@ -685,9 +728,11 @@ function bindForms() {
   $("memberPasswordForm").addEventListener("submit", saveAdminMemberPassword);
   $("memberPhotoForm").addEventListener("submit", saveMemberPhoto);
   $("settingsForm").addEventListener("submit", saveSettings);
+  $("expenseSettlementForm").addEventListener("submit", saveExpenseSettlement);
   $("stickyNoteForm").addEventListener("submit", saveStickyNote);
   $("stickyQuickForm").addEventListener("submit", saveQuickStickyNote);
   $("createBackupNow").addEventListener("click", createBackupNow);
+  $("addExpenseSettlement").addEventListener("click", function(){openExpenseSettlementDialog();});
   $("memberRole").addEventListener("change", syncMemberAccessRole);
   $("memberPhotoFile").addEventListener("change", previewMemberPhoto);
   $("deleteMemberPhoto").addEventListener("click", deleteMemberPhoto);
@@ -809,6 +854,9 @@ function bindActions() {
     if (action === "filter-expense-member") { $("expenseMemberFilter").value=id; renderExpenses(); $("expenseTable").scrollIntoView({behavior:"smooth",block:"start"}); }
     if (action === "quick-filter-expense-member") { $("expenseMemberFilter").value=id||""; renderExpenses(); }
     if (action === "filter-expense-category") { $("expenseCategoryFilter").value=button.dataset.category||""; renderExpenses(); $("expenseTable").scrollIntoView({behavior:"smooth",block:"start"}); }
+    if (action === "toggle-expense-section") toggleExpenseSection(button);
+    if (action === "open-expense-settlement") openExpenseSettlementDialog(button.dataset.from,button.dataset.to,button.dataset.amount);
+    if (action === "delete-expense-settlement") confirmDelete("deleteSettlement", id, "Remove this settlement record? The shared-expense balance will be recalculated.");
     if (action === "edit-sticky") editStickyNote(id);
     if (action === "delete-sticky") confirmDelete("deleteStickyNote", id, "Delete this sticky note permanently?");
     if (action === "complete-sticky") completeStickyNote(id);
@@ -989,14 +1037,20 @@ async function saveExpense(event) {
   const recurringId = $("expenseRecurringId").value;
   const plannedId = $("expenseMarkPaidId").value;
   const action = recurringId ? "markRecurringExpensePaid" : plannedId ? "markPlannedExpensePaid" : $("expenseId").value ? "updateExpense" : "createExpense";
-  await mutate(action, {
+  await mutate(action, Object.assign({
     id: recurringId || plannedId || $("expenseId").value, date: $("expenseDate").value, amount: $("expenseAmount").value,
     memberId: $("expenseMember").value,
     category: $("expenseCategory").value, subcategory: $("expenseSubcategory").value.trim(),
     sentTo: $("expenseSendTo").value.trim(), fromAccount: $("expenseFromAccount").value.trim(),
     reason: $("expenseReason").value.trim(), entryType: recurringId ? "RECURRING" : $("expenseEntryType").value,
     majorPlanId: $("expenseMajorPlan").value, majorPlanPhaseId: $("expenseMajorPlanPhase").value
-  }, recurringId ? "Payment recorded and the next due date was calculated." : plannedId ? "Preplanned expenditure marked as paid." : "Expenditure saved.", "expenseDialog");
+  },expenseSharingPayload()), recurringId ? "Payment recorded and the next due date was calculated." : plannedId ? "Preplanned expenditure marked as paid." : "Expenditure saved.", "expenseDialog");
+}
+
+async function saveExpenseSettlement(event) {
+  event.preventDefault();
+  if($("settlementFromMember").value===$("settlementToMember").value)return toast("Choose two different family members.","error");
+  await mutate("createSettlement",{fromMemberId:$("settlementFromMember").value,toMemberId:$("settlementToMember").value,amount:$("settlementAmount").value,date:$("settlementDate").value,paymentMode:$("settlementPaymentMode").value.trim(),reference:$("settlementReference").value.trim(),notes:$("settlementNotes").value.trim()},"Settlement recorded and balances updated.","expenseSettlementDialog","Recording settlement…");
 }
 
 async function saveRecurringExpense(event) {
@@ -1332,7 +1386,9 @@ async function saveSettings(event) {
     dashboardClockHighlight: safeClockHighlight($("settingDashboardClockHighlight").value),
     memoryPhotoLimit: Number($("settingMemoryPhotoLimit").value),
     memoryUploadPolicy: $("settingMemoryUploadPolicy").value,
-    memoryPrintPages: Number($("settingMemoryPrintPages").value)
+    memoryPrintPages: Number($("settingMemoryPrintPages").value),
+    monthlyExpenseBudget: Number($("settingMonthlyExpenseBudget").value)||0,
+    expenseSettlementEnabled: $("settingExpenseSettlementEnabled").checked
   }, "Family settings updated.");
 }
 async function createBackupNow() {
@@ -1356,15 +1412,15 @@ async function confirmDelete(action, id, message) { if (window.confirm(message))
 
 function editExpense(id) {
   const item = state.data.expenses.find(function (x) { return x.id === id; }); if (!item) return;
-  const expense = normalizeExpense(item); prepareNewDialog("expenseDialog"); $("expenseId").value = expense.id; fillMemberSelect($("expenseMember"), expenseMemberId(expense), true); $("expenseEntryType").value = expense.status === "PLANNED" ? "PREPLANNED" : (expense.entryType === "PREPLANNED" ? "PREPLANNED" : "REGULAR"); $("expenseDate").value = expense.date; $("expenseAmount").value = expense.amount; fillExpenseCategorySelect($("expenseCategory"), expense.category); fillExpenseSubcategorySelect($("expenseSubcategory"), expense.category, expense.subcategory); fillMajorPlanLinkSelects($("expenseMajorPlan"),$("expenseMajorPlanPhase"),expense.majorPlanId||"",expense.majorPlanPhaseId||"",true); $("expenseSendTo").value = expense.sentTo; $("expenseFromAccount").value = expense.fromAccount; $("expenseReason").value = expense.reason; $("expenseDialogTitle").textContent = "Edit expenditure"; syncExpenseEntryType(); openDialog("expenseDialog");
+  const expense = normalizeExpense(item); prepareNewDialog("expenseDialog"); $("expenseId").value = expense.id; fillMemberSelect($("expenseMember"), expenseMemberId(expense), true); $("expenseEntryType").value = expense.status === "PLANNED" ? "PREPLANNED" : (expense.entryType === "PREPLANNED" ? "PREPLANNED" : "REGULAR"); $("expenseDate").value = expense.date; $("expenseAmount").value = expense.amount; fillExpenseCategorySelect($("expenseCategory"), expense.category); fillExpenseSubcategorySelect($("expenseSubcategory"), expense.category, expense.subcategory); fillMajorPlanLinkSelects($("expenseMajorPlan"),$("expenseMajorPlanPhase"),expense.majorPlanId||"",expense.majorPlanPhaseId||"",true); $("expenseSendTo").value = expense.sentTo; $("expenseFromAccount").value = expense.fromAccount; $("expenseReason").value = expense.reason; resetExpenseSharingForm(expense); $("expenseDialogTitle").textContent = "Edit expenditure"; syncExpenseEntryType(); openDialog("expenseDialog");
 }
 function openPlannedPayment(id) {
   const item = state.data.expenses.find(function (x) { return x.id === id; }); if (!item) return;
-  const expense = normalizeExpense(item); prepareNewDialog("expenseDialog"); $("expenseMarkPaidId").value = expense.id; fillMemberSelect($("expenseMember"), expenseMemberId(expense), true); $("expenseEntryType").value = "REGULAR"; $("expenseEntryType").disabled = true; $("expenseDate").value = todayIso(); $("expenseAmount").value = expense.amount; fillExpenseCategorySelect($("expenseCategory"), expense.category); fillExpenseSubcategorySelect($("expenseSubcategory"), expense.category, expense.subcategory); fillMajorPlanLinkSelects($("expenseMajorPlan"),$("expenseMajorPlanPhase"),expense.majorPlanId||"",expense.majorPlanPhaseId||"",true); $("expenseSendTo").value = expense.sentTo; $("expenseFromAccount").value = expense.fromAccount; $("expenseReason").value = expense.reason; $("expenseDialogTitle").textContent = "Mark preplanned expenditure as paid"; $("expenseRecurringNote").textContent = "Planned for " + formatDate(expense.date) + ". Confirm the actual payment date and amount."; $("expenseRecurringNote").classList.remove("hidden"); syncExpenseEntryType(); openDialog("expenseDialog");
+  const expense = normalizeExpense(item); prepareNewDialog("expenseDialog"); $("expenseMarkPaidId").value = expense.id; fillMemberSelect($("expenseMember"), expenseMemberId(expense), true); $("expenseEntryType").value = "REGULAR"; $("expenseEntryType").disabled = true; $("expenseDate").value = todayIso(); $("expenseAmount").value = expense.amount; fillExpenseCategorySelect($("expenseCategory"), expense.category); fillExpenseSubcategorySelect($("expenseSubcategory"), expense.category, expense.subcategory); fillMajorPlanLinkSelects($("expenseMajorPlan"),$("expenseMajorPlanPhase"),expense.majorPlanId||"",expense.majorPlanPhaseId||"",true); $("expenseSendTo").value = expense.sentTo; $("expenseFromAccount").value = expense.fromAccount; $("expenseReason").value = expense.reason; resetExpenseSharingForm(expense); $("expenseDialogTitle").textContent = "Mark preplanned expenditure as paid"; $("expenseRecurringNote").textContent = "Planned for " + formatDate(expense.date) + ". Confirm the actual payment date and amount."; $("expenseRecurringNote").classList.remove("hidden"); syncExpenseEntryType(); openDialog("expenseDialog");
 }
 function openRecurringPayment(id) {
   const item = state.data.recurringExpenses.find(function (x) { return x.id === id; }); if (!item) return;
-  prepareNewDialog("expenseDialog"); $("expenseRecurringId").value = item.id; fillMemberSelect($("expenseMember"), expenseMemberId(item), true); $("expenseEntryType").value = "REGULAR"; $("expenseEntryType").disabled = true; $("expenseDate").value = todayIso(); $("expenseAmount").value = Number(item.estimatedAmount || 0) || ""; fillExpenseCategorySelect($("expenseCategory"), item.category); fillExpenseSubcategorySelect($("expenseSubcategory"), item.category, item.subcategory || "General"); fillMajorPlanLinkSelects($("expenseMajorPlan"),$("expenseMajorPlanPhase"),item.majorPlanId||"",item.majorPlanPhaseId||"",true); $("expenseSendTo").value = item.sentTo; $("expenseFromAccount").value = item.fromAccount; $("expenseReason").value = item.reason; $("expenseDialogTitle").textContent = "Mark “" + item.title + "” as paid"; $("expenseRecurringNote").textContent = "Due " + formatDate(item.nextDueDate) + ". You can change the actual amount or payment details before saving."; $("expenseRecurringNote").classList.remove("hidden"); syncExpenseEntryType(); openDialog("expenseDialog");
+  prepareNewDialog("expenseDialog"); $("expenseRecurringId").value = item.id; fillMemberSelect($("expenseMember"), expenseMemberId(item), true); $("expenseEntryType").value = "REGULAR"; $("expenseEntryType").disabled = true; $("expenseDate").value = todayIso(); $("expenseAmount").value = Number(item.estimatedAmount || 0) || ""; fillExpenseCategorySelect($("expenseCategory"), item.category); fillExpenseSubcategorySelect($("expenseSubcategory"), item.category, item.subcategory || "General"); fillMajorPlanLinkSelects($("expenseMajorPlan"),$("expenseMajorPlanPhase"),item.majorPlanId||"",item.majorPlanPhaseId||"",true); $("expenseSendTo").value = item.sentTo; $("expenseFromAccount").value = item.fromAccount; $("expenseReason").value = item.reason; resetExpenseSharingForm(item); $("expenseDialogTitle").textContent = "Mark “" + item.title + "” as paid"; $("expenseRecurringNote").textContent = "Due " + formatDate(item.nextDueDate) + ". You can change the actual amount or payment details before saving."; $("expenseRecurringNote").classList.remove("hidden"); syncExpenseEntryType(); openDialog("expenseDialog");
 }
 function editRecurringExpense(id) {
   const item = state.data.recurringExpenses.find(function (x) { return x.id === id; }); if (!item) return;
@@ -1620,7 +1676,7 @@ function renderActivity() {
   $("activityList").classList.toggle("empty-block", !items.length); $("activityList").innerHTML = items.length ? items.map(function(x){return '<div class="activity-item"><span class="activity-icon">'+h(x.icon)+'</span><p><strong>'+h(x.title)+'</strong><br><small>'+h(x.meta)+'</small></p></div>';}).join("") : "Your family's latest additions will appear here.";
 }
 
-function normalizeExpense(item) { const entryType=String(item.entryType||"REGULAR").toUpperCase(); return Object.assign({}, item, { memberId:expenseMemberId(item), sentTo: item.sentTo || item.description || "", fromAccount: item.fromAccount || item.paymentMode || "", reason: item.reason || item.description || "", entryType: entryType, category: item.category || (entryType==="OLD"?"Old expenditure":entryType==="RECURRING"?"Regular payment":"Other"), subcategory: item.subcategory || "General", status: String(item.status || (entryType==="PREPLANNED"?"PLANNED":"PAID")).toUpperCase() }); }
+function normalizeExpense(item) { const entryType=String(item.entryType||"REGULAR").toUpperCase(); return Object.assign({}, item, { memberId:expenseMemberId(item), paidByMemberId:item.paidByMemberId||item.createdBy||item.paidBy||expenseMemberId(item), sharedWithIds:item.sharedWithIds||"", splitMethod:String(item.splitMethod||"PERSONAL").toUpperCase(), shareAmounts:item.shareAmounts||"", sentTo: item.sentTo || item.description || "", fromAccount: item.fromAccount || item.paymentMode || "", reason: item.reason || item.description || "", entryType: entryType, category: item.category || (entryType==="OLD"?"Old expenditure":entryType==="RECURRING"?"Regular payment":"Other"), subcategory: item.subcategory || "General", status: String(item.status || (entryType==="PREPLANNED"?"PLANNED":"PAID")).toUpperCase() }); }
 function majorPlanTotals(plan) {
   const entries=(state.data.expenses||[]).map(normalizeExpense).filter(function(item){return item.majorPlanId===plan.id;});
   const paid=entries.filter(function(item){return item.status==="PAID";}).reduce(function(sum,item){return sum+Number(item.amount||0);},0);
@@ -1681,7 +1737,8 @@ function renderInlineExpenseRow(item) {
 }
 function renderExpenseDisplayRow(item) {
   const plan=majorPlanName(item.majorPlanId),phase=majorPlanPhaseName(item.majorPlanPhaseId);
-  return '<tr class="expense-'+h(item.status.toLowerCase())+'"><td><div class="expense-description-cell"><span class="expense-row-icon">₹</span><span><strong>'+h(item.reason||item.sentTo||"Expenditure")+'</strong><small>Paid to '+h(item.sentTo||"—")+' · From '+h(item.fromAccount||"—")+'</small></span></div></td><td><strong>'+h(formatDate(item.date))+'</strong><span class="expense-status '+h(item.status.toLowerCase())+'">'+(item.status==="PLANNED"?'PREPLANNED':'PAID')+'</span></td><td><span class="expense-category-chip">'+h(item.category)+'</span><small class="expense-subcategory-line">'+h(item.subcategory)+'</small></td><td>'+memberIdentityMarkup(expenseMemberId(item),false)+'</td><td class="number expense-amount-cell"><strong>'+h(money(item.amount))+'</strong></td><td>'+(plan?'<span class="major-plan-link-chip">'+h(plan)+(phase?'<small>'+h(phase)+'</small>':'')+'</span>':'<span class="muted">—</span>')+'</td><td class="row-edit-cell"><div class="statement-actions">'+(item.status==="PLANNED"?'<button class="tiny-button paid-button" data-action="mark-planned-paid" data-id="'+h(item.id)+'">✓ Mark paid</button>':'')+'<button class="row-edit-primary" data-action="inline-edit-expense" data-id="'+h(item.id)+'">✎ Edit row</button><button class="tiny-button" data-action="edit-expense" data-id="'+h(item.id)+'" title="Open every field">Full form</button>'+(mayDelete(item)?'<button class="danger-button" data-action="delete-expense" data-id="'+h(item.id)+'">Delete</button>':"")+'</div></td></tr>';
+  const shared=item.splitMethod&&item.splitMethod!=="PERSONAL"?'<small class="expense-split-line">'+h(item.splitMethod==="EQUAL"?'Equal split':'Custom split')+' · paid by '+h(memberName(item.paidByMemberId))+'</small>':'';
+  return '<tr class="expense-'+h(item.status.toLowerCase())+'"><td><div class="expense-description-cell"><span class="expense-row-icon">₹</span><span><strong>'+h(item.reason||item.sentTo||"Expenditure")+'</strong><small>Paid to '+h(item.sentTo||"—")+' · From '+h(item.fromAccount||"—")+'</small>'+shared+'</span></div></td><td><strong>'+h(formatDate(item.date))+'</strong><span class="expense-status '+h(item.status.toLowerCase())+'">'+(item.status==="PLANNED"?'PREPLANNED':'PAID')+'</span></td><td><span class="expense-category-chip">'+h(item.category)+'</span><small class="expense-subcategory-line">'+h(item.subcategory)+'</small></td><td>'+memberIdentityMarkup(expenseMemberId(item),false)+'</td><td class="number expense-amount-cell"><strong>'+h(money(item.amount))+'</strong></td><td>'+(plan?'<span class="major-plan-link-chip">'+h(plan)+(phase?'<small>'+h(phase)+'</small>':'')+'</span>':'<span class="muted">—</span>')+'</td><td class="row-edit-cell"><div class="statement-actions">'+(item.status==="PLANNED"?'<button class="tiny-button paid-button" data-action="mark-planned-paid" data-id="'+h(item.id)+'">✓ Mark paid</button>':'')+'<button class="row-edit-primary" data-action="inline-edit-expense" data-id="'+h(item.id)+'">✎ Edit row</button><button class="tiny-button" data-action="edit-expense" data-id="'+h(item.id)+'" title="Open every field">Full form</button>'+(mayDelete(item)?'<button class="danger-button" data-action="delete-expense" data-id="'+h(item.id)+'">Delete</button>':"")+'</div></td></tr>';
 }
 async function saveInlineExpenseRow(button) {
   const row = button.closest("tr"), id = button.dataset.id;
@@ -1692,7 +1749,7 @@ async function saveInlineExpenseRow(button) {
   if (!date || !category || !subcategory || !sentTo || !fromAccount || !reason || !(Number(amount) > 0)) return toast("Complete every row field and enter an amount greater than zero.", "error");
   const normalized = normalizeExpense(original);
   state.inlineExpenseId = "";
-  const result = await mutate("updateExpense", { id: id, date: date, amount: amount, memberId:memberId, category: category, subcategory: subcategory, sentTo: sentTo, fromAccount: fromAccount, reason: reason, entryType: normalized.status === "PLANNED" ? "PREPLANNED" : normalized.entryType, recurringId: normalized.recurringId || "", majorPlanId:majorPlanId, majorPlanPhaseId:majorPlanPhaseId }, "Expenditure row updated.", null, "Saving expenditure row…");
+  const result = await mutate("updateExpense", { id: id, date: date, amount: amount, memberId:memberId, category: category, subcategory: subcategory, sentTo: sentTo, fromAccount: fromAccount, reason: reason, entryType: normalized.status === "PLANNED" ? "PREPLANNED" : normalized.entryType, recurringId: normalized.recurringId || "", majorPlanId:majorPlanId, majorPlanPhaseId:majorPlanPhaseId, paidByMemberId:normalized.paidByMemberId, sharedWithIds:normalized.sharedWithIds, splitMethod:normalized.splitMethod, shareAmounts:normalized.shareAmounts }, "Expenditure row updated.", null, "Saving expenditure row…");
   if (!result) { state.inlineExpenseId = id; renderExpenses(); }
 }
 function renderExpenses() {
@@ -1702,6 +1759,8 @@ function renderExpenses() {
   $("expenseStatementSnapshot").innerHTML='<span><small>Showing</small><strong>'+h(plural(items.length,"entry","entries"))+'</strong></span><span><small>Paid</small><strong>'+h(money(paidTotal))+'</strong></span>'+(planned.length?'<span><small>Preplanned</small><strong>'+h(money(plannedTotal))+'</strong></span>':'');
   $("expenseTotals").innerHTML='<span class="total-pill">'+plural(items.length,"entry","entries")+'</span><span class="total-pill">Paid '+h(money(paidTotal))+'</span>'+(planned.length?'<span class="total-pill planned">Preplanned '+h(money(plannedTotal))+'</span>':'');
   renderExpenseMemberAnalytics(items);
+  renderExpenseOverview(items);
+  renderExpenseSettlements();
   $("expenseRows").innerHTML=items.map(function(item){return item.id===state.inlineExpenseId?renderInlineExpenseRow(item):renderExpenseDisplayRow(item);}).join("");
   $("expenseEmpty").classList.toggle("hidden",items.length>0);
 }
@@ -1718,11 +1777,55 @@ function expenseAnalyticsRows(items) {
 }
 function renderExpenseMemberAnalytics(items) {
   const rows=expenseAnalyticsRows(items),paidTotal=rows.reduce(function(sum,row){return sum+row.paid;},0),max=Math.max(1,...rows.map(function(row){return row.total;}));
-  $("expenseMemberSummary").innerHTML=rows.length?rows.map(function(row){const share=paidTotal?Math.round(row.paid/paidTotal*100):0;return '<button type="button" class="member-expense-card" data-action="filter-expense-member" data-id="'+h(row.id)+'">'+memberAvatarMarkup(row.id,"summary")+'<span><strong>'+h(row.name)+'</strong><small>'+h(plural(row.count,"entry"))+' · '+share+'% of paid</small></span><span class="member-money"><b>'+h(money(row.paid))+'</b>'+(row.planned?'<small>'+h(money(row.planned))+' planned</small>':'')+'</span></button>';}).join(""):'<p class="chart-empty">No expenditure matches the selected filters.</p>';
+  $("expenseMemberSummary").innerHTML=rows.length?rows.map(function(row){const share=paidTotal?Math.round(row.paid/paidTotal*100):0;return '<button type="button" class="member-expense-card" data-action="filter-expense-member" data-id="'+h(row.id)+'">'+memberAvatarMarkup(row.id,"summary")+'<span class="member-card-copy"><strong>'+h(row.name)+'</strong><small>'+h(plural(row.count,"entry"))+' · '+share+'% of paid</small><i class="member-spend-track"><b style="width:'+share+'%"></b></i></span><span class="member-money"><b>'+h(money(row.paid))+'</b>'+(row.planned?'<small>'+h(money(row.planned))+' planned</small>':'')+'</span></button>';}).join(""):'<p class="chart-empty">No expenditure matches the selected filters.</p>';
   $("expenseMemberChart").innerHTML=rows.length?rows.map(function(row){const paidWidth=row.paid/max*100,plannedWidth=row.planned/max*100;return '<button type="button" class="expense-bar-row" data-action="filter-expense-member" data-id="'+h(row.id)+'"><span class="bar-label">'+memberAvatarMarkup(row.id,"tiny")+'<strong>'+h(row.name)+'</strong></span><span class="bar-track"><i class="bar-paid" style="width:'+paidWidth.toFixed(2)+'%"></i><i class="bar-planned" style="width:'+plannedWidth.toFixed(2)+'%"></i></span><span class="bar-value">'+h(money(row.total))+'</span></button>';}).join(""):'<p class="chart-empty">Add expenditure to see the member chart.</p>';
   const categoryMap={};items.filter(function(item){return item.status==="PAID";}).forEach(function(item){categoryMap[item.category]=(categoryMap[item.category]||0)+Number(item.amount||0);});const categories=Object.keys(categoryMap).map(function(name){return {name:name,total:categoryMap[name]};}).sort(function(a,b){return b.total-a.total;}).slice(0,8),categoryMax=Math.max(1,...categories.map(function(item){return item.total;}));
   $("expenseCategoryChart").innerHTML=categories.length?categories.map(function(item){return '<button type="button" class="expense-bar-row" data-action="filter-expense-category" data-category="'+h(item.name)+'"><span class="bar-label"><strong>'+h(item.name)+'</strong></span><span class="bar-track"><i class="bar-category" style="width:'+(item.total/categoryMax*100).toFixed(2)+'%"></i></span><span class="bar-value">'+h(money(item.total))+'</span></button>';}).join(""):'<p class="chart-empty">No paid expenditure in this view.</p>';
 }
+function renderExpenseOverview(items) {
+  const paid=items.filter(function(item){return item.status==="PAID";}),planned=items.filter(function(item){return item.status==="PLANNED";}),paidTotal=paid.reduce(function(sum,item){return sum+Number(item.amount||0);},0),plannedTotal=planned.reduce(function(sum,item){return sum+Number(item.amount||0);},0),budget=Number(state.data.settings.monthlyExpenseBudget||0),remaining=budget-paidTotal-plannedTotal,used=budget>0?Math.round((paidTotal+plannedTotal)/budget*100):0,month=$("expenseMonth").value;
+  $("expenseOverviewPeriod").textContent=month?new Date(month+"-01T00:00:00").toLocaleDateString("en-IN",{month:"long",year:"numeric"}):"All records";
+  $("expenseOverviewCards").innerHTML=[
+    {icon:"▣",label:"Monthly budget",value:budget?money(budget):"Not set",note:budget?"Administrator target":"Set in Administration",tone:"budget"},
+    {icon:"₹",label:"Paid expenses",value:money(paidTotal),note:plural(paid.length,"payment"),tone:"paid"},
+    {icon:"◷",label:"Preplanned",value:money(plannedTotal),note:plural(planned.length,"planned item"),tone:"planned"},
+    {icon:remaining<0?"!":"✓",label:"Balance available",value:budget?money(remaining):"—",note:budget?(Math.abs(used)+"% committed"):"Add a monthly budget",tone:remaining<0?"over":"balance"}
+  ].map(function(card){return '<article class="expense-overview-card '+card.tone+'"><span class="overview-card-icon">'+h(card.icon)+'</span><div><small>'+h(card.label)+'</small><strong>'+h(card.value)+'</strong><em>'+h(card.note)+'</em></div></article>';}).join("");
+  const categoryMap={}; paid.forEach(function(item){categoryMap[item.category]=(categoryMap[item.category]||0)+Number(item.amount||0);});
+  const colours=["#ff725e","#15a997","#6d55d9","#efaa22","#3f8ed8","#d05d9b","#7ba73a","#7c8298"], allCategories=Object.keys(categoryMap).map(function(name){return {name:name,total:categoryMap[name]};}).sort(function(a,b){return b.total-a.total;}), categories=allCategories.length>8?allCategories.slice(0,7).concat([{name:"Other categories",total:allCategories.slice(7).reduce(function(sum,item){return sum+item.total;},0)}]):allCategories, categoryTotal=allCategories.reduce(function(sum,item){return sum+item.total;},0);
+  let cursor=0; const stops=categories.map(function(item,index){const start=cursor,end=cursor+(categoryTotal?item.total/categoryTotal*100:0);cursor=end;return colours[index]+" "+start.toFixed(2)+"% "+end.toFixed(2)+"%";});
+  $("expenseDonutChart").style.background=stops.length?"conic-gradient("+stops.join(",")+")":"conic-gradient(#eceaf4 0 100%)";
+  $("expenseDonutChart").innerHTML='<span><small>Total</small><strong>'+h(money(categoryTotal))+'</strong></span>'; $("expenseDonutTotal").textContent=money(categoryTotal);
+  $("expenseDonutLegend").innerHTML=categories.length?categories.map(function(item,index){const pct=categoryTotal?Math.round(item.total/categoryTotal*100):0,filter=item.name==="Other categories"?'':' data-action="filter-expense-category" data-category="'+h(item.name)+'"';return '<button type="button"'+filter+'><i style="background:'+colours[index]+'"></i><span><strong>'+h(item.name)+'</strong><small>'+pct+'% · '+h(money(item.total))+'</small></span></button>';}).join(""):'<p class="chart-empty">Add a paid expense to see the category chart.</p>';
+  const timeMap={}; paid.forEach(function(item){const key=month?String(item.date).slice(8,10):String(item.date).slice(0,7);timeMap[key]=(timeMap[key]||0)+Number(item.amount||0);});
+  const points=Object.keys(timeMap).sort().slice(-14).map(function(key){return {key:key,total:timeMap[key]};}),max=Math.max(1,...points.map(function(point){return point.total;}));
+  $("expenseTimelineTitle").textContent=month?"By day":"By month";
+  $("expenseTimelineChart").innerHTML=points.length?points.map(function(point){const label=month?Number(point.key):new Date(point.key+"-01T00:00:00").toLocaleDateString("en-IN",{month:"short",year:"2-digit"});return '<div class="timeline-column" title="'+h(label+" · "+money(point.total))+'"><span class="timeline-value">'+h(money(point.total))+'</span><i><b style="height:'+Math.max(5,point.total/max*100).toFixed(2)+'%"></b></i><small>'+h(label)+'</small></div>';}).join(""):'<p class="chart-empty">Paid expenditure will appear here by date.</p>';
+}
+function expenseBalanceTransfers() {
+  const balances={}; (state.data.members||[]).forEach(function(member){balances[member.id]=0;});
+  (state.data.expenses||[]).map(normalizeExpense).filter(function(item){return item.status==="PAID"&&["EQUAL","CUSTOM"].indexOf(item.splitMethod)>=0;}).forEach(function(item){
+    const ids=String(item.sharedWithIds||"").split(",").filter(function(id){return balances[id]!==undefined;}),payer=item.paidByMemberId,amount=Number(item.amount||0); if(!ids.length||balances[payer]===undefined||!(amount>0))return;
+    const custom=parseExpenseShares(item.shareAmounts), equal=amount/ids.length; balances[payer]+=amount; ids.forEach(function(id){balances[id]-=item.splitMethod==="CUSTOM"?Number(custom[id]||0):equal;});
+  });
+  (state.data.settlements||[]).forEach(function(item){const amount=Number(item.amount||0);if(balances[item.fromMemberId]!==undefined)balances[item.fromMemberId]+=amount;if(balances[item.toMemberId]!==undefined)balances[item.toMemberId]-=amount;});
+  const debtors=Object.keys(balances).filter(function(id){return balances[id]<-0.005;}).map(function(id){return {id:id,amount:-balances[id]};}),creditors=Object.keys(balances).filter(function(id){return balances[id]>0.005;}).map(function(id){return {id:id,amount:balances[id]};}),transfers=[]; let d=0,c=0;
+  while(d<debtors.length&&c<creditors.length){const amount=Math.min(debtors[d].amount,creditors[c].amount);if(amount>0.005)transfers.push({from:debtors[d].id,to:creditors[c].id,amount:Math.round(amount*100)/100});debtors[d].amount-=amount;creditors[c].amount-=amount;if(debtors[d].amount<0.005)d++;if(creditors[c].amount<0.005)c++;}
+  return transfers;
+}
+function renderExpenseSettlements() {
+  const enabled=expenseSharingEnabled(),panel=$("expenseSettlementPanel"); panel.classList.toggle("hidden",!enabled); if(!enabled)return;
+  $("addExpenseSettlement").classList.toggle("hidden",!isAdmin());
+  const transfers=expenseBalanceTransfers();
+  $("expenseSettlementSummary").innerHTML=transfers.length?transfers.map(function(item){return '<article class="settlement-card">'+memberAvatarMarkup(item.from,"small")+'<div><strong>'+h(memberName(item.from))+'</strong><small>owes '+h(memberName(item.to))+'</small></div><span class="settlement-arrow">→</span>'+memberAvatarMarkup(item.to,"small")+'<b>'+h(money(item.amount))+'</b>'+(isAdmin()?'<button class="tiny-button" data-action="open-expense-settlement" data-from="'+h(item.from)+'" data-to="'+h(item.to)+'" data-amount="'+h(item.amount)+'">Settle</button>':'')+'</article>';}).join(""):'<div class="settled-up"><span>✓</span><div><strong>All settled up</strong><small>No outstanding shared-expense balance.</small></div></div>';
+  const history=(state.data.settlements||[]).slice().sort(function(a,b){return String(b.date).localeCompare(String(a.date));});
+  $("expenseSettlementHistory").innerHTML=history.length?'<details><summary>Settlement history · '+history.length+'</summary>'+history.map(function(item){return '<div class="settlement-history-row"><span>'+memberIdentityMarkup(item.fromMemberId,true)+' → '+memberIdentityMarkup(item.toMemberId,true)+'</span><span><strong>'+h(money(item.amount))+'</strong><small>'+h(formatDate(item.date))+(item.paymentMode?' · '+h(item.paymentMode):'')+'</small></span>'+(isAdmin()?'<button class="danger-button" data-action="delete-expense-settlement" data-id="'+h(item.id)+'">Remove</button>':'')+'</div>';}).join("")+'</details>':'';
+}
+function openExpenseSettlementDialog(fromId,toId,amount) {
+  if(!isAdmin()||!expenseSharingEnabled())return;
+  $("expenseSettlementForm").reset(); fillMemberSelect($("settlementFromMember"),fromId||state.data.user.id,false); fillMemberSelect($("settlementToMember"),toId||((state.data.members||[]).find(function(member){return member.id!==$("settlementFromMember").value;})||{}).id,false); $("settlementAmount").value=amount||""; $("settlementDate").value=todayIso(); openDialog("expenseSettlementDialog");
+}
+function toggleExpenseSection(button) { const panel=button.closest(".panel"); if(!panel)return; const collapsed=panel.classList.toggle("section-collapsed"); button.textContent=collapsed?"Show section":"Hide section"; button.setAttribute("aria-expanded",collapsed?"false":"true"); }
 function recurringIsActive(item) { return !(item.active === false || String(item.active).toLowerCase() === "false"); }
 function recurringIntervalMonthsClient(item) {
   const frequency=String(item.frequency||"MONTHLY").toUpperCase();
@@ -1904,6 +2007,8 @@ function renderAdmin() {
   $("settingMemoryPhotoLimit").value=memoryPhotoLimit();
   $("settingMemoryUploadPolicy").value=state.data.settings.memoryUploadPolicy==="MEMBERS_WITH_ACCESS"?"MEMBERS_WITH_ACCESS":"ADMIN_ONLY";
   $("settingMemoryPrintPages").value=String(memoryPrintPages());
+  $("settingMonthlyExpenseBudget").value=Number(state.data.settings.monthlyExpenseBudget||0)||"";
+  $("settingExpenseSettlementEnabled").checked=expenseSharingEnabled();
   const configuredCategories=expenseCategoryConfig(), activeCategories=configuredCategories.filter(function(category){return category.active!==false;}); $("adminExpenseCategorySummary").textContent=plural(configuredCategories.length,"category","categories")+" · "+activeCategories.length+" active";
   const backup=state.data.backupStatus||{}; $("automaticBackupStatus").textContent=backup.automatic?"● Monthly backup enabled":"● Monthly backup needs setup"; $("automaticBackupStatus").classList.toggle("success",!!backup.automatic); $("lastBackupText").textContent=backup.lastBackupAt?("Last backup: "+new Date(backup.lastBackupAt).toLocaleString("en-IN")+(backup.lastBackupName?" · "+backup.lastBackupName:"")):"No backup created yet."; $("backupFolderLink").classList.toggle("hidden",!backup.folderUrl); if(backup.folderUrl)$("backupFolderLink").href=backup.folderUrl;
   const photoFolder=$("memberPhotoFolderLink"),folderUrl=state.data.memberPhotoFolderUrl||""; photoFolder.classList.toggle("hidden",!folderUrl); if(folderUrl)photoFolder.href=folderUrl;

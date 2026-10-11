@@ -7,8 +7,8 @@
   <meta name="color-scheme" content="light">
   <meta name="description" content="Private family dashboard for expenses, goals, important dates and photos.">
   <title>Our Family Hub</title>
-  <link rel="icon" href="favicon.svg?v=1.0.28" type="image/svg+xml">
-  <link rel="stylesheet" href="styles.css?v=1.0.28">
+  <link rel="icon" href="favicon.svg?v=1.0.29" type="image/svg+xml">
+  <link rel="stylesheet" href="styles.css?v=1.0.29">
 </head>
 <body>
   <a class="skip-link" href="#mainContent">Skip to dashboard content</a>
@@ -42,8 +42,8 @@
         </label>
         <div class="login-options">
           <label class="remember-row"><input id="rememberUsername" type="checkbox" checked> Save username on this device</label>
-          <span class="version-pair"><b id="loginFrontendVersion">FE v1.0.28</b><b id="loginBackendVersion">BE checking…</b></span>
-          <span id="loginVersion" class="legacy-version hidden" aria-hidden="true">Version 1.0.28</span>
+          <span class="version-pair"><b id="loginFrontendVersion">FE v1.0.29</b><b id="loginBackendVersion">BE checking…</b></span>
+          <span id="loginVersion" class="legacy-version hidden" aria-hidden="true">Version 1.0.29</span>
         </div>
         <button class="primary-button wide" type="submit">Sign in securely</button>
         <button id="repairSessionButton" class="repair-session-button" type="button">↻ Repair browser cache / session</button>
@@ -60,8 +60,8 @@
         <div class="brand-mark small">FH</div>
         <div>
           <strong id="sidebarFamilyName">Our Family Hub</strong>
-          <span class="sidebar-version-pair"><b id="sidebarFrontendVersion">FE v1.0.28</b><b id="sidebarBackendVersion">BE checking…</b></span>
-          <b id="sidebarVersion" class="legacy-version hidden" aria-hidden="true">v1.0.28</b>
+          <span class="sidebar-version-pair"><b id="sidebarFrontendVersion">FE v1.0.29</b><b id="sidebarBackendVersion">BE checking…</b></span>
+          <b id="sidebarVersion" class="legacy-version hidden" aria-hidden="true">v1.0.29</b>
         </div>
       </div>
       <nav class="main-nav" aria-label="Main navigation">
@@ -182,7 +182,12 @@
             <div class="table-wrap recurring-table-wrap"><table id="recurringExpenseTable" class="recurring-table"><thead><tr><th>Active</th><th>Payment</th><th>Member</th><th>Category / subcategory</th><th>Frequency</th><th class="number">Expected</th><th>Next due</th><th>Send to</th><th>From account</th><th>Major plan</th><th class="recurring-action-head">Actions</th></tr></thead><tbody id="recurringExpenseList"></tbody></table></div>
             <div id="recurringExpenseEmpty" class="recurring-empty">No regular payment added. Choose <strong>Add regular payment</strong> to add one now or later.</div>
           </article>
-          <div class="filter-bar">
+          <article class="expense-statement-intro">
+            <div><p class="eyebrow">DETAILED EXPENDITURE STATEMENT</p><h3>Family spending at a glance</h3><p>Select a member photo to view only that person’s expenditure. Every row keeps the full details and editing controls on its right side.</p></div>
+            <div id="expenseStatementSnapshot" class="expense-statement-snapshot" aria-live="polite"></div>
+          </article>
+          <div id="expenseMemberQuickFilters" class="expense-member-switcher" role="group" aria-label="View expenditure by family member"></div>
+          <div class="filter-bar expense-filter-panel">
             <label>Month<input id="expenseMonth" type="month"></label>
             <label>Status<select id="expenseStatusFilter"><option value="">Paid &amp; planned</option><option value="PAID">Paid only</option><option value="PLANNED">Preplanned only</option></select></label>
             <label>Family member<select id="expenseMemberFilter"><option value="">All members</option></select></label>
@@ -199,10 +204,10 @@
             <div class="panel-heading"><div><p class="eyebrow">LIVE EXPENDITURE ANALYSIS</p><h3>Member and category charts</h3><small>Charts automatically follow the expenditure filters above.</small></div><div class="chart-legend"><span><i class="paid"></i>Paid</span><span><i class="planned"></i>Preplanned</span></div></div>
             <div class="expense-chart-grid"><section><h4>Member-wise expenditure</h4><div id="expenseMemberChart" class="expense-bar-chart"></div></section><section><h4>Category-wise paid expenditure</h4><div id="expenseCategoryChart" class="expense-bar-chart category-chart"></div></section></div>
           </article>
-          <div class="table-wrap">
+          <div class="table-wrap expense-statement-wrap">
             <table id="expenseTable" class="expense-table">
-              <colgroup><col><col><col><col><col><col><col><col><col><col><col><col></colgroup>
-              <thead><tr><th class="number">Amt (Rs.)<span class="column-resizer" data-expense-column="0" tabindex="0" role="separator" aria-label="Resize amount column"></span></th><th>Date<span class="column-resizer" data-expense-column="1" tabindex="0" role="separator" aria-label="Resize date column"></span></th><th>Status<span class="column-resizer" data-expense-column="2" tabindex="0" role="separator" aria-label="Resize status column"></span></th><th>Member<span class="column-resizer" data-expense-column="3" tabindex="0" role="separator" aria-label="Resize member column"></span></th><th>Category<span class="column-resizer" data-expense-column="4" tabindex="0" role="separator" aria-label="Resize category column"></span></th><th>Subcategory<span class="column-resizer" data-expense-column="5" tabindex="0" role="separator" aria-label="Resize subcategory column"></span></th><th>Send to<span class="column-resizer" data-expense-column="6" tabindex="0" role="separator" aria-label="Resize recipient column"></span></th><th>From Acct<span class="column-resizer" data-expense-column="7" tabindex="0" role="separator" aria-label="Resize account column"></span></th><th>Reason<span class="column-resizer" data-expense-column="8" tabindex="0" role="separator" aria-label="Resize reason column"></span></th><th>Major plan<span class="column-resizer" data-expense-column="9" tabindex="0" role="separator" aria-label="Resize major plan column"></span></th><th>Other actions<span class="column-resizer" data-expense-column="10" tabindex="0" role="separator" aria-label="Resize actions column"></span></th><th class="row-edit-heading">Edit row<span class="column-resizer" data-expense-column="11" tabindex="0" role="separator" aria-label="Resize row edit column"></span></th></tr></thead>
+              <colgroup><col><col><col><col><col><col><col></colgroup>
+              <thead><tr><th>Expense details<span class="column-resizer" data-expense-column="0" tabindex="0" role="separator" aria-label="Resize expense details column"></span></th><th>Date &amp; status<span class="column-resizer" data-expense-column="1" tabindex="0" role="separator" aria-label="Resize date column"></span></th><th>Category<span class="column-resizer" data-expense-column="2" tabindex="0" role="separator" aria-label="Resize category column"></span></th><th>Family member<span class="column-resizer" data-expense-column="3" tabindex="0" role="separator" aria-label="Resize family member column"></span></th><th class="number">Amount<span class="column-resizer" data-expense-column="4" tabindex="0" role="separator" aria-label="Resize amount column"></span></th><th>Major plan<span class="column-resizer" data-expense-column="5" tabindex="0" role="separator" aria-label="Resize major plan column"></span></th><th class="row-edit-heading">Actions / Edit row<span class="column-resizer" data-expense-column="6" tabindex="0" role="separator" aria-label="Resize actions column"></span></th></tr></thead>
               <tbody id="expenseRows"></tbody>
             </table>
             <div id="expenseEmpty" class="table-empty hidden">No expenditure matches these filters.</div>
@@ -649,7 +654,7 @@
   <div id="loadingOverlay" class="loading-overlay hidden" role="status" aria-live="polite" aria-atomic="true"><div class="spinner" aria-hidden="true"></div><p id="loadingText">Working…</p></div>
   <div id="toastRegion" class="toast-region" role="status" aria-live="polite" aria-atomic="true"></div>
 
-  <script src="config.js?v=1.0.28" defer></script>
-  <script src="app.js?v=1.0.28" defer></script>
+  <script src="config.js?v=1.0.29" defer></script>
+  <script src="app.js?v=1.0.29" defer></script>
 </body>
 </html>

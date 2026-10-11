@@ -2,12 +2,12 @@
 
 const CONFIG = window.FAMILY_DASHBOARD_CONFIG || {};
 const PLACEHOLDER_URL = "PASTE_YOUR_APPS_SCRIPT_WEB_APP_URL_HERE";
-const FRONTEND_VERSION = "1.0.28";
+const FRONTEND_VERSION = "1.0.29";
 const SAVED_USERNAME_KEY = "familyDashboardUsername";
 const SESSION_TOKEN_KEY = "familyDashboardToken";
 const IDLE_TIMEOUT_MS = 5 * 60 * 1000;
 const KEEP_ALIVE_INTERVAL_MS = 2 * 60 * 1000;
-const EXPENSE_COLUMN_WIDTHS_KEY = "familyDashboardExpenseColumnWidthsV4";
+const EXPENSE_COLUMN_WIDTHS_KEY = "familyDashboardExpenseColumnWidthsV5";
 const state = {
   token: sessionStorage.getItem(SESSION_TOKEN_KEY) || "",
   data: null,
@@ -725,7 +725,7 @@ function bindFilters() {
 }
 
 function bindExpenseColumnResize() {
-  const table = $("expenseTable"), columns = all("col", table), defaults = [125,115,105,150,145,145,170,170,300,190,180,98];
+  const table = $("expenseTable"), columns = all("col", table), defaults = [360,160,180,190,135,185,230];
   if (!table || !columns.length) return;
   let saved = [];
   try { saved = JSON.parse(localStorage.getItem(EXPENSE_COLUMN_WIDTHS_KEY) || "[]"); } catch (error) { saved = []; }
@@ -807,6 +807,7 @@ function bindActions() {
     if (action === "set-password") openMemberPasswordDialog(id);
     if (action === "manage-member-photo") openMemberPhotoDialog(id);
     if (action === "filter-expense-member") { $("expenseMemberFilter").value=id; renderExpenses(); $("expenseTable").scrollIntoView({behavior:"smooth",block:"start"}); }
+    if (action === "quick-filter-expense-member") { $("expenseMemberFilter").value=id||""; renderExpenses(); }
     if (action === "filter-expense-category") { $("expenseCategoryFilter").value=button.dataset.category||""; renderExpenses(); $("expenseTable").scrollIntoView({behavior:"smooth",block:"start"}); }
     if (action === "edit-sticky") editStickyNote(id);
     if (action === "delete-sticky") confirmDelete("deleteStickyNote", id, "Delete this sticky note permanently?");
@@ -1665,23 +1666,22 @@ function startInlineExpenseEdit(id) {
   setTimeout(function () { const row = document.querySelector('tr[data-inline-expense-id="'+CSS.escape(id)+'"]'); const input = row && row.querySelector("input"); if (input) { input.focus(); input.select(); } }, 20);
 }
 function renderInlineExpenseRow(item) {
-  return '<tr class="expense-'+h(item.status.toLowerCase())+' inline-expense-row" data-inline-expense-id="'+h(item.id)+'">'+
-    '<td><input class="inline-expense-input number" data-inline-field="amount" type="number" min="0.01" step="0.01" value="'+h(item.amount)+'" aria-label="Amount"></td>'+
-    '<td><input class="inline-expense-input" data-inline-field="date" type="date" value="'+h(String(item.date).slice(0,10))+'" aria-label="Date"></td>'+
-    '<td><span class="expense-status '+h(item.status.toLowerCase())+'">'+(item.status==="PLANNED"?'PREPLANNED':'PAID')+'</span></td>'+
-    '<td><select class="inline-expense-input" data-inline-field="memberId" aria-label="Family member">'+memberSelectOptions(expenseMemberId(item),true)+'</select></td>'+
-    '<td><select class="inline-expense-input inline-expense-category" data-inline-field="category" aria-label="Category">'+expenseCategoryOptions(item.category,false)+'</select></td>'+
-    '<td><select class="inline-expense-input inline-expense-subcategory" data-inline-field="subcategory" aria-label="Subcategory">'+expenseSubcategoryOptions(item.category,item.subcategory,false)+'</select></td>'+
-    '<td><input class="inline-expense-input" data-inline-field="sentTo" maxlength="100" value="'+h(item.sentTo)+'" aria-label="Send to"></td>'+
-    '<td><input class="inline-expense-input" data-inline-field="fromAccount" maxlength="100" value="'+h(item.fromAccount)+'" aria-label="From account"></td>'+
-    '<td><textarea class="inline-expense-input inline-expense-reason" data-inline-field="reason" rows="2" maxlength="500" aria-label="Reason">'+h(item.reason)+'</textarea></td>'+
-    '<td><div class="inline-project-fields"><select class="inline-expense-input inline-expense-major-plan" data-inline-field="majorPlanId" aria-label="Major plan">'+majorPlanOptions(item.majorPlanId||"",true)+'</select><select class="inline-expense-input inline-expense-major-plan-phase" data-inline-field="majorPlanPhaseId" aria-label="Project phase"'+(item.majorPlanId?'':' disabled')+'>'+majorPlanPhaseOptions(item.majorPlanId||"",item.majorPlanPhaseId||"",true)+'</select></div></td>'+
-    '<td><span class="editing-row-label">Editing in row</span></td>'+
-    '<td class="row-edit-cell"><div class="inline-save-actions"><button class="tiny-button save-row-button" data-action="inline-save-expense" data-id="'+h(item.id)+'">✓ Save</button><button class="tiny-button" data-action="inline-cancel-expense" data-id="'+h(item.id)+'">Cancel</button></div></td></tr>';
+  return '<tr class="expense-'+h(item.status.toLowerCase())+' inline-expense-row" data-inline-expense-id="'+h(item.id)+'"><td colspan="7">'+
+    '<div class="inline-expense-editor"><header>'+memberIdentityMarkup(expenseMemberId(item),false)+'<span class="expense-status '+h(item.status.toLowerCase())+'">'+(item.status==="PLANNED"?'PREPLANNED':'PAID')+'</span><strong>Edit this expenditure directly</strong></header><div class="inline-expense-editor-grid">'+
+    '<label>Amount<input class="inline-expense-input number" data-inline-field="amount" type="number" min="0.01" step="0.01" value="'+h(item.amount)+'"></label>'+
+    '<label>Date<input class="inline-expense-input" data-inline-field="date" type="date" value="'+h(String(item.date).slice(0,10))+'"></label>'+
+    '<label>Family member<select class="inline-expense-input" data-inline-field="memberId">'+memberSelectOptions(expenseMemberId(item),true)+'</select></label>'+
+    '<label>Category<select class="inline-expense-input inline-expense-category" data-inline-field="category">'+expenseCategoryOptions(item.category,false)+'</select></label>'+
+    '<label>Subcategory<select class="inline-expense-input inline-expense-subcategory" data-inline-field="subcategory">'+expenseSubcategoryOptions(item.category,item.subcategory,false)+'</select></label>'+
+    '<label>Paid / sent to<input class="inline-expense-input" data-inline-field="sentTo" maxlength="100" value="'+h(item.sentTo)+'"></label>'+
+    '<label>From account<input class="inline-expense-input" data-inline-field="fromAccount" maxlength="100" value="'+h(item.fromAccount)+'"></label>'+
+    '<label class="inline-editor-wide">Description / reason<textarea class="inline-expense-input inline-expense-reason" data-inline-field="reason" rows="2" maxlength="500">'+h(item.reason)+'</textarea></label>'+
+    '<label>Major plan<select class="inline-expense-input inline-expense-major-plan" data-inline-field="majorPlanId">'+majorPlanOptions(item.majorPlanId||"",true)+'</select></label>'+
+    '<label>Plan phase<select class="inline-expense-input inline-expense-major-plan-phase" data-inline-field="majorPlanPhaseId"'+(item.majorPlanId?'':' disabled')+'>'+majorPlanPhaseOptions(item.majorPlanId||"",item.majorPlanPhaseId||"",true)+'</select></label></div><div class="inline-save-actions"><button class="tiny-button" data-action="inline-cancel-expense" data-id="'+h(item.id)+'">Cancel</button><button class="tiny-button save-row-button" data-action="inline-save-expense" data-id="'+h(item.id)+'">✓ Save row</button></div></div></td></tr>';
 }
 function renderExpenseDisplayRow(item) {
   const plan=majorPlanName(item.majorPlanId),phase=majorPlanPhaseName(item.majorPlanPhaseId);
-  return '<tr class="expense-'+h(item.status.toLowerCase())+'"><td class="number"><strong>'+h(money(item.amount))+'</strong></td><td>'+h(formatDate(item.date))+'</td><td><span class="expense-status '+h(item.status.toLowerCase())+'">'+(item.status==="PLANNED"?'PREPLANNED':'PAID')+'</span></td><td>'+memberIdentityMarkup(expenseMemberId(item),true)+'</td><td><strong>'+h(item.category)+'</strong></td><td>'+h(item.subcategory)+'</td><td><strong>'+h(item.sentTo)+'</strong></td><td>'+h(item.fromAccount)+'</td><td class="expense-reason">'+h(item.reason)+'</td><td>'+(plan?'<span class="major-plan-link-chip">'+h(plan)+(phase?'<small>'+h(phase)+'</small>':'')+'</span>':'<span class="muted">—</span>')+'</td><td><div class="row-actions">'+(item.status==="PLANNED"?'<button class="tiny-button paid-button" data-action="mark-planned-paid" data-id="'+h(item.id)+'">✓ Paid</button>':'')+'<button class="tiny-button" data-action="edit-expense" data-id="'+h(item.id)+'" title="Edit in a larger form">↗ Form</button>'+(mayDelete(item)?'<button class="danger-button" data-action="delete-expense" data-id="'+h(item.id)+'">×</button>':"")+'</div></td><td class="row-edit-cell"><button class="row-edit-primary" data-action="inline-edit-expense" data-id="'+h(item.id)+'">✎ Edit</button></td></tr>';
+  return '<tr class="expense-'+h(item.status.toLowerCase())+'"><td><div class="expense-description-cell"><span class="expense-row-icon">₹</span><span><strong>'+h(item.reason||item.sentTo||"Expenditure")+'</strong><small>Paid to '+h(item.sentTo||"—")+' · From '+h(item.fromAccount||"—")+'</small></span></div></td><td><strong>'+h(formatDate(item.date))+'</strong><span class="expense-status '+h(item.status.toLowerCase())+'">'+(item.status==="PLANNED"?'PREPLANNED':'PAID')+'</span></td><td><span class="expense-category-chip">'+h(item.category)+'</span><small class="expense-subcategory-line">'+h(item.subcategory)+'</small></td><td>'+memberIdentityMarkup(expenseMemberId(item),false)+'</td><td class="number expense-amount-cell"><strong>'+h(money(item.amount))+'</strong></td><td>'+(plan?'<span class="major-plan-link-chip">'+h(plan)+(phase?'<small>'+h(phase)+'</small>':'')+'</span>':'<span class="muted">—</span>')+'</td><td class="row-edit-cell"><div class="statement-actions">'+(item.status==="PLANNED"?'<button class="tiny-button paid-button" data-action="mark-planned-paid" data-id="'+h(item.id)+'">✓ Mark paid</button>':'')+'<button class="row-edit-primary" data-action="inline-edit-expense" data-id="'+h(item.id)+'">✎ Edit row</button><button class="tiny-button" data-action="edit-expense" data-id="'+h(item.id)+'" title="Open every field">Full form</button>'+(mayDelete(item)?'<button class="danger-button" data-action="delete-expense" data-id="'+h(item.id)+'">Delete</button>':"")+'</div></td></tr>';
 }
 async function saveInlineExpenseRow(button) {
   const row = button.closest("tr"), id = button.dataset.id;
@@ -1698,10 +1698,18 @@ async function saveInlineExpenseRow(button) {
 function renderExpenses() {
   const items=filteredExpenses(),paid=items.filter(function(x){return x.status==="PAID";}),planned=items.filter(function(x){return x.status==="PLANNED";}),paidTotal=paid.reduce(function(s,x){return s+Number(x.amount||0);},0),plannedTotal=planned.reduce(function(s,x){return s+Number(x.amount||0);},0);
   if (state.inlineExpenseId && !items.some(function (item) { return item.id === state.inlineExpenseId; })) state.inlineExpenseId = "";
+  renderExpenseMemberQuickFilters();
+  $("expenseStatementSnapshot").innerHTML='<span><small>Showing</small><strong>'+h(plural(items.length,"entry","entries"))+'</strong></span><span><small>Paid</small><strong>'+h(money(paidTotal))+'</strong></span>'+(planned.length?'<span><small>Preplanned</small><strong>'+h(money(plannedTotal))+'</strong></span>':'');
   $("expenseTotals").innerHTML='<span class="total-pill">'+plural(items.length,"entry","entries")+'</span><span class="total-pill">Paid '+h(money(paidTotal))+'</span>'+(planned.length?'<span class="total-pill planned">Preplanned '+h(money(plannedTotal))+'</span>':'');
   renderExpenseMemberAnalytics(items);
   $("expenseRows").innerHTML=items.map(function(item){return item.id===state.inlineExpenseId?renderInlineExpenseRow(item):renderExpenseDisplayRow(item);}).join("");
   $("expenseEmpty").classList.toggle("hidden",items.length>0);
+}
+function renderExpenseMemberQuickFilters() {
+  const selected=$("expenseMemberFilter").value;
+  const members=(state.data.members||[]);
+  const buttons=[{id:"",name:"Everyone"},{id:"ALL",name:"Whole family"}].concat(members.map(function(member){return {id:member.id,name:member.name};}));
+  $("expenseMemberQuickFilters").innerHTML='<span class="member-switcher-label">Viewing &amp; editing for</span>'+buttons.map(function(item){return '<button type="button" class="expense-member-switch'+(selected===item.id?' active':'')+'" data-action="quick-filter-expense-member" data-id="'+h(item.id)+'">'+(item.id?memberAvatarMarkup(item.id,"small"):'<span class="member-avatar small everyone">ALL</span>')+'<span>'+h(item.name)+'</span></button>';}).join("");
 }
 function memberSelectOptions(selected,allowAll) { return (allowAll?'<option value="ALL" '+(selected==="ALL"?'selected':'')+'>Whole family</option>':'')+(state.data.members||[]).map(function(member){return '<option value="'+h(member.id)+'" '+(selected===member.id?'selected':'')+'>'+h(member.name)+'</option>';}).join(""); }
 function expenseAnalyticsRows(items) {

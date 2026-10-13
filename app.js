@@ -2,7 +2,7 @@
 
 const CONFIG = window.FAMILY_DASHBOARD_CONFIG || {};
 const PLACEHOLDER_URL = "PASTE_YOUR_APPS_SCRIPT_WEB_APP_URL_HERE";
-const FRONTEND_VERSION = "1.0.30";
+const FRONTEND_VERSION = "1.0.31";
 const SAVED_USERNAME_KEY = "familyDashboardUsername";
 const SESSION_TOKEN_KEY = "familyDashboardToken";
 const IDLE_TIMEOUT_MS = 5 * 60 * 1000;
@@ -15,6 +15,8 @@ const state = {
   calendarCursor: new Date(new Date().getFullYear(), new Date().getMonth(), 1),
   pendingPhoto: null,
   pendingMemberPhoto: null,
+  pendingImportantDatePhoto: null,
+  removeImportantDatePhoto: false,
   stickyView: "active",
   stickyDrag: null,
   stickyHighestZ: 100,
@@ -157,7 +159,7 @@ function updateImportantDateConversion() {
   if(system==="SAKA"){
     gregorian=sakaToGregorian($("importantDateSakaYear").value,$("importantDateSakaMonth").value,$("importantDateSakaDay").value,false);
     if(gregorian){saka=gregorianToSaka(gregorian);$("importantDateValue").value=gregorian;}
-  } else {gregorian=$("importantDateValue").value;saka=gregorianToSaka(gregorian);}
+  } else {gregorian=$("importantDateValue").value;saka=gregorianToSaka(gregorian);if(saka){$("importantDateSakaYear").value=saka.year;$("importantDateSakaMonth").value=String(saka.month);$("importantDateSakaDay").value=saka.day;}}
   $("importantDateConversion").textContent=gregorian&&saka?("English: "+formatDate(gregorian)+" · Saka: "+formatSakaDate(saka)):(system==="SAKA"?"Enter a valid Saka date.":"Choose a date to see both calendar formats.");
 }
 function syncRecurringFrequency() { const custom=$("recurringExpenseFrequency").value==="CUSTOM"; $("recurringCustomIntervalLabel").classList.toggle("hidden",!custom); $("recurringExpenseIntervalMonths").required=custom; }
@@ -544,7 +546,7 @@ function prepareNewDialog(id) {
   if (id === "incomeDialog") { $("incomeDialogTitle").textContent = "Add income"; fillMemberSelect($("incomeReceivedBy"), state.data.user.id); }
   if (id === "targetDialog") { $("targetForm").reset(); $("targetDueDate").value = todayIso(); fillMemberSelect($("targetOwner"), state.data.user.id, true); }
   if (id === "contributionDialog") { $("contributionForm").reset(); $("contributionDate").value = todayIso(); }
-  if (id === "dateDialog") { $("dateDialogTitle").textContent = "Add important date"; $("importantDateCalendarSystem").value="GREGORIAN"; const saka=gregorianToSaka($("importantDateValue").value||todayIso()); if(saka){$("importantDateSakaYear").value=saka.year;$("importantDateSakaMonth").value=String(saka.month);$("importantDateSakaDay").value=saka.day;} syncImportantDateCalendar(); $("notifyEveryone").checked = true; $("recipientChecks").classList.add("hidden"); renderRecipientChecks([]); }
+  if (id === "dateDialog") { $("dateDialogTitle").textContent = "Add important date"; $("importantDateCalendarSystem").value="GREGORIAN"; $("importantDateReminderBasis").value="GREGORIAN"; state.pendingImportantDatePhoto=null; state.removeImportantDatePhoto=false; $("importantDatePhotoFile").value=""; setImportantDatePhotoPreview(null); $("importantDateAdminControls").classList.toggle("hidden",!isAdmin()); const saka=gregorianToSaka($("importantDateValue").value||todayIso()); if(saka){$("importantDateSakaYear").value=saka.year;$("importantDateSakaMonth").value=String(saka.month);$("importantDateSakaDay").value=saka.day;} syncImportantDateCalendar(); $("notifyEveryone").checked = true; $("recipientChecks").classList.add("hidden"); renderRecipientChecks([]); }
   if (id === "photoDialog") { $("photoForm").reset(); $("photoTakenDate").value = todayIso(); $("photoPreview").classList.add("hidden"); state.pendingPhoto = null; }
   if (id === "memberDialog") { $("memberDialogTitle").textContent = "Add family member"; $("memberActive").checked = true; $("memberPassword").required = true; setMemberPermissions(["EXPENSES","INCOME","TARGETS","DATES","CALENDAR","PHOTOS","EXPERIENCES","DIARY"]); syncMemberAccessRole(); }
   if (id === "experienceDialog") $("experienceDialogTitle").textContent = "Add experience";
@@ -736,6 +738,8 @@ function bindForms() {
   $("memberRole").addEventListener("change", syncMemberAccessRole);
   $("memberPhotoFile").addEventListener("change", previewMemberPhoto);
   $("deleteMemberPhoto").addEventListener("click", deleteMemberPhoto);
+  $("importantDatePhotoFile").addEventListener("change", previewImportantDatePhoto);
+  $("removeImportantDatePhoto").addEventListener("click", removeImportantDatePhotoPreview);
   $("settingDashboardClockHighlight").addEventListener("input", function (event) { previewDashboardClockHighlight(event.target.value); });
 }
 
@@ -1244,11 +1248,22 @@ async function saveImportantDate(event) {
   const sakaDate=sakaIso($("importantDateSakaYear").value,$("importantDateSakaMonth").value,$("importantDateSakaDay").value);
   const eventDate=calendarSystem==="SAKA"?sakaToGregorian($("importantDateSakaYear").value,$("importantDateSakaMonth").value,$("importantDateSakaDay").value,false):$("importantDateValue").value;
   if(!eventDate)return toast("Enter a valid date in the selected calendar.","error");
-  await mutate($("importantDateId").value ? "updateImportantDate" : "createImportantDate", {
-    id: $("importantDateId").value, title: $("importantDateTitle").value.trim(), eventDate: eventDate, calendarSystem: calendarSystem, calendarDate: calendarSystem==="SAKA"?sakaDate:eventDate,
-    eventType: $("importantDateType").value, repeatYearly: $("importantDateRepeat").checked,
-    remindDays: $("importantDateRemind").value, recipientIds: recipients.join(","), notes: $("importantDateNotes").value.trim()
-  }, "Reminder saved.", "dateDialog");
+  const id=$("importantDateId").value;
+  const payload={
+    id:id, title:$("importantDateTitle").value.trim(), occasionLabel:$("importantDateOccasion").value.trim(), eventDate:eventDate,
+    calendarSystem:calendarSystem, calendarDate:sakaDate, reminderBasis:$("importantDateReminderBasis").value,
+    eventType:$("importantDateType").value, repeatYearly:$("importantDateRepeat").checked,
+    remindDays:$("importantDateRemind").value, recipientIds:recipients.join(","), notes:$("importantDateNotes").value.trim()
+  };
+  showLoading(state.pendingImportantDatePhoto?"Saving reminder and photo to Google Drive…":"Saving reminder…");
+  try {
+    const saved=await api(id?"updateImportantDate":"createImportantDate",payload),savedId=saved.id;
+    if(isAdmin()&&state.removeImportantDatePhoto&&id)await api("deleteImportantDatePhoto",{id:savedId});
+    if(isAdmin()&&state.pendingImportantDatePhoto)await api("uploadImportantDatePhoto",{id:savedId,fileName:state.pendingImportantDatePhoto.name,fullData:state.pendingImportantDatePhoto.fullData,thumbData:state.pendingImportantDatePhoto.thumbData});
+    if($("dateDialog").open)$("dateDialog").close();
+    await refreshData(); toast("Reminder saved with both calendar dates.","success");
+  } catch(error){if(!handleSessionError(error))toast(friendlyApiError(error),"error");}
+  finally{hideLoading();}
 }
 
 async function saveStickyNote(event) {
@@ -1443,7 +1458,7 @@ function editIncome(id) {
 function openContribution(id) { const target = state.data.targets.find(function (x) { return x.id === id; }); if (!target) return; prepareNewDialog("contributionDialog"); $("contributionTargetId").value = id; $("contributionTitle").textContent = "Add to “" + target.title + "”"; openDialog("contributionDialog"); }
 function editImportantDate(id) {
   const item = state.data.importantDates.find(function (x) { return x.id === id; }); if (!item) return;
-  prepareNewDialog("dateDialog"); $("importantDateId").value = item.id; $("importantDateTitle").value = item.title; $("importantDateValue").value = item.eventDate; $("importantDateCalendarSystem").value=item.calendarSystem==="SAKA"?"SAKA":"GREGORIAN"; const saka=item.calendarSystem==="SAKA"&&item.calendarDate?{year:Number(String(item.calendarDate).slice(0,4)),month:Number(String(item.calendarDate).slice(5,7)),day:Number(String(item.calendarDate).slice(8,10))}:gregorianToSaka(item.eventDate); if(saka){$("importantDateSakaYear").value=saka.year;$("importantDateSakaMonth").value=String(saka.month);$("importantDateSakaDay").value=saka.day;} syncImportantDateCalendar(); $("importantDateType").value = item.eventType; $("importantDateRepeat").checked = item.repeatYearly; $("importantDateRemind").value = item.remindDays; $("importantDateNotes").value = item.notes || "";
+  prepareNewDialog("dateDialog"); $("importantDateId").value = item.id; $("importantDateTitle").value = item.title; $("importantDateOccasion").value=item.occasionLabel||""; $("importantDateValue").value = item.eventDate; $("importantDateCalendarSystem").value=item.calendarSystem==="SAKA"?"SAKA":"GREGORIAN"; const saka=item.calendarDate?{year:Number(String(item.calendarDate).slice(0,4)),month:Number(String(item.calendarDate).slice(5,7)),day:Number(String(item.calendarDate).slice(8,10))}:gregorianToSaka(item.eventDate); if(saka){$("importantDateSakaYear").value=saka.year;$("importantDateSakaMonth").value=String(saka.month);$("importantDateSakaDay").value=saka.day;} syncImportantDateCalendar(); $("importantDateReminderBasis").value=["GREGORIAN","SAKA","BOTH"].includes(item.reminderBasis)?item.reminderBasis:(item.calendarSystem==="SAKA"?"SAKA":"GREGORIAN"); $("importantDateType").value = item.eventType; $("importantDateRepeat").checked = item.repeatYearly; $("importantDateRemind").value = item.remindDays; $("importantDateNotes").value = item.notes || ""; state.pendingImportantDatePhoto=null; state.removeImportantDatePhoto=false; setImportantDatePhotoPreview(item.photoThumbData||null); $("removeImportantDatePhoto").classList.toggle("hidden",!item.photoThumbData); $("importantDateAdminControls").classList.toggle("hidden",!isAdmin());
   const ids = String(item.recipientIds || "").split(","); const everyone = ids.indexOf("ALL") >= 0; $("notifyEveryone").checked = everyone; $("recipientChecks").classList.toggle("hidden", everyone); renderRecipientChecks(ids); $("dateDialogTitle").textContent = "Edit reminder"; openDialog("dateDialog");
 }
 function editStickyNote(id) {
@@ -1941,7 +1956,20 @@ function filteredIncome() { const month=$("incomeMonth").value,cat=$("incomeCate
 function renderIncome() { const items=filteredIncome(),total=items.reduce(function(s,x){return s+Number(x.amount||0);},0); $("incomeTotals").innerHTML='<span class="total-pill green">'+plural(items.length,"entry","entries")+'</span><span class="total-pill green">Total '+h(money(total))+'</span>'; $("incomeRows").innerHTML=items.map(function(x){return '<tr><td>'+h(formatDate(x.date))+'</td><td><strong>'+h(x.source)+'</strong></td><td>'+h(x.category)+'</td><td>'+memberIdentityMarkup(x.receivedBy,true)+'</td><td>'+h(x.receivingMode)+'</td><td class="number"><strong>'+h(money(x.amount))+'</strong></td><td><div class="row-actions"><button class="tiny-button" data-action="edit-income" data-id="'+h(x.id)+'">Edit</button>'+(mayDelete(x)?'<button class="danger-button" data-action="delete-income" data-id="'+h(x.id)+'">×</button>':"")+'</div></td></tr>';}).join(""); $("incomeEmpty").classList.toggle("hidden",items.length>0); }
 
 function renderTargets() { const items=state.data.targets,total=items.reduce(function(s,x){return s+Number(x.targetAmount||0);},0),saved=items.reduce(function(s,x){return s+Number(x.currentAmount||0);},0); $("targetSummary").innerHTML=items.length?'<span class="total-pill">Total goal '+h(money(total))+'</span><span class="total-pill green">Progress '+h(money(saved))+'</span>':""; $("targetGrid").innerHTML=items.map(function(x){const pct=Number(x.targetAmount)?Math.min(100,Math.round(Number(x.currentAmount)/Number(x.targetAmount)*100)):0;return '<article class="target-card"><div class="target-top"><div><small>'+h(x.category)+' · '+h(x.ownerId==="ALL"?"Whole family":memberName(x.ownerId))+'</small><h3>'+h(x.title)+'</h3><small>Due '+h(formatDate(x.dueDate))+'</small></div><span class="target-icon">◎</span></div><div class="progress-track"><div class="progress-fill" style="width:'+pct+'%"></div></div><div class="target-numbers"><span><strong>'+h(money(x.currentAmount))+'</strong> saved</span><span>'+pct+'% of '+h(money(x.targetAmount))+'</span></div><div class="target-actions"><button class="primary-button" data-action="contribute" data-id="'+h(x.id)+'">＋ Add progress</button>'+(mayDelete(x)?'<button class="danger-button" data-action="delete-target" data-id="'+h(x.id)+'">Delete</button>':"")+'</div></article>';}).join(""); $("targetEmpty").classList.toggle("hidden",items.length>0); }
-function renderDates() { const type=$("dateTypeFilter").value,q=normalize($("dateSearch").value); const items=state.data.importantDates.filter(function(x){return (!type||x.eventType===type)&&(!q||normalize([x.title,x.eventType,x.notes,x.calendarDate].join(" ")).includes(q));}); $("dateGrid").innerHTML=items.map(function(x){const occurrence=x.nextOccurrence||x.eventDate,p=dayParts(occurrence),saka=x.calendarSystem==="SAKA"&&x.calendarDate?{year:Number(String(x.calendarDate).slice(0,4)),month:Number(String(x.calendarDate).slice(5,7)),day:Number(String(x.calendarDate).slice(8,10))}:gregorianToSaka(x.eventDate); return '<article class="date-card"><div class="date-tile"><strong>'+p.day+'</strong><span>'+p.month+'</span></div><div><h3>'+h(x.title)+'</h3><p>'+h(x.eventType)+' · '+h(formatDate(occurrence))+'</p><p class="dual-date-line"><span class="saka-date-icon" aria-hidden="true">S</span><span><small>SAKA ERA</small><strong>'+h(formatSakaDate(saka))+'</strong></span></p><p>Email: '+h(reminderText(x.remindDays))+'</p>'+(x.repeatYearly?'<span class="repeat-chip">↻ Every year in '+(x.calendarSystem==="SAKA"?'Saka':'English')+' calendar</span>':"")+'</div><div class="row-actions"><button class="tiny-button" data-action="edit-date" data-id="'+h(x.id)+'">Edit</button>'+(mayDelete(x)?'<button class="danger-button" data-action="delete-date" data-id="'+h(x.id)+'">×</button>':"")+'</div></article>';}).join(""); $("dateEmpty").classList.toggle("hidden",items.length>0); }
+function reminderBasis(item){const value=String(item&&item.reminderBasis||item&&item.calendarSystem||"GREGORIAN").toUpperCase();return ["GREGORIAN","SAKA","BOTH"].includes(value)?value:"GREGORIAN";}
+function reminderBasisLabel(value){return value==="SAKA"?"Saka calendar":value==="BOTH"?"English + Saka calendars":"English calendar";}
+function renderDates() {
+  const type=$("dateTypeFilter").value,q=normalize($("dateSearch").value);
+  const items=state.data.importantDates.filter(function(x){return (!type||x.eventType===type)&&(!q||normalize([x.title,x.occasionLabel,x.eventType,x.notes,x.calendarDate].join(" ")).includes(q));});
+  $("dateGrid").innerHTML=items.map(function(x){
+    const basis=reminderBasis(x),occurrence=x.nextOccurrence||x.eventDate,englishParts=dayParts(occurrence),savedSaka=x.calendarDate?{year:Number(String(x.calendarDate).slice(0,4)),month:Number(String(x.calendarDate).slice(5,7)),day:Number(String(x.calendarDate).slice(8,10))}:gregorianToSaka(x.eventDate),nextSaka=gregorianToSaka(occurrence);
+    const tile=basis==="SAKA"?'<div class="date-tile saka-primary"><strong>'+h(nextSaka.day)+'</strong><span>'+h(SAKA_MONTHS[nextSaka.month-1].slice(0,3))+' S</span></div>':'<div class="date-tile"><strong>'+h(englishParts.day)+'</strong><span>'+h(englishParts.month)+'</span></div>';
+    const photo=x.photoThumbData?'<div class="important-date-photo"><img src="'+h(x.photoThumbData)+'" alt="'+h(x.title)+'" loading="lazy" decoding="async"></div>':'';
+    const nextRows=(x.nextOccurrences||[{date:occurrence,basis:basis}]).map(function(next){const label=next.basis==="SAKA"?"Saka reminder":next.basis==="GREGORIAN"?"English reminder":next.basis==="BOTH"?"English + Saka reminder":"Reminder";return '<span class="next-occurrence '+h(String(next.basis||"").toLowerCase())+'"><b>'+h(label)+'</b> '+h(formatDate(next.date))+' · '+h(formatSakaDate(gregorianToSaka(next.date)))+'</span>';}).join("");
+    return '<article class="date-card basis-'+h(basis.toLowerCase())+'"><div class="date-visual">'+photo+tile+'</div><div class="date-card-copy"><h3>'+h(x.title)+'</h3>'+(x.occasionLabel?'<p class="occasion-label">'+h(x.occasionLabel)+'</p>':'')+'<p>'+h(x.eventType)+'</p><div class="original-calendar-pair"><span><small>ENGLISH ORIGINAL</small><strong>'+h(formatDate(x.eventDate))+'</strong></span><span><small>SAKA ORIGINAL</small><strong>'+h(formatSakaDate(savedSaka))+'</strong></span></div>'+(x.repeatYearly?'<div class="next-occurrence-list">'+nextRows+'</div>':'')+'<p>Email: '+h(reminderText(x.remindDays))+'</p>'+(x.repeatYearly?'<span class="repeat-chip">↻ Remind by '+h(reminderBasisLabel(basis))+'</span>':'<span class="repeat-chip one-time">One-time reminder · both dates saved</span>')+'</div><div class="row-actions"><button class="tiny-button" data-action="edit-date" data-id="'+h(x.id)+'">Edit</button>'+(mayDelete(x)?'<button class="danger-button" data-action="delete-date" data-id="'+h(x.id)+'">×</button>':"")+'</div></article>';
+  }).join("");
+  $("dateEmpty").classList.toggle("hidden",items.length>0);
+}
 function reminderText(days) { return String(days||"").split(",").map(function(d){return Number(d)===0?"same day":d+"d before";}).join(", "); }
 
 function renderPhotos() {
@@ -1988,12 +2016,18 @@ async function viewPhoto(id) { const item=state.data.photos.find(function(x){ret
 function renderExperiences() { const year=$("experienceYear").value,q=normalize($("experienceSearch").value); const items=state.data.experiences.filter(function(x){return (!year||String(x.experienceDate).slice(0,4)===year)&&(!q||normalize([x.title,x.place,x.story,x.tags,memberName(x.createdBy)].join(" ")).includes(q));}); $("experienceGrid").innerHTML=items.map(function(x){const tags=String(x.tags||"").split(",").map(function(t){return t.trim();}).filter(Boolean);return '<article class="experience-card"><div class="experience-meta"><span>'+h(formatDate(x.experienceDate))+'</span>'+(x.place?'<span>⌖ '+h(x.place)+'</span>':"")+'</div><h3>'+h(x.title)+'</h3><p class="story">'+h(x.story)+'</p><div class="tag-list">'+tags.map(function(t){return '<span class="tag">'+h(t)+'</span>';}).join("")+'</div><div class="experience-footer"><span class="writer">Written by '+h(memberName(x.createdBy))+'</span><div class="row-actions"><button class="tiny-button" data-action="edit-experience" data-id="'+h(x.id)+'">Edit</button>'+(mayDelete(x)?'<button class="danger-button" data-action="delete-experience" data-id="'+h(x.id)+'">×</button>':"")+'</div></div></article>';}).join(""); $("experienceEmpty").classList.toggle("hidden",items.length>0); }
 function renderDiary() { const month=$("diaryMonth").value,writer=$("diaryWriterFilter").value,q=normalize($("diarySearch").value); const items=state.data.diary.filter(function(x){return (!month||String(x.diaryDate).slice(0,7)===month)&&(!writer||x.createdBy===writer)&&(!q||normalize([x.title,x.body,x.mood,x.tags,memberName(x.createdBy)].join(" ")).includes(q));}); $("diaryTimeline").innerHTML=items.map(function(x){const p=dayParts(x.diaryDate),tags=String(x.tags||"").split(",").map(function(t){return t.trim();}).filter(Boolean);return '<article class="diary-entry"><div class="diary-date-badge"><strong>'+p.day+'</strong><span>'+p.month+'</span></div><div class="diary-entry-top"><div><h3>'+h(x.title)+'</h3><span class="writer">Written by '+h(memberName(x.createdBy))+'</span></div><span class="diary-mood">'+h(x.mood)+'</span></div><p class="diary-body">'+h(x.body)+'</p><div class="diary-entry-footer"><div class="tag-list">'+tags.map(function(t){return '<span class="tag">'+h(t)+'</span>';}).join("")+'</div><div class="row-actions"><button class="tiny-button" data-action="edit-diary" data-id="'+h(x.id)+'">Edit</button>'+(mayDelete(x)?'<button class="danger-button" data-action="delete-diary" data-id="'+h(x.id)+'">×</button>':"")+'</div></div></article>';}).join(""); $("diaryEmpty").classList.toggle("hidden",items.length>0); }
 
+function importantDateMatchesIso(item,iso,cellSaka) {
+  if(!item.repeatYearly)return item.eventDate===iso;
+  const basis=reminderBasis(item),englishMatch=String(item.eventDate).slice(5)===String(iso).slice(5),saved=String(item.calendarDate||"").split("-").map(Number);
+  const sakaMatch=saved.length===3&&saved[1]===cellSaka.month&&Math.min(saved[2],sakaMonthLengths(cellSaka.year+78)[cellSaka.month-1])===cellSaka.day;
+  return basis==="BOTH"?(englishMatch||sakaMatch):basis==="SAKA"?sakaMatch:englishMatch;
+}
 function renderCalendar() {
   if (!state.data) return;
   const year=state.calendarCursor.getFullYear(),month=state.calendarCursor.getMonth(); const monthStart=[year,String(month+1).padStart(2,"0"),"01"].join("-"); const monthEndDate=new Date(year,month+1,0),monthEnd=[monthEndDate.getFullYear(),String(monthEndDate.getMonth()+1).padStart(2,"0"),String(monthEndDate.getDate()).padStart(2,"0")].join("-"); const startSaka=gregorianToSaka(monthStart),endSaka=gregorianToSaka(monthEnd),englishMonthLabel=state.calendarCursor.toLocaleDateString("en-IN",{month:"long",year:"numeric"}),sakaMonthLabel=SAKA_MONTHS[startSaka.month-1]+(startSaka.month!==endSaka.month?"–"+SAKA_MONTHS[endSaka.month-1]:"")+" "+endSaka.year; $("calendarMonthLabel").innerHTML='<span class="gregorian-month-label">'+h(englishMonthLabel)+'</span><span class="saka-month-label"><small>SAKA ERA</small>'+h(sakaMonthLabel)+'</span>'; $("calendarMonthLabel").setAttribute("aria-label",englishMonthLabel+"; "+sakaMonthLabel+" Saka era");
   const first=new Date(year,month,1),start=new Date(year,month,1-first.getDay()),today=todayIso(),cells=[];
   for(let i=0;i<42;i++){const d=new Date(start);d.setDate(start.getDate()+i);const iso=[d.getFullYear(),String(d.getMonth()+1).padStart(2,"0"),String(d.getDate()).padStart(2,"0")].join("-");const events=[],cellSaka=gregorianToSaka(iso);
-    state.data.importantDates.forEach(function(x){let match=x.eventDate===iso;if(x.repeatYearly){if(x.calendarSystem==="SAKA"){const saved=String(x.calendarDate||"").split("-").map(Number);match=saved[1]===cellSaka.month&&Math.min(saved[2],sakaMonthLengths(cellSaka.year+78)[cellSaka.month-1])===cellSaka.day;}else match=String(x.eventDate).slice(5)===iso.slice(5);}if(match)events.push({type:"reminder",title:x.title});});
+    state.data.importantDates.forEach(function(x){if(importantDateMatchesIso(x,iso,cellSaka))events.push({type:"reminder",title:(x.occasionLabel||x.title)+" · "+reminderBasisLabel(reminderBasis(x))});});
     state.data.recurringExpenses.forEach(function(x){if(recurringIsActive(x)&&x.nextDueDate===iso)events.push({type:"recurring",title:"Payment: "+x.title});});
     state.data.expenses.map(normalizeExpense).forEach(function(x){if(x.status==="PLANNED"&&x.date===iso)events.push({type:"recurring",title:"Preplanned: "+(x.reason||x.category)});});
     state.data.experiences.forEach(function(x){if(x.experienceDate===iso)events.push({type:"experience",title:x.title});}); state.data.diary.forEach(function(x){if(x.diaryDate===iso)events.push({type:"diary",title:x.title});});
@@ -2129,7 +2163,7 @@ function renderGlobalSearch() {
   state.data.majorPlans.forEach(function(x){if(normalize([x.name,x.notes,x.status,memberName(x.ownerId)].join(" ")).includes(q))results.push({view:"expenses",icon:"▣",title:x.name,meta:"Major plan · "+String(x.status||"ACTIVE")+" · "+money(x.proposedAmount)});});
   state.data.income.forEach(function(x){if(normalize([x.source,x.category,memberName(x.receivedBy)].join(" ")).includes(q))results.push({view:"income",icon:"↗",title:x.source,meta:money(x.amount)+" · "+formatDate(x.date)});});
   state.data.targets.forEach(function(x){if(normalize([x.title,x.category,x.notes].join(" ")).includes(q))results.push({view:"targets",icon:"◎",title:x.title,meta:"Target · "+money(x.targetAmount)});});
-  state.data.importantDates.forEach(function(x){if(normalize([x.title,x.eventType,x.notes].join(" ")).includes(q))results.push({view:"dates",icon:"◫",title:x.title,meta:x.eventType+" · "+formatDate(x.nextOccurrence)});});
+  state.data.importantDates.forEach(function(x){if(normalize([x.title,x.occasionLabel,x.eventType,x.notes,x.calendarDate].join(" ")).includes(q))results.push({view:"dates",icon:"◫",title:x.occasionLabel||x.title,meta:x.eventType+" · "+reminderBasisLabel(reminderBasis(x))+" · "+formatDate(x.nextOccurrence)});});
   state.data.photos.forEach(function(x){if(normalize([x.title,x.caption,memberName(x.uploadedBy)].join(" ")).includes(q))results.push({view:"photos",icon:"▧",title:x.title,meta:"Photo by "+memberName(x.uploadedBy)});});
   state.data.experiences.forEach(function(x){if(normalize([x.title,x.place,x.story,x.tags].join(" ")).includes(q))results.push({view:"experiences",icon:"✦",title:x.title,meta:formatDate(x.experienceDate)+" · "+memberName(x.createdBy)});});
   state.data.diary.forEach(function(x){if(normalize([x.title,x.body,x.mood,x.tags].join(" ")).includes(q))results.push({view:"diary",icon:"☷",title:x.title,meta:formatDate(x.diaryDate)+" · "+memberName(x.createdBy)});});
@@ -2151,6 +2185,27 @@ async function previewMemberPhoto() {
     $("memberPhotoCurrent").innerHTML='<img src="'+h(thumb)+'" alt="Selected member photo preview">';
   } catch(error) { toast("This member photo could not be prepared.","error"); }
   finally { hideLoading(); }
+}
+function setImportantDatePhotoPreview(dataUrl) {
+  const preview=$("importantDatePhotoPreview");
+  preview.innerHTML=dataUrl?'<img src="'+h(dataUrl)+'" alt="Reminder photo preview">':'<span>◎</span>';
+  $("removeImportantDatePhoto").classList.toggle("hidden",!dataUrl);
+}
+async function previewImportantDatePhoto() {
+  const file=$("importantDatePhotoFile").files[0]; if(!file)return;
+  if(!isAdmin())return toast("Only the administrator can attach reminder photos.","error");
+  if(!/^image\/(jpeg|png|webp)$/.test(file.type))return toast("Choose a JPG, PNG or WebP image.","error");
+  showLoading("Preparing reminder photo…");
+  try {
+    const full=await resizeImage(file,1000,.84),thumb=await resizeImage(file,180,.72);
+    state.pendingImportantDatePhoto={name:file.name.replace(/[^A-Za-z0-9._-]/g,"_"),fullData:full,thumbData:thumb};
+    state.removeImportantDatePhoto=false; setImportantDatePhotoPreview(thumb);
+  } catch(error){toast("This reminder photo could not be prepared.","error");}
+  finally{hideLoading();}
+}
+function removeImportantDatePhotoPreview() {
+  if(!isAdmin())return;
+  state.pendingImportantDatePhoto=null; state.removeImportantDatePhoto=true; $("importantDatePhotoFile").value=""; setImportantDatePhotoPreview(null);
 }
 function resizeImage(file,maxDimension,quality){return new Promise(function(resolve,reject){const reader=new FileReader();reader.onerror=reject;reader.onload=function(){const img=new Image();img.onerror=reject;img.onload=function(){let w=img.width,hgt=img.height;if(Math.max(w,hgt)>maxDimension){const scale=maxDimension/Math.max(w,hgt);w=Math.round(w*scale);hgt=Math.round(hgt*scale);}const canvas=document.createElement("canvas");canvas.width=w;canvas.height=hgt;const ctx=canvas.getContext("2d");ctx.fillStyle="#fff";ctx.fillRect(0,0,w,hgt);ctx.drawImage(img,0,0,w,hgt);resolve(canvas.toDataURL("image/jpeg",quality));};img.src=reader.result;};reader.readAsDataURL(file);});}
 function exportCsv(filename,items,fields,headers){if(!items.length)return toast("There is no filtered data to export.","error");const lines=[(headers||fields).join(",")].concat(items.map(function(item){return fields.map(function(field){return '"'+String(item[field]==null?"":item[field]).replace(/"/g,'""')+'"';}).join(",");}));const blob=new Blob(["\ufeff"+lines.join("\n")],{type:"text/csv;charset=utf-8"});const url=URL.createObjectURL(blob),a=document.createElement("a");a.href=url;a.download=filename;a.click();setTimeout(function(){URL.revokeObjectURL(url);},1000);}

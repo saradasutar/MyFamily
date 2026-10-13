@@ -2,7 +2,7 @@
 
 const CONFIG = window.FAMILY_DASHBOARD_CONFIG || {};
 const PLACEHOLDER_URL = "PASTE_YOUR_APPS_SCRIPT_WEB_APP_URL_HERE";
-const FRONTEND_VERSION = "1.0.33";
+const FRONTEND_VERSION = "1.0.34";
 const SAVED_USERNAME_KEY = "familyDashboardUsername";
 const SESSION_TOKEN_KEY = "familyDashboardToken";
 const IDLE_TIMEOUT_MS = 5 * 60 * 1000;
@@ -142,7 +142,7 @@ function dayParts(iso) {
   return { day: Number(p[2]) || "—", month: months[(Number(p[1]) || 1) - 1] };
 }
 const SAKA_MONTHS = ["Chaitra","Vaishakha","Jyeshtha","Ashadha","Shravana","Bhadra","Ashvina","Kartika","Agrahayana","Pausha","Magha","Phalguna"];
-const ODIA_MONTHS = {CHAITA:"ଚୈତ୍ର",BAISAKHA:"ବୈଶାଖ",JYESTHA:"ଜ୍ୟେଷ୍ଠ",ASADHA:"ଆଷାଢ଼",SRABANA:"ଶ୍ରାବଣ",BHADRA:"ଭାଦ୍ରବ",ASWINA:"ଆଶ୍ୱିନ",KARTIKA:"କାର୍ତ୍ତିକ",MARGASIRA:"ମାର୍ଗଶିର",PAUSA:"ପୌଷ",MAGHA:"ମାଘ",PHALGUNA:"ଫାଲ୍ଗୁନ"};
+const ODIA_MONTHS = {AUTO:"ଭୁବନେଶ୍ୱର ସୂର୍ୟ୍ୟୋଦୟ ତିଥି",CHAITA:"ଚୈତ୍ର",BAISAKHA:"ବୈଶାଖ",JYESTHA:"ଜ୍ୟେଷ୍ଠ",ASADHA:"ଆଷାଢ଼",SRABANA:"ଶ୍ରାବଣ",BHADRA:"ଭାଦ୍ରବ",ASWINA:"ଆଶ୍ୱିନ",KARTIKA:"କାର୍ତ୍ତିକ",MARGASIRA:"ମାର୍ଗଶିର",PAUSA:"ପୌଷ",MAGHA:"ମାଘ",PHALGUNA:"ଫାଲ୍ଗୁନ"};
 const ODIA_TITHIS = ["ପ୍ରତିପଦା","ଦ୍ୱିତୀୟା","ତୃତୀୟା","ଚତୁର୍ଥୀ","ପଞ୍ଚମୀ","ଷଷ୍ଠୀ","ସପ୍ତମୀ","ଅଷ୍ଟମୀ","ନବମୀ","ଦଶମୀ","ଏକାଦଶୀ","ଦ୍ୱାଦଶୀ","ତ୍ରୟୋଦଶୀ","ଚତୁର୍ଦ୍ଦଶୀ"];
 function isGregorianLeapYear(year) { return year % 4 === 0 && (year % 100 !== 0 || year % 400 === 0); }
 function sakaMonthLengths(gregorianStartYear) { return [isGregorianLeapYear(gregorianStartYear) ? 31 : 30,31,31,31,31,31,30,30,30,30,30,30]; }
@@ -1285,7 +1285,6 @@ async function saveImportantDate(event) {
   const recipients = everyone ? ["ALL"] : all("input[name='dateRecipient']:checked").map(function (el) { return el.value; });
   if (!recipients.length) return toast("Choose at least one email recipient.", "error");
   const calendarSystem=$("importantDateCalendarSystem").value;
-  if(reminderBasisIncludes($("importantDateReminderBasis").value,"ODIA")&&calendarSystem!=="ODIA")return toast("Choose Traditional Odia Panjika under Enter original date using, then add the month, paksha, tithi and verified English equivalent.","error");
   const sakaDate=sakaIso($("importantDateSakaYear").value,$("importantDateSakaMonth").value,$("importantDateSakaDay").value);
   const eventDate=calendarSystem==="SAKA"?sakaToGregorian($("importantDateSakaYear").value,$("importantDateSakaMonth").value,$("importantDateSakaDay").value,false):calendarSystem==="ODIA"?$("importantDateOdiaEquivalent").value:$("importantDateValue").value;
   if(!eventDate)return toast("Enter a valid date in the selected calendar.","error");
@@ -1523,7 +1522,7 @@ function openOdiaMappingDialog(id) {
 }
 function renderOdiaMappingList(item) {
   const mappings=(item.odiaMappings||[]).slice().sort(function(a,b){return String(a.gregorianDate).localeCompare(String(b.gregorianDate));});
-  $("odiaMappingList").innerHTML=mappings.length?mappings.map(function(mapping){return '<div class="odia-mapping-row"><span><strong>Odia Sal '+h(mapping.odiaYear)+'</strong><small>'+h(formatEnglishDate(mapping.gregorianDate))+' · '+h(formatOdiaScriptDate(mapping.gregorianDate))+(mapping.sourceNote?' · '+h(mapping.sourceNote):'')+'</small></span><button class="danger-button" type="button" data-action="delete-odia-mapping" data-id="'+h(mapping.id)+'">Delete</button></div>';}).join(""):'<p class="empty-state compact-empty">No verified yearly dates saved yet.</p>';
+  $("odiaMappingList").innerHTML=mappings.length?mappings.map(function(mapping){return '<div class="odia-mapping-row"><span><strong>'+(mapping.odiaYear?'Odia Sal '+h(mapping.odiaYear):'Automatic Odia occurrence')+'</strong><small>'+h(formatEnglishDate(mapping.gregorianDate))+' · '+h(formatOdiaScriptDate(mapping.gregorianDate))+(mapping.sourceNote?' · '+h(mapping.sourceNote):'')+'</small></span><button class="danger-button" type="button" data-action="delete-odia-mapping" data-id="'+h(mapping.id)+'">Delete</button></div>';}).join(""):'<p class="empty-state compact-empty">No yearly Odia dates saved yet.</p>';
 }
 async function saveOdiaReminderMapping(event) {
   event.preventDefault(); if(!state.odiaMappingDateId)return;
@@ -2041,7 +2040,7 @@ function renderDates() {
     const tile=basis==="ODIA"?'<div class="date-tile odia-primary"><strong>'+h(x.odiaTithi||englishParts.day)+'</strong><span>ଓଡ଼ିଆ</span></div>':'<div class="date-tile"><strong>'+h(englishParts.day)+'</strong><span>'+h(englishParts.month)+'</span></div>';
     const photo=x.photoThumbData?'<div class="important-date-photo"><img src="'+h(x.photoThumbData)+'" alt="'+h(x.title)+'" loading="lazy" decoding="async"></div>':'';
     const nextRows=(x.nextOccurrences||[{date:occurrence,basis:basis}]).map(function(next){return '<span class="next-occurrence '+h(String(next.basis||"").toLowerCase())+'"><b>'+h(reminderBasisLabel(next.basis))+" reminder</b> "+h(formatDate(next.date))+(reminderBasisIncludes(next.basis,"ODIA")&&x.odiaMonth?' · '+h(formatOdiaPanjika(x,next.odiaYear||"")):'')+'</span>';}).join("");
-    const panjikaOriginal=x.odiaMonth?'<span class="odia-original"><small>ODIA KOHINOOR / PANJIKA</small><strong>'+h(formatOdiaPanjika(x))+'</strong></span>':'';
+    const panjikaOriginal=x.odiaMonth?'<span class="odia-original"><small>'+(x.odiaMonth==="AUTO"?'AUTO-DERIVED ODIA TITHI':'ODIA KOHINOOR / PANJIKA')+'</small><strong>'+h(formatOdiaPanjika(x))+'</strong></span>':'';
     const mappingButton=isAdmin()?'<button class="tiny-button odia-map-button" data-action="manage-odia-mappings" data-id="'+h(x.id)+'">Odia years</button>':'';
     return '<article class="date-card basis-'+h(basis.toLowerCase())+'"><div class="date-visual">'+photo+tile+'</div><div class="date-card-copy"><h3>'+h(x.title)+'</h3>'+(x.occasionLabel?'<p class="occasion-label">'+h(x.occasionLabel)+'</p>':'')+'<p>'+h(x.eventType)+'</p><div class="original-calendar-pair two-calendars'+(x.odiaMonth?'':' english-only')+'"><span><small>ENGLISH ORIGINAL</small><strong>'+h(formatEnglishDate(x.eventDate))+'</strong></span>'+panjikaOriginal+'</div>'+(x.repeatYearly?'<div class="next-occurrence-list">'+nextRows+(reminderBasisIncludes(basis,"ODIA")&&!(x.odiaMappings||[]).some(function(mapping){return String(mapping.gregorianDate)>=todayIso();})?'<span class="odia-mapping-warning"><b>Odia date pending</b> Use Refresh Odia calendar now; an administrator can add a Kohinoor correction under Odia years.</span>':'')+'</div>':'')+'<p>Email: '+h(reminderText(x.remindDays))+'</p>'+(x.repeatYearly?'<span class="repeat-chip">↻ Remind by '+h(reminderBasisLabel(basis))+'</span>':'<span class="repeat-chip one-time">One-time reminder · saved date</span>')+'</div><div class="row-actions">'+mappingButton+'<button class="tiny-button" data-action="edit-date" data-id="'+h(x.id)+'">Edit</button>'+(mayDelete(x)?'<button class="danger-button" data-action="delete-date" data-id="'+h(x.id)+'">×</button>':"")+'</div></article>';
   }).join("");

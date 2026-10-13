@@ -2,7 +2,7 @@
 
 const CONFIG = window.FAMILY_DASHBOARD_CONFIG || {};
 const PLACEHOLDER_URL = "PASTE_YOUR_APPS_SCRIPT_WEB_APP_URL_HERE";
-const FRONTEND_VERSION = "1.0.31";
+const FRONTEND_VERSION = "1.0.33";
 const SAVED_USERNAME_KEY = "familyDashboardUsername";
 const SESSION_TOKEN_KEY = "familyDashboardToken";
 const IDLE_TIMEOUT_MS = 5 * 60 * 1000;
@@ -36,7 +36,8 @@ const state = {
   categoryDraft: [],
   categoryEditIds: new Set(),
   subcategoryEditIds: new Set(),
-  clockTimer: null
+  clockTimer: null,
+  odiaMappingDateId: ""
 };
 const pendingRequests = new Map();
 const viewTitles = {
@@ -112,12 +113,28 @@ function canUploadMemories() {
   return !!(state.data && state.data.settings && state.data.settings.memoryUploadPolicy === "MEMBERS_WITH_ACCESS" && hasModuleAccess("PHOTOS"));
 }
 function expenseSharingEnabled() { return !!(state.data && state.data.settings && (state.data.settings.expenseSettlementEnabled === true || String(state.data.settings.expenseSettlementEnabled).toLowerCase() === "true")); }
-function formatDate(iso) {
+function calendarDisplayMode() {
+  const value=String(state.data&&state.data.settings&&state.data.settings.calendarDisplayMode||"ENGLISH_ODIA").toUpperCase();
+  return ["ENGLISH","ODIA","ENGLISH_ODIA"].includes(value)?value:"ENGLISH_ODIA";
+}
+function calendarDisplayIncludes(calendar) { const mode=calendarDisplayMode(); return mode===calendar||mode.split("_").includes(calendar); }
+function formatEnglishDate(iso) {
   if (!iso) return "—";
   const parts = String(iso).slice(0, 10).split("-");
   if (parts.length !== 3) return iso;
   const months = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"];
   return Number(parts[2]) + " " + months[Number(parts[1]) - 1] + " " + parts[0];
+}
+function formatOdiaScriptDate(iso) {
+  if(!iso)return "—";
+  try{return new Intl.DateTimeFormat("or-IN-u-nu-orya",{day:"numeric",month:"short",year:"numeric",timeZone:"UTC"}).format(new Date(String(iso).slice(0,10)+"T00:00:00Z"));}
+  catch(error){return formatEnglishDate(iso);}
+}
+function formatDate(iso) {
+  const parts=[];
+  if(calendarDisplayIncludes("ENGLISH"))parts.push(formatEnglishDate(iso));
+  if(calendarDisplayIncludes("ODIA"))parts.push("ଓଡ଼ିଆ "+formatOdiaScriptDate(iso));
+  return parts.length?parts.join(" · "):formatEnglishDate(iso);
 }
 function dayParts(iso) {
   const p = String(iso || "").slice(0, 10).split("-");
@@ -125,6 +142,8 @@ function dayParts(iso) {
   return { day: Number(p[2]) || "—", month: months[(Number(p[1]) || 1) - 1] };
 }
 const SAKA_MONTHS = ["Chaitra","Vaishakha","Jyeshtha","Ashadha","Shravana","Bhadra","Ashvina","Kartika","Agrahayana","Pausha","Magha","Phalguna"];
+const ODIA_MONTHS = {CHAITA:"ଚୈତ୍ର",BAISAKHA:"ବୈଶାଖ",JYESTHA:"ଜ୍ୟେଷ୍ଠ",ASADHA:"ଆଷାଢ଼",SRABANA:"ଶ୍ରାବଣ",BHADRA:"ଭାଦ୍ରବ",ASWINA:"ଆଶ୍ୱିନ",KARTIKA:"କାର୍ତ୍ତିକ",MARGASIRA:"ମାର୍ଗଶିର",PAUSA:"ପୌଷ",MAGHA:"ମାଘ",PHALGUNA:"ଫାଲ୍ଗୁନ"};
+const ODIA_TITHIS = ["ପ୍ରତିପଦା","ଦ୍ୱିତୀୟା","ତୃତୀୟା","ଚତୁର୍ଥୀ","ପଞ୍ଚମୀ","ଷଷ୍ଠୀ","ସପ୍ତମୀ","ଅଷ୍ଟମୀ","ନବମୀ","ଦଶମୀ","ଏକାଦଶୀ","ଦ୍ୱାଦଶୀ","ତ୍ରୟୋଦଶୀ","ଚତୁର୍ଦ୍ଦଶୀ"];
 function isGregorianLeapYear(year) { return year % 4 === 0 && (year % 100 !== 0 || year % 400 === 0); }
 function sakaMonthLengths(gregorianStartYear) { return [isGregorianLeapYear(gregorianStartYear) ? 31 : 30,31,31,31,31,31,30,30,30,30,30,30]; }
 function sakaIso(year,month,day) { return String(year).padStart(4,"0")+"-"+String(month).padStart(2,"0")+"-"+String(day).padStart(2,"0"); }
@@ -146,12 +165,19 @@ function formatSakaDate(value) {
   const saka=typeof value==="string"?gregorianToSaka(value):value; if(!saka)return "—";
   return saka.day+" "+SAKA_MONTHS[saka.month-1]+" "+saka.year+" Saka";
 }
+function formatOdiaPanjika(item, mappedYear) {
+  if(!item||!item.odiaMonth)return "Not recorded";
+  const number=Number(item.odiaTithi||0),tithi=number===15?(item.odiaPaksha==="SHUKLA"?"ପୂର୍ଣ୍ଣିମା":"ଅମାବାସ୍ୟା"):(ODIA_TITHIS[number-1]||"ତିଥି");
+  return (ODIA_MONTHS[item.odiaMonth]||item.odiaMonth)+" · "+(item.odiaPaksha==="SHUKLA"?"ଶୁକ୍ଳ ପକ୍ଷ":"କୃଷ୍ଣ ପକ୍ଷ")+" · "+tithi+((mappedYear||item.odiaYear)?" · ଓଡ଼ିଆ ସାଲ "+(mappedYear||item.odiaYear):"");
+}
 function syncImportantDateCalendar() {
   const system=$("importantDateCalendarSystem").value;
-  $("importantDateGregorianFields").classList.toggle("hidden",system==="SAKA");
+  $("importantDateGregorianFields").classList.toggle("hidden",system!=="GREGORIAN");
   $("importantDateSakaFields").classList.toggle("hidden",system!=="SAKA");
-  $("importantDateValue").required=system!=="SAKA";
+  $("importantDateOdiaFields").classList.toggle("hidden",system!=="ODIA");
+  $("importantDateValue").required=system==="GREGORIAN";
   ["importantDateSakaYear","importantDateSakaMonth","importantDateSakaDay"].forEach(function(id){$(id).required=system==="SAKA";});
+  ["importantDateOdiaYear","importantDateOdiaMonth","importantDateOdiaPaksha","importantDateOdiaTithi","importantDateOdiaEquivalent"].forEach(function(id){$(id).required=system==="ODIA";});
   updateImportantDateConversion();
 }
 function updateImportantDateConversion() {
@@ -159,8 +185,10 @@ function updateImportantDateConversion() {
   if(system==="SAKA"){
     gregorian=sakaToGregorian($("importantDateSakaYear").value,$("importantDateSakaMonth").value,$("importantDateSakaDay").value,false);
     if(gregorian){saka=gregorianToSaka(gregorian);$("importantDateValue").value=gregorian;}
-  } else {gregorian=$("importantDateValue").value;saka=gregorianToSaka(gregorian);if(saka){$("importantDateSakaYear").value=saka.year;$("importantDateSakaMonth").value=String(saka.month);$("importantDateSakaDay").value=saka.day;}}
-  $("importantDateConversion").textContent=gregorian&&saka?("English: "+formatDate(gregorian)+" · Saka: "+formatSakaDate(saka)):(system==="SAKA"?"Enter a valid Saka date.":"Choose a date to see both calendar formats.");
+  } else if(system==="ODIA"){gregorian=$("importantDateOdiaEquivalent").value;saka=gregorianToSaka(gregorian);if(gregorian)$("importantDateValue").value=gregorian;}
+  else {gregorian=$("importantDateValue").value;saka=gregorianToSaka(gregorian);if(saka){$("importantDateSakaYear").value=saka.year;$("importantDateSakaMonth").value=String(saka.month);$("importantDateSakaDay").value=saka.day;}}
+  const odiaPreview=system==="ODIA"?formatOdiaPanjika({odiaYear:$("importantDateOdiaYear").value,odiaMonth:$("importantDateOdiaMonth").value,odiaPaksha:$("importantDateOdiaPaksha").value,odiaTithi:$("importantDateOdiaTithi").value}):"";
+  $("importantDateConversion").textContent=gregorian&&saka?("English: "+formatEnglishDate(gregorian)+" · Odia: "+formatOdiaScriptDate(gregorian)+(odiaPreview?" · Kohinoor/Panjika: "+odiaPreview:"")):(system==="SAKA"?"Enter a valid saved legacy date.":system==="ODIA"?"Enter the Kohinoor/Panjika details and its verified English equivalent date.":"Choose a date to see English and Odia formats.");
 }
 function syncRecurringFrequency() { const custom=$("recurringExpenseFrequency").value==="CUSTOM"; $("recurringCustomIntervalLabel").classList.toggle("hidden",!custom); $("recurringExpenseIntervalMonths").required=custom; }
 function money(value) {
@@ -223,7 +251,14 @@ function updateDashboardClock() {
   const clock = $("dashboardDateTime");
   if (!clock || !state.data) return;
   const now = new Date(), parts = dateTimeParts(now), day = Number(parts.day) || now.getDate();
-  clock.textContent = "◆ " + day + ordinalSuffix(day) + "-" + parts.month + "-" + parts.year + " (" + parts.weekday + ") | " + parts.hour + ":" + parts.minute + " " + String(parts.dayPeriod || "").toUpperCase();
+  let iso=todayIso();
+  try{const zoned=new Intl.DateTimeFormat("en-CA",{timeZone:dashboardTimeZone(),year:"numeric",month:"2-digit",day:"2-digit"}).formatToParts(now).reduce(function(result,part){if(part.type!=="literal")result[part.type]=part.value;return result;},{});iso=zoned.year+"-"+zoned.month+"-"+zoned.day;}catch(error){}
+  const dateLabels=[];
+  if(calendarDisplayIncludes("ENGLISH"))dateLabels.push(day+ordinalSuffix(day)+"-"+parts.month+"-"+parts.year+" ("+parts.weekday+")");
+  if(calendarDisplayIncludes("ODIA")){try{dateLabels.push(new Intl.DateTimeFormat("or-IN-u-nu-orya",{timeZone:dashboardTimeZone(),weekday:"long",day:"numeric",month:"long",year:"numeric"}).format(now));}catch(error){dateLabels.push(formatOdiaScriptDate(iso));}}
+  const timeText=calendarDisplayMode()==="ODIA"?new Intl.DateTimeFormat("or-IN-u-nu-orya",{timeZone:dashboardTimeZone(),hour:"numeric",minute:"2-digit",hour12:true}).format(now):parts.hour+":"+parts.minute+" "+String(parts.dayPeriod||"").toUpperCase();
+  clock.textContent = "◆ " + dateLabels.join(" · ") + " | " + timeText;
+  if($("todayLabel"))$("todayLabel").textContent=dateLabels.join(" · ");
   clock.dateTime = now.toISOString();
 }
 function startDashboardClock() {
@@ -406,7 +441,7 @@ async function repairBrowserSession() {
   const url = new URL(window.location.href); url.searchParams.set("fresh", String(Date.now())); window.location.replace(url.toString());
 }
 function loadSavedUsername() { const saved = localStorage.getItem(SAVED_USERNAME_KEY) || ""; $("loginUsername").value = saved; $("rememberUsername").checked = !!saved || $("rememberUsername").checked; }
-function normalizeBootstrapData(data) { const result = data || {}; ["members","expenses","recurringExpenses","settlements","majorPlans","majorPlanPhases","income","targets","importantDates","photos","experiences","diary","stickyNotes"].forEach(function (key) { if (!Array.isArray(result[key])) result[key] = []; }); if (!result.settings) result.settings = {}; if (!Array.isArray(result.expenseCategories) || !result.expenseCategories.length) result.expenseCategories = fallbackExpenseCategories(); return result; }
+function normalizeBootstrapData(data) { const result = data || {}; ["members","expenses","recurringExpenses","settlements","majorPlans","majorPlanPhases","income","targets","importantDates","odiaFestivals","photos","experiences","diary","stickyNotes"].forEach(function (key) { if (!Array.isArray(result[key])) result[key] = []; }); if (!result.settings) result.settings = {}; if (!Array.isArray(result.expenseCategories) || !result.expenseCategories.length) result.expenseCategories = fallbackExpenseCategories(); return result; }
 
 function majorPlanById(id) { return (state.data && state.data.majorPlans || []).find(function (item) { return item.id === id; }); }
 function majorPlanPhaseById(id) { return (state.data && state.data.majorPlanPhases || []).find(function (item) { return item.id === id; }); }
@@ -516,9 +551,10 @@ function bindDialogs() {
   $("expenseShareMembers").addEventListener("change", syncExpenseSharingFields);
   $("recurringExpenseCategory").addEventListener("change", function () { populateSubcategoryOptions("recurringExpenseCategory", "recurringExpenseSubcategory", "recurringExpenseSubcategoryOptions", true); });
   $("recurringExpenseFrequency").addEventListener("change", syncRecurringFrequency);
-  $("importantDateCalendarSystem").addEventListener("change", syncImportantDateCalendar);
+  $("importantDateCalendarSystem").addEventListener("change", function(){if(!$("importantDateId").value&&isAdmin())$("importantDateReminderBasis").value=$("importantDateCalendarSystem").value==="ODIA"?"GREGORIAN_ODIA":"GREGORIAN";syncImportantDateCalendar();});
   $("importantDateValue").addEventListener("input", updateImportantDateConversion);
   ["importantDateSakaYear","importantDateSakaMonth","importantDateSakaDay"].forEach(function(id){$(id).addEventListener("input",updateImportantDateConversion);$(id).addEventListener("change",updateImportantDateConversion);});
+  ["importantDateOdiaYear","importantDateOdiaMonth","importantDateOdiaPaksha","importantDateOdiaTithi","importantDateOdiaEquivalent"].forEach(function(id){$(id).addEventListener("input",updateImportantDateConversion);$(id).addEventListener("change",updateImportantDateConversion);});
   $("expenseMajorPlan").addEventListener("change", function () { fillMajorPlanLinkSelects($("expenseMajorPlan"), $("expenseMajorPlanPhase"), $("expenseMajorPlan").value, "", false); });
   $("recurringExpenseMajorPlan").addEventListener("change", function () { fillMajorPlanLinkSelects($("recurringExpenseMajorPlan"), $("recurringExpenseMajorPlanPhase"), $("recurringExpenseMajorPlan").value, "", false); });
   $("addMajorPlanPhase").addEventListener("click", function () { addMajorPlanPhaseRow(); });
@@ -526,6 +562,7 @@ function bindDialogs() {
   $("majorPlanPhaseList").addEventListener("input", updateMajorPlanPhaseBudgetSummary);
   $("expenseCategoryAddForm").addEventListener("submit", addExpenseCategoryDraft);
   $("saveExpenseCategories").addEventListener("click", saveExpenseCategories);
+  $("odiaMappingForm").addEventListener("submit", saveOdiaReminderMapping);
 }
 function openDialog(id) { const dialog = $(id); if (dialog && !dialog.open) dialog.showModal(); }
 function prepareNewDialog(id) {
@@ -546,7 +583,7 @@ function prepareNewDialog(id) {
   if (id === "incomeDialog") { $("incomeDialogTitle").textContent = "Add income"; fillMemberSelect($("incomeReceivedBy"), state.data.user.id); }
   if (id === "targetDialog") { $("targetForm").reset(); $("targetDueDate").value = todayIso(); fillMemberSelect($("targetOwner"), state.data.user.id, true); }
   if (id === "contributionDialog") { $("contributionForm").reset(); $("contributionDate").value = todayIso(); }
-  if (id === "dateDialog") { $("dateDialogTitle").textContent = "Add important date"; $("importantDateCalendarSystem").value="GREGORIAN"; $("importantDateReminderBasis").value="GREGORIAN"; state.pendingImportantDatePhoto=null; state.removeImportantDatePhoto=false; $("importantDatePhotoFile").value=""; setImportantDatePhotoPreview(null); $("importantDateAdminControls").classList.toggle("hidden",!isAdmin()); const saka=gregorianToSaka($("importantDateValue").value||todayIso()); if(saka){$("importantDateSakaYear").value=saka.year;$("importantDateSakaMonth").value=String(saka.month);$("importantDateSakaDay").value=saka.day;} syncImportantDateCalendar(); $("notifyEveryone").checked = true; $("recipientChecks").classList.add("hidden"); renderRecipientChecks([]); }
+  if (id === "dateDialog") { $("dateDialogTitle").textContent = "Add important date"; $("importantDateCalendarSystem").value="GREGORIAN"; $("importantDateReminderBasis").value="GREGORIAN"; $("importantDateOdiaMonth").value="BAISAKHA"; $("importantDateOdiaPaksha").value="SHUKLA"; $("importantDateOdiaTithi").value="1"; $("importantDateOdiaEquivalent").value=todayIso(); state.pendingImportantDatePhoto=null; state.removeImportantDatePhoto=false; $("importantDatePhotoFile").value=""; setImportantDatePhotoPreview(null); $("importantDateAdminControls").classList.toggle("hidden",!isAdmin()); const saka=gregorianToSaka($("importantDateValue").value||todayIso()); if(saka){$("importantDateSakaYear").value=saka.year;$("importantDateSakaMonth").value=String(saka.month);$("importantDateSakaDay").value=saka.day;} syncImportantDateCalendar(); $("notifyEveryone").checked = true; $("recipientChecks").classList.add("hidden"); renderRecipientChecks([]); }
   if (id === "photoDialog") { $("photoForm").reset(); $("photoTakenDate").value = todayIso(); $("photoPreview").classList.add("hidden"); state.pendingPhoto = null; }
   if (id === "memberDialog") { $("memberDialogTitle").textContent = "Add family member"; $("memberActive").checked = true; $("memberPassword").required = true; setMemberPermissions(["EXPENSES","INCOME","TARGETS","DATES","CALENDAR","PHOTOS","EXPERIENCES","DIARY"]); syncMemberAccessRole(); }
   if (id === "experienceDialog") $("experienceDialogTitle").textContent = "Add experience";
@@ -734,6 +771,7 @@ function bindForms() {
   $("stickyNoteForm").addEventListener("submit", saveStickyNote);
   $("stickyQuickForm").addEventListener("submit", saveQuickStickyNote);
   $("createBackupNow").addEventListener("click", createBackupNow);
+  $("refreshOdiaCalendarNow").addEventListener("click", refreshOdiaCalendarNow);
   $("addExpenseSettlement").addEventListener("click", function(){openExpenseSettlementDialog();});
   $("memberRole").addEventListener("change", syncMemberAccessRole);
   $("memberPhotoFile").addEventListener("change", previewMemberPhoto);
@@ -846,6 +884,8 @@ function bindActions() {
     if (action === "delete-target") confirmDelete("deleteTarget", id, "Delete this target and its contribution history?");
     if (action === "edit-date") editImportantDate(id);
     if (action === "delete-date") confirmDelete("deleteImportantDate", id, "Delete this reminder?");
+    if (action === "manage-odia-mappings") openOdiaMappingDialog(id);
+    if (action === "delete-odia-mapping") deleteOdiaReminderMapping(id);
     if (action === "view-photo") viewPhoto(id);
     if (action === "delete-photo") { event.stopPropagation(); confirmDelete("deletePhoto", id, "Delete this shared photo from Google Drive?"); }
     if (action === "edit-experience") editExperience(id);
@@ -1245,13 +1285,15 @@ async function saveImportantDate(event) {
   const recipients = everyone ? ["ALL"] : all("input[name='dateRecipient']:checked").map(function (el) { return el.value; });
   if (!recipients.length) return toast("Choose at least one email recipient.", "error");
   const calendarSystem=$("importantDateCalendarSystem").value;
+  if(reminderBasisIncludes($("importantDateReminderBasis").value,"ODIA")&&calendarSystem!=="ODIA")return toast("Choose Traditional Odia Panjika under Enter original date using, then add the month, paksha, tithi and verified English equivalent.","error");
   const sakaDate=sakaIso($("importantDateSakaYear").value,$("importantDateSakaMonth").value,$("importantDateSakaDay").value);
-  const eventDate=calendarSystem==="SAKA"?sakaToGregorian($("importantDateSakaYear").value,$("importantDateSakaMonth").value,$("importantDateSakaDay").value,false):$("importantDateValue").value;
+  const eventDate=calendarSystem==="SAKA"?sakaToGregorian($("importantDateSakaYear").value,$("importantDateSakaMonth").value,$("importantDateSakaDay").value,false):calendarSystem==="ODIA"?$("importantDateOdiaEquivalent").value:$("importantDateValue").value;
   if(!eventDate)return toast("Enter a valid date in the selected calendar.","error");
   const id=$("importantDateId").value;
   const payload={
     id:id, title:$("importantDateTitle").value.trim(), occasionLabel:$("importantDateOccasion").value.trim(), eventDate:eventDate,
     calendarSystem:calendarSystem, calendarDate:sakaDate, reminderBasis:$("importantDateReminderBasis").value,
+    odiaYear:$("importantDateOdiaYear").value.trim(), odiaMonth:$("importantDateOdiaMonth").value, odiaPaksha:$("importantDateOdiaPaksha").value, odiaTithi:$("importantDateOdiaTithi").value,
     eventType:$("importantDateType").value, repeatYearly:$("importantDateRepeat").checked,
     remindDays:$("importantDateRemind").value, recipientIds:recipients.join(","), notes:$("importantDateNotes").value.trim()
   };
@@ -1261,7 +1303,7 @@ async function saveImportantDate(event) {
     if(isAdmin()&&state.removeImportantDatePhoto&&id)await api("deleteImportantDatePhoto",{id:savedId});
     if(isAdmin()&&state.pendingImportantDatePhoto)await api("uploadImportantDatePhoto",{id:savedId,fileName:state.pendingImportantDatePhoto.name,fullData:state.pendingImportantDatePhoto.fullData,thumbData:state.pendingImportantDatePhoto.thumbData});
     if($("dateDialog").open)$("dateDialog").close();
-    await refreshData(); toast("Reminder saved with both calendar dates.","success");
+    await refreshData(); toast("Reminder saved for " + reminderBasisLabel(payload.reminderBasis) + ".","success");
   } catch(error){if(!handleSessionError(error))toast(friendlyApiError(error),"error");}
   finally{hideLoading();}
 }
@@ -1398,6 +1440,9 @@ async function saveSettings(event) {
     familyName: $("settingFamilyName").value.trim(),
     currency: $("settingCurrency").value,
     timezone: $("settingTimezone").value.trim(),
+    calendarDisplayMode: $("settingCalendarDisplayMode").value,
+    odiaFestivalAutoEnabled: $("settingOdiaFestivalAutoEnabled").checked,
+    odiaPersonalAutoEnabled: $("settingOdiaPersonalAutoEnabled").checked,
     dashboardClockHighlight: safeClockHighlight($("settingDashboardClockHighlight").value),
     memoryPhotoLimit: Number($("settingMemoryPhotoLimit").value),
     memoryUploadPolicy: $("settingMemoryUploadPolicy").value,
@@ -1405,6 +1450,14 @@ async function saveSettings(event) {
     monthlyExpenseBudget: Number($("settingMonthlyExpenseBudget").value)||0,
     expenseSettlementEnabled: $("settingExpenseSettlementEnabled").checked
   }, "Family settings updated.");
+}
+async function refreshOdiaCalendarNow() {
+  const result=await mutate("refreshOdiaFestivals",{},"Odia calendar refreshed.",null,"Downloading and calculating Odia calendar dates…");
+  if(!result)return;
+  const festival=result.festival&&result.festival.count!==undefined?result.festival.count:state.data.odiaFestivals.length;
+  const personal=result.personal&&result.personal.created!==undefined?result.personal.created:0;
+  if(result.errors&&result.errors.length)toast("Refresh completed with cached fallback: "+result.errors.join(" "),"error");
+  else toast("Odia calendar refreshed: "+festival+" public festivals · "+personal+" personal occurrence"+(personal===1?"":"s")+" added.","success");
 }
 async function createBackupNow() {
   const result = await mutate("createBackupNow", {}, "Dashboard backup created.", null, "Creating a private Drive backup…");
@@ -1458,8 +1511,29 @@ function editIncome(id) {
 function openContribution(id) { const target = state.data.targets.find(function (x) { return x.id === id; }); if (!target) return; prepareNewDialog("contributionDialog"); $("contributionTargetId").value = id; $("contributionTitle").textContent = "Add to “" + target.title + "”"; openDialog("contributionDialog"); }
 function editImportantDate(id) {
   const item = state.data.importantDates.find(function (x) { return x.id === id; }); if (!item) return;
-  prepareNewDialog("dateDialog"); $("importantDateId").value = item.id; $("importantDateTitle").value = item.title; $("importantDateOccasion").value=item.occasionLabel||""; $("importantDateValue").value = item.eventDate; $("importantDateCalendarSystem").value=item.calendarSystem==="SAKA"?"SAKA":"GREGORIAN"; const saka=item.calendarDate?{year:Number(String(item.calendarDate).slice(0,4)),month:Number(String(item.calendarDate).slice(5,7)),day:Number(String(item.calendarDate).slice(8,10))}:gregorianToSaka(item.eventDate); if(saka){$("importantDateSakaYear").value=saka.year;$("importantDateSakaMonth").value=String(saka.month);$("importantDateSakaDay").value=saka.day;} syncImportantDateCalendar(); $("importantDateReminderBasis").value=["GREGORIAN","SAKA","BOTH"].includes(item.reminderBasis)?item.reminderBasis:(item.calendarSystem==="SAKA"?"SAKA":"GREGORIAN"); $("importantDateType").value = item.eventType; $("importantDateRepeat").checked = item.repeatYearly; $("importantDateRemind").value = item.remindDays; $("importantDateNotes").value = item.notes || ""; state.pendingImportantDatePhoto=null; state.removeImportantDatePhoto=false; setImportantDatePhotoPreview(item.photoThumbData||null); $("removeImportantDatePhoto").classList.toggle("hidden",!item.photoThumbData); $("importantDateAdminControls").classList.toggle("hidden",!isAdmin());
+  prepareNewDialog("dateDialog"); $("importantDateId").value = item.id; $("importantDateTitle").value = item.title; $("importantDateOccasion").value=item.occasionLabel||""; $("importantDateValue").value = item.eventDate; $("importantDateCalendarSystem").value=["GREGORIAN","SAKA","ODIA"].includes(item.calendarSystem)?item.calendarSystem:"GREGORIAN"; const saka=item.calendarDate?{year:Number(String(item.calendarDate).slice(0,4)),month:Number(String(item.calendarDate).slice(5,7)),day:Number(String(item.calendarDate).slice(8,10))}:gregorianToSaka(item.eventDate); if(saka){$("importantDateSakaYear").value=saka.year;$("importantDateSakaMonth").value=String(saka.month);$("importantDateSakaDay").value=saka.day;} $("importantDateOdiaYear").value=item.odiaYear||""; $("importantDateOdiaMonth").value=item.odiaMonth||"BAISAKHA"; $("importantDateOdiaPaksha").value=item.odiaPaksha||"SHUKLA"; $("importantDateOdiaTithi").value=item.odiaTithi||1; $("importantDateOdiaEquivalent").value=item.eventDate; syncImportantDateCalendar(); const basis=String(item.reminderBasis||"").toUpperCase()==="BOTH"?"GREGORIAN_SAKA":String(item.reminderBasis||item.calendarSystem||"GREGORIAN").toUpperCase(); $("importantDateReminderBasis").value=["GREGORIAN","SAKA","ODIA","GREGORIAN_SAKA","GREGORIAN_ODIA","SAKA_ODIA","ALL"].includes(basis)?basis:"GREGORIAN"; $("importantDateType").value = item.eventType; $("importantDateRepeat").checked = item.repeatYearly; $("importantDateRemind").value = item.remindDays; $("importantDateNotes").value = item.notes || ""; state.pendingImportantDatePhoto=null; state.removeImportantDatePhoto=false; setImportantDatePhotoPreview(item.photoThumbData||null); $("removeImportantDatePhoto").classList.toggle("hidden",!item.photoThumbData); $("importantDateAdminControls").classList.toggle("hidden",!isAdmin());
   const ids = String(item.recipientIds || "").split(","); const everyone = ids.indexOf("ALL") >= 0; $("notifyEveryone").checked = everyone; $("recipientChecks").classList.toggle("hidden", everyone); renderRecipientChecks(ids); $("dateDialogTitle").textContent = "Edit reminder"; openDialog("dateDialog");
+}
+function openOdiaMappingDialog(id) {
+  if(!isAdmin())return;
+  const item=state.data.importantDates.find(function(entry){return entry.id===id;}); if(!item)return;
+  state.odiaMappingDateId=id; $("odiaMappingForm").reset(); $("odiaMappingId").value=""; $("odiaMappingYear").value=""; $("odiaMappingGregorianDate").value=""; $("odiaMappingSourceNote").value="";
+  $("odiaMappingReminderTitle").textContent=item.occasionLabel||item.title; $("odiaMappingPanjikaLabel").textContent=formatOdiaPanjika(item);
+  renderOdiaMappingList(item); openDialog("odiaMappingDialog");
+}
+function renderOdiaMappingList(item) {
+  const mappings=(item.odiaMappings||[]).slice().sort(function(a,b){return String(a.gregorianDate).localeCompare(String(b.gregorianDate));});
+  $("odiaMappingList").innerHTML=mappings.length?mappings.map(function(mapping){return '<div class="odia-mapping-row"><span><strong>Odia Sal '+h(mapping.odiaYear)+'</strong><small>'+h(formatEnglishDate(mapping.gregorianDate))+' · '+h(formatOdiaScriptDate(mapping.gregorianDate))+(mapping.sourceNote?' · '+h(mapping.sourceNote):'')+'</small></span><button class="danger-button" type="button" data-action="delete-odia-mapping" data-id="'+h(mapping.id)+'">Delete</button></div>';}).join(""):'<p class="empty-state compact-empty">No verified yearly dates saved yet.</p>';
+}
+async function saveOdiaReminderMapping(event) {
+  event.preventDefault(); if(!state.odiaMappingDateId)return;
+  const result=await mutate("saveOdiaReminderMapping",{id:$("odiaMappingId").value,dateId:state.odiaMappingDateId,odiaYear:$("odiaMappingYear").value.trim(),gregorianDate:$("odiaMappingGregorianDate").value,sourceNote:$("odiaMappingSourceNote").value.trim()},"Verified Odia Panjika date saved.",null,"Saving verified Panjika date…");
+  if(result){const item=state.data.importantDates.find(function(entry){return entry.id===state.odiaMappingDateId;});if(item)renderOdiaMappingList(item);$("odiaMappingForm").reset();}
+}
+async function deleteOdiaReminderMapping(id) {
+  if(!window.confirm("Delete this verified Odia Panjika year mapping?"))return;
+  const result=await mutate("deleteOdiaReminderMapping",{id:id},"Odia Panjika mapping deleted.",null,"Deleting mapping…");
+  if(result){const item=state.data.importantDates.find(function(entry){return entry.id===state.odiaMappingDateId;});if(item)renderOdiaMappingList(item);}
 }
 function editStickyNote(id) {
   if (!canWriteStickyNotes()) return toast("Your administrator has not allowed sticky-note writing for your account.", "error");
@@ -1677,7 +1751,7 @@ function renderCategoryBars(items) {
   const rows = Object.keys(totals).map(function (key) { return [key, totals[key]]; }).sort(function (a,b) { return b[1] - a[1]; }).slice(0,6); const max = rows.length ? rows[0][1] : 1;
   $("categoryBars").classList.toggle("empty-block", !rows.length); $("categoryBars").innerHTML = rows.length ? rows.map(function (row) { return '<div class="category-row"><span>' + h(row[0]) + '</span><div class="bar-track"><div class="bar-fill" style="width:' + Math.max(4,row[1]/max*100) + '%"></div></div><strong>' + h(money(row[1])) + "</strong></div>"; }).join("") : "No expenditure added this month.";
 }
-function upcomingDates(days) { return state.data.importantDates.filter(function (x) { return Number(x.daysUntil) >= 0 && Number(x.daysUntil) <= days; }).sort(function (a,b) { return Number(a.daysUntil)-Number(b.daysUntil); }); }
+function upcomingDates(days) { const reminders=state.data.importantDates.filter(function (x) { return Number(x.daysUntil) >= 0 && Number(x.daysUntil) <= days; }); const festivals=state.data.odiaFestivals.filter(function(x){return Number(x.daysUntil)>=0&&Number(x.daysUntil)<=days;}).map(function(x){return {id:x.id,title:x.name,eventType:"Odia festival",nextOccurrence:x.eventDate,daysUntil:x.daysUntil,automaticFestival:true};}); return reminders.concat(festivals).sort(function (a,b) { return Number(a.daysUntil)-Number(b.daysUntil); }); }
 function renderUpcoming(items) {
   $("upcomingList").classList.toggle("empty-block", !items.length); $("upcomingList").innerHTML = items.length ? items.slice(0,5).map(function (x) { const p=dayParts(x.nextOccurrence); return '<div class="mini-item"><div class="mini-date"><strong>'+p.day+'</strong><span>'+p.month+'</span></div><p><strong>'+h(x.title)+'</strong><br><small>'+h(x.eventType)+' · '+(Number(x.daysUntil)===0?'Today':plural(Number(x.daysUntil),"day")+" away")+'</small></p></div>'; }).join("") : (state.data.importantDates.length ? plural(state.data.importantDates.length,"saved reminder")+" · none falls within the next 30 days. Use View all to see every reminder." : "No important dates have been added yet.");
 }
@@ -1956,17 +2030,20 @@ function filteredIncome() { const month=$("incomeMonth").value,cat=$("incomeCate
 function renderIncome() { const items=filteredIncome(),total=items.reduce(function(s,x){return s+Number(x.amount||0);},0); $("incomeTotals").innerHTML='<span class="total-pill green">'+plural(items.length,"entry","entries")+'</span><span class="total-pill green">Total '+h(money(total))+'</span>'; $("incomeRows").innerHTML=items.map(function(x){return '<tr><td>'+h(formatDate(x.date))+'</td><td><strong>'+h(x.source)+'</strong></td><td>'+h(x.category)+'</td><td>'+memberIdentityMarkup(x.receivedBy,true)+'</td><td>'+h(x.receivingMode)+'</td><td class="number"><strong>'+h(money(x.amount))+'</strong></td><td><div class="row-actions"><button class="tiny-button" data-action="edit-income" data-id="'+h(x.id)+'">Edit</button>'+(mayDelete(x)?'<button class="danger-button" data-action="delete-income" data-id="'+h(x.id)+'">×</button>':"")+'</div></td></tr>';}).join(""); $("incomeEmpty").classList.toggle("hidden",items.length>0); }
 
 function renderTargets() { const items=state.data.targets,total=items.reduce(function(s,x){return s+Number(x.targetAmount||0);},0),saved=items.reduce(function(s,x){return s+Number(x.currentAmount||0);},0); $("targetSummary").innerHTML=items.length?'<span class="total-pill">Total goal '+h(money(total))+'</span><span class="total-pill green">Progress '+h(money(saved))+'</span>':""; $("targetGrid").innerHTML=items.map(function(x){const pct=Number(x.targetAmount)?Math.min(100,Math.round(Number(x.currentAmount)/Number(x.targetAmount)*100)):0;return '<article class="target-card"><div class="target-top"><div><small>'+h(x.category)+' · '+h(x.ownerId==="ALL"?"Whole family":memberName(x.ownerId))+'</small><h3>'+h(x.title)+'</h3><small>Due '+h(formatDate(x.dueDate))+'</small></div><span class="target-icon">◎</span></div><div class="progress-track"><div class="progress-fill" style="width:'+pct+'%"></div></div><div class="target-numbers"><span><strong>'+h(money(x.currentAmount))+'</strong> saved</span><span>'+pct+'% of '+h(money(x.targetAmount))+'</span></div><div class="target-actions"><button class="primary-button" data-action="contribute" data-id="'+h(x.id)+'">＋ Add progress</button>'+(mayDelete(x)?'<button class="danger-button" data-action="delete-target" data-id="'+h(x.id)+'">Delete</button>':"")+'</div></article>';}).join(""); $("targetEmpty").classList.toggle("hidden",items.length>0); }
-function reminderBasis(item){const value=String(item&&item.reminderBasis||item&&item.calendarSystem||"GREGORIAN").toUpperCase();return ["GREGORIAN","SAKA","BOTH"].includes(value)?value:"GREGORIAN";}
-function reminderBasisLabel(value){return value==="SAKA"?"Saka calendar":value==="BOTH"?"English + Saka calendars":"English calendar";}
+function reminderBasis(item){let value=String(item&&item.reminderBasis||item&&item.calendarSystem||"GREGORIAN").toUpperCase();if(value==="BOTH")value="GREGORIAN_SAKA";return ["GREGORIAN","SAKA","ODIA","GREGORIAN_SAKA","GREGORIAN_ODIA","SAKA_ODIA","ALL"].includes(value)?value:"GREGORIAN";}
+function reminderBasisIncludes(value,calendar){value=String(value||"").toUpperCase();return value==="ALL"||value===calendar||value.split("_").includes(calendar);}
+function reminderBasisLabel(value){value=String(value||"").toUpperCase();return {GREGORIAN:"English calendar",SAKA:"saved legacy calendar",ODIA:"Odia Kohinoor/Panjika",GREGORIAN_SAKA:"English + saved legacy calendar",GREGORIAN_ODIA:"English + Odia Kohinoor/Panjika",SAKA_ODIA:"saved legacy + Odia Kohinoor/Panjika",ALL:"English + Odia Kohinoor/Panjika",ORIGINAL:"Original date"}[value]||"English calendar";}
 function renderDates() {
   const type=$("dateTypeFilter").value,q=normalize($("dateSearch").value);
-  const items=state.data.importantDates.filter(function(x){return (!type||x.eventType===type)&&(!q||normalize([x.title,x.occasionLabel,x.eventType,x.notes,x.calendarDate].join(" ")).includes(q));});
+  const items=state.data.importantDates.filter(function(x){return (!type||x.eventType===type)&&(!q||normalize([x.title,x.occasionLabel,x.eventType,x.notes,x.calendarDate,x.odiaYear,x.odiaMonth,x.odiaPaksha,x.odiaTithi].join(" ")).includes(q));});
   $("dateGrid").innerHTML=items.map(function(x){
-    const basis=reminderBasis(x),occurrence=x.nextOccurrence||x.eventDate,englishParts=dayParts(occurrence),savedSaka=x.calendarDate?{year:Number(String(x.calendarDate).slice(0,4)),month:Number(String(x.calendarDate).slice(5,7)),day:Number(String(x.calendarDate).slice(8,10))}:gregorianToSaka(x.eventDate),nextSaka=gregorianToSaka(occurrence);
-    const tile=basis==="SAKA"?'<div class="date-tile saka-primary"><strong>'+h(nextSaka.day)+'</strong><span>'+h(SAKA_MONTHS[nextSaka.month-1].slice(0,3))+' S</span></div>':'<div class="date-tile"><strong>'+h(englishParts.day)+'</strong><span>'+h(englishParts.month)+'</span></div>';
+    const basis=reminderBasis(x),occurrence=x.nextOccurrence||x.eventDate,englishParts=dayParts(occurrence);
+    const tile=basis==="ODIA"?'<div class="date-tile odia-primary"><strong>'+h(x.odiaTithi||englishParts.day)+'</strong><span>ଓଡ଼ିଆ</span></div>':'<div class="date-tile"><strong>'+h(englishParts.day)+'</strong><span>'+h(englishParts.month)+'</span></div>';
     const photo=x.photoThumbData?'<div class="important-date-photo"><img src="'+h(x.photoThumbData)+'" alt="'+h(x.title)+'" loading="lazy" decoding="async"></div>':'';
-    const nextRows=(x.nextOccurrences||[{date:occurrence,basis:basis}]).map(function(next){const label=next.basis==="SAKA"?"Saka reminder":next.basis==="GREGORIAN"?"English reminder":next.basis==="BOTH"?"English + Saka reminder":"Reminder";return '<span class="next-occurrence '+h(String(next.basis||"").toLowerCase())+'"><b>'+h(label)+'</b> '+h(formatDate(next.date))+' · '+h(formatSakaDate(gregorianToSaka(next.date)))+'</span>';}).join("");
-    return '<article class="date-card basis-'+h(basis.toLowerCase())+'"><div class="date-visual">'+photo+tile+'</div><div class="date-card-copy"><h3>'+h(x.title)+'</h3>'+(x.occasionLabel?'<p class="occasion-label">'+h(x.occasionLabel)+'</p>':'')+'<p>'+h(x.eventType)+'</p><div class="original-calendar-pair"><span><small>ENGLISH ORIGINAL</small><strong>'+h(formatDate(x.eventDate))+'</strong></span><span><small>SAKA ORIGINAL</small><strong>'+h(formatSakaDate(savedSaka))+'</strong></span></div>'+(x.repeatYearly?'<div class="next-occurrence-list">'+nextRows+'</div>':'')+'<p>Email: '+h(reminderText(x.remindDays))+'</p>'+(x.repeatYearly?'<span class="repeat-chip">↻ Remind by '+h(reminderBasisLabel(basis))+'</span>':'<span class="repeat-chip one-time">One-time reminder · both dates saved</span>')+'</div><div class="row-actions"><button class="tiny-button" data-action="edit-date" data-id="'+h(x.id)+'">Edit</button>'+(mayDelete(x)?'<button class="danger-button" data-action="delete-date" data-id="'+h(x.id)+'">×</button>':"")+'</div></article>';
+    const nextRows=(x.nextOccurrences||[{date:occurrence,basis:basis}]).map(function(next){return '<span class="next-occurrence '+h(String(next.basis||"").toLowerCase())+'"><b>'+h(reminderBasisLabel(next.basis))+" reminder</b> "+h(formatDate(next.date))+(reminderBasisIncludes(next.basis,"ODIA")&&x.odiaMonth?' · '+h(formatOdiaPanjika(x,next.odiaYear||"")):'')+'</span>';}).join("");
+    const panjikaOriginal=x.odiaMonth?'<span class="odia-original"><small>ODIA KOHINOOR / PANJIKA</small><strong>'+h(formatOdiaPanjika(x))+'</strong></span>':'';
+    const mappingButton=isAdmin()?'<button class="tiny-button odia-map-button" data-action="manage-odia-mappings" data-id="'+h(x.id)+'">Odia years</button>':'';
+    return '<article class="date-card basis-'+h(basis.toLowerCase())+'"><div class="date-visual">'+photo+tile+'</div><div class="date-card-copy"><h3>'+h(x.title)+'</h3>'+(x.occasionLabel?'<p class="occasion-label">'+h(x.occasionLabel)+'</p>':'')+'<p>'+h(x.eventType)+'</p><div class="original-calendar-pair two-calendars'+(x.odiaMonth?'':' english-only')+'"><span><small>ENGLISH ORIGINAL</small><strong>'+h(formatEnglishDate(x.eventDate))+'</strong></span>'+panjikaOriginal+'</div>'+(x.repeatYearly?'<div class="next-occurrence-list">'+nextRows+(reminderBasisIncludes(basis,"ODIA")&&!(x.odiaMappings||[]).some(function(mapping){return String(mapping.gregorianDate)>=todayIso();})?'<span class="odia-mapping-warning"><b>Odia date pending</b> Use Refresh Odia calendar now; an administrator can add a Kohinoor correction under Odia years.</span>':'')+'</div>':'')+'<p>Email: '+h(reminderText(x.remindDays))+'</p>'+(x.repeatYearly?'<span class="repeat-chip">↻ Remind by '+h(reminderBasisLabel(basis))+'</span>':'<span class="repeat-chip one-time">One-time reminder · saved date</span>')+'</div><div class="row-actions">'+mappingButton+'<button class="tiny-button" data-action="edit-date" data-id="'+h(x.id)+'">Edit</button>'+(mayDelete(x)?'<button class="danger-button" data-action="delete-date" data-id="'+h(x.id)+'">×</button>':"")+'</div></article>';
   }).join("");
   $("dateEmpty").classList.toggle("hidden",items.length>0);
 }
@@ -2020,23 +2097,30 @@ function importantDateMatchesIso(item,iso,cellSaka) {
   if(!item.repeatYearly)return item.eventDate===iso;
   const basis=reminderBasis(item),englishMatch=String(item.eventDate).slice(5)===String(iso).slice(5),saved=String(item.calendarDate||"").split("-").map(Number);
   const sakaMatch=saved.length===3&&saved[1]===cellSaka.month&&Math.min(saved[2],sakaMonthLengths(cellSaka.year+78)[cellSaka.month-1])===cellSaka.day;
-  return basis==="BOTH"?(englishMatch||sakaMatch):basis==="SAKA"?sakaMatch:englishMatch;
+  const odiaMatch=(item.odiaMappings||[]).some(function(mapping){return mapping.gregorianDate===iso;});
+  return (reminderBasisIncludes(basis,"GREGORIAN")&&englishMatch)||(reminderBasisIncludes(basis,"SAKA")&&sakaMatch)||(reminderBasisIncludes(basis,"ODIA")&&odiaMatch);
 }
 function renderCalendar() {
   if (!state.data) return;
-  const year=state.calendarCursor.getFullYear(),month=state.calendarCursor.getMonth(); const monthStart=[year,String(month+1).padStart(2,"0"),"01"].join("-"); const monthEndDate=new Date(year,month+1,0),monthEnd=[monthEndDate.getFullYear(),String(monthEndDate.getMonth()+1).padStart(2,"0"),String(monthEndDate.getDate()).padStart(2,"0")].join("-"); const startSaka=gregorianToSaka(monthStart),endSaka=gregorianToSaka(monthEnd),englishMonthLabel=state.calendarCursor.toLocaleDateString("en-IN",{month:"long",year:"numeric"}),sakaMonthLabel=SAKA_MONTHS[startSaka.month-1]+(startSaka.month!==endSaka.month?"–"+SAKA_MONTHS[endSaka.month-1]:"")+" "+endSaka.year; $("calendarMonthLabel").innerHTML='<span class="gregorian-month-label">'+h(englishMonthLabel)+'</span><span class="saka-month-label"><small>SAKA ERA</small>'+h(sakaMonthLabel)+'</span>'; $("calendarMonthLabel").setAttribute("aria-label",englishMonthLabel+"; "+sakaMonthLabel+" Saka era");
+  const year=state.calendarCursor.getFullYear(),month=state.calendarCursor.getMonth(),englishMonthLabel=state.calendarCursor.toLocaleDateString("en-IN",{month:"long",year:"numeric"}),odiaMonthLabel=state.calendarCursor.toLocaleDateString("or-IN-u-nu-orya",{month:"long",year:"numeric"}); const monthLabels=[];if(calendarDisplayIncludes("ENGLISH"))monthLabels.push('<span class="gregorian-month-label">'+h(englishMonthLabel)+'</span>');if(calendarDisplayIncludes("ODIA"))monthLabels.push('<span class="odia-month-label"><small>ଓଡ଼ିଆ</small>'+h(odiaMonthLabel)+'</span>');$("calendarMonthLabel").innerHTML=monthLabels.join(""); $("calendarMonthLabel").setAttribute("aria-label",[calendarDisplayIncludes("ENGLISH")?englishMonthLabel:"",calendarDisplayIncludes("ODIA")?odiaMonthLabel:""].filter(Boolean).join("; "));
   const first=new Date(year,month,1),start=new Date(year,month,1-first.getDay()),today=todayIso(),cells=[];
   for(let i=0;i<42;i++){const d=new Date(start);d.setDate(start.getDate()+i);const iso=[d.getFullYear(),String(d.getMonth()+1).padStart(2,"0"),String(d.getDate()).padStart(2,"0")].join("-");const events=[],cellSaka=gregorianToSaka(iso);
-    state.data.importantDates.forEach(function(x){if(importantDateMatchesIso(x,iso,cellSaka))events.push({type:"reminder",title:(x.occasionLabel||x.title)+" · "+reminderBasisLabel(reminderBasis(x))});});
+    state.data.odiaFestivals.forEach(function(x){if(x.eventDate===iso)events.push({type:"odia-festival",title:"Odia festival: "+x.name});});
+    state.data.importantDates.forEach(function(x){if(importantDateMatchesIso(x,iso,cellSaka)){const odiaMapping=(x.odiaMappings||[]).find(function(mapping){return mapping.gregorianDate===iso;}),isOdia=!!odiaMapping;events.push({type:isOdia?"odia-reminder":"reminder",title:(x.occasionLabel||x.title)+" · "+(isOdia?formatOdiaPanjika(x,odiaMapping.odiaYear||""):reminderBasisLabel(reminderBasis(x)))});}});
     state.data.recurringExpenses.forEach(function(x){if(recurringIsActive(x)&&x.nextDueDate===iso)events.push({type:"recurring",title:"Payment: "+x.title});});
     state.data.expenses.map(normalizeExpense).forEach(function(x){if(x.status==="PLANNED"&&x.date===iso)events.push({type:"recurring",title:"Preplanned: "+(x.reason||x.category)});});
     state.data.experiences.forEach(function(x){if(x.experienceDate===iso)events.push({type:"experience",title:x.title});}); state.data.diary.forEach(function(x){if(x.diaryDate===iso)events.push({type:"diary",title:x.title});});
-    cells.push('<div class="calendar-cell '+(d.getMonth()!==month?'other-month ':'')+(iso===today?'today':'')+'"><div class="calendar-day-pair"><span class="calendar-day">'+d.getDate()+'</span><small class="saka-day-chip" title="'+h(formatSakaDate(cellSaka))+'">'+(cellSaka.day===1?'<span>'+h(SAKA_MONTHS[cellSaka.month-1].slice(0,3))+'</span>':'')+'<b>'+cellSaka.day+'</b><em>S</em></small></div><div class="calendar-events">'+events.slice(0,4).map(function(e){return '<button class="calendar-event '+e.type+'" title="'+h(e.title)+'">'+h(e.title)+'</button>';}).join("")+(events.length>4?'<span class="calendar-event">+'+(events.length-4)+' more</span>':"")+'</div></div>');
+    const mainDay=calendarDisplayIncludes("ENGLISH")?d.getDate():new Intl.NumberFormat("or-IN-u-nu-orya").format(d.getDate()),odiaChip=calendarDisplayIncludes("ENGLISH")&&calendarDisplayIncludes("ODIA")?'<small class="odia-day-chip" title="'+h(formatOdiaScriptDate(iso))+'"><b>'+h(new Intl.NumberFormat("or-IN-u-nu-orya").format(d.getDate()))+'</b><em>ଓ</em></small>':'';
+    cells.push('<div class="calendar-cell '+(d.getMonth()!==month?'other-month ':'')+(iso===today?'today':'')+'"><div class="calendar-day-pair"><span class="calendar-day">'+mainDay+'</span>'+odiaChip+'</div><div class="calendar-events">'+events.slice(0,4).map(function(e){return '<button class="calendar-event '+e.type+'" title="'+h(e.title)+'">'+h(e.title)+'</button>';}).join("")+(events.length>4?'<span class="calendar-event">+'+(events.length-4)+' more</span>':"")+'</div></div>');
   } $("calendarGrid").innerHTML=cells.join("");
 }
 
 function renderAdmin() {
   $("settingFamilyName").value=state.data.settings.familyName||""; $("settingCurrency").value=state.data.settings.currency||"INR"; $("settingTimezone").value=state.data.settings.timezone||"Asia/Kolkata";
+  $("settingCalendarDisplayMode").value=["ENGLISH","ODIA","ENGLISH_ODIA"].includes(String(state.data.settings.calendarDisplayMode||"ENGLISH_ODIA"))?String(state.data.settings.calendarDisplayMode||"ENGLISH_ODIA"):"ENGLISH_ODIA";
+  $("settingOdiaFestivalAutoEnabled").checked=String(state.data.settings.odiaFestivalAutoEnabled===undefined?"true":state.data.settings.odiaFestivalAutoEnabled).toLowerCase()!=="false";
+  $("settingOdiaPersonalAutoEnabled").checked=String(state.data.settings.odiaPersonalAutoEnabled===undefined?"true":state.data.settings.odiaPersonalAutoEnabled).toLowerCase()!=="false";
+  const odiaStatus=$("odiaCalendarAutoStatus"),last=state.data.settings.odiaFestivalLastRefreshAt||"",personalLast=state.data.settings.odiaPersonalLastRefreshAt||"",failure=state.data.settings.odiaFestivalLastError||state.data.settings.odiaPersonalLastError||"",statusTime=last||personalLast; odiaStatus.textContent=failure?("⚠ Cached dates retained · "+failure):statusTime?("● Automatic calendar current · "+new Date(statusTime).toLocaleString("en-IN",{dateStyle:"medium",timeStyle:"short"})):(state.data.odiaFestivals.length?"● Automatic festival cache ready":"Not refreshed yet"); odiaStatus.classList.toggle("success",!failure&&!!(statusTime||state.data.odiaFestivals.length));
   $("settingDashboardClockHighlight").value=dashboardClockHighlight(); previewDashboardClockHighlight(dashboardClockHighlight());
   $("settingMemoryPhotoLimit").value=memoryPhotoLimit();
   $("settingMemoryUploadPolicy").value=state.data.settings.memoryUploadPolicy==="MEMBERS_WITH_ACCESS"?"MEMBERS_WITH_ACCESS":"ADMIN_ONLY";
@@ -2164,6 +2248,7 @@ function renderGlobalSearch() {
   state.data.income.forEach(function(x){if(normalize([x.source,x.category,memberName(x.receivedBy)].join(" ")).includes(q))results.push({view:"income",icon:"↗",title:x.source,meta:money(x.amount)+" · "+formatDate(x.date)});});
   state.data.targets.forEach(function(x){if(normalize([x.title,x.category,x.notes].join(" ")).includes(q))results.push({view:"targets",icon:"◎",title:x.title,meta:"Target · "+money(x.targetAmount)});});
   state.data.importantDates.forEach(function(x){if(normalize([x.title,x.occasionLabel,x.eventType,x.notes,x.calendarDate].join(" ")).includes(q))results.push({view:"dates",icon:"◫",title:x.occasionLabel||x.title,meta:x.eventType+" · "+reminderBasisLabel(reminderBasis(x))+" · "+formatDate(x.nextOccurrence)});});
+  state.data.odiaFestivals.forEach(function(x){if(normalize([x.name,x.source].join(" ")).includes(q))results.push({view:"calendar",icon:"✿",title:x.name,meta:"Automatic Odia festival · "+formatDate(x.eventDate)});});
   state.data.photos.forEach(function(x){if(normalize([x.title,x.caption,memberName(x.uploadedBy)].join(" ")).includes(q))results.push({view:"photos",icon:"▧",title:x.title,meta:"Photo by "+memberName(x.uploadedBy)});});
   state.data.experiences.forEach(function(x){if(normalize([x.title,x.place,x.story,x.tags].join(" ")).includes(q))results.push({view:"experiences",icon:"✦",title:x.title,meta:formatDate(x.experienceDate)+" · "+memberName(x.createdBy)});});
   state.data.diary.forEach(function(x){if(normalize([x.title,x.body,x.mood,x.tags].join(" ")).includes(q))results.push({view:"diary",icon:"☷",title:x.title,meta:formatDate(x.diaryDate)+" · "+memberName(x.createdBy)});});

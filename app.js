@@ -2,10 +2,12 @@
 
 const CONFIG = window.FAMILY_DASHBOARD_CONFIG || {};
 const PLACEHOLDER_URL = "PASTE_YOUR_APPS_SCRIPT_WEB_APP_URL_HERE";
-const FRONTEND_VERSION = "1.0.45";
+const FRONTEND_VERSION = "1.0.46";
 const SAVED_USERNAME_KEY = "familyDashboardUsername";
 const SESSION_TOKEN_KEY = "familyDashboardToken";
-const IDLE_TIMEOUT_MS = 5 * 60 * 1000;
+const DEFAULT_IDLE_TIMEOUT_MINUTES = 60;
+const LEGACY_IDLE_TIMEOUT_MINUTES = 5;
+const ALLOWED_IDLE_TIMEOUT_MINUTES = [5, 15, 30, 60, 120];
 const KEEP_ALIVE_INTERVAL_MS = 2 * 60 * 1000;
 const EXPENSE_COLUMN_WIDTHS_KEY = "familyDashboardExpenseColumnWidthsV5";
 const state = {
@@ -116,6 +118,21 @@ function canUploadMemories() {
   return !!(state.data && state.data.settings && state.data.settings.memoryUploadPolicy === "MEMBERS_WITH_ACCESS" && hasModuleAccess("PHOTOS"));
 }
 function expenseSharingEnabled() { return !!(state.data && state.data.settings && (state.data.settings.expenseSettlementEnabled === true || String(state.data.settings.expenseSettlementEnabled).toLowerCase() === "true")); }
+function adjustableIdleTimeoutSupported() {
+  const version = String(state.data && state.data.backendVersion || state.backendVersion || "0.0.0").split(".").map(Number);
+  return (version[0] || 0) > 1 || ((version[0] || 0) === 1 && ((version[1] || 0) > 0 || ((version[1] || 0) === 0 && (version[2] || 0) >= 37)));
+}
+function idleTimeoutMinutes() {
+  const configured = Number(state.data && state.data.settings && state.data.settings.sessionIdleMinutes);
+  if (ALLOWED_IDLE_TIMEOUT_MINUTES.includes(configured)) return configured;
+  return adjustableIdleTimeoutSupported() ? DEFAULT_IDLE_TIMEOUT_MINUTES : LEGACY_IDLE_TIMEOUT_MINUTES;
+}
+function idleTimeoutLabel(minutes) {
+  const value = Number(minutes) || DEFAULT_IDLE_TIMEOUT_MINUTES;
+  if (value === 60) return "1 hour";
+  if (value === 120) return "2 hours";
+  return value + " minutes";
+}
 function calendarDisplayMode() {
   const value=String(state.data&&state.data.settings&&state.data.settings.calendarDisplayMode||"ENGLISH_ODIA").toUpperCase();
   return ["ENGLISH","ODIA","ENGLISH_ODIA"].includes(value)?value:"ENGLISH_ODIA";
@@ -434,7 +451,8 @@ function recordActivity() {
 function resetIdleTimer() {
   stopIdleTimer();
   if (!state.token || !state.data) return;
-  state.idleTimer = setTimeout(function () { endSession("Signed out after 5 minutes of inactivity.", true); }, IDLE_TIMEOUT_MS);
+  const minutes = idleTimeoutMinutes();
+  state.idleTimer = setTimeout(function () { endSession("Signed out after " + idleTimeoutLabel(minutes) + " of inactivity.", true); }, minutes * 60 * 1000);
 }
 
 function stopIdleTimer() { if (state.idleTimer) clearTimeout(state.idleTimer); state.idleTimer = null; }
@@ -1510,7 +1528,7 @@ async function deleteMemberPhoto() {
 }
 async function saveSettings(event) {
   event.preventDefault();
-  await mutate("saveSettings", {
+  const result = await mutate("saveSettings", {
     familyName: $("settingFamilyName").value.trim(),
     currency: $("settingCurrency").value,
     timezone: $("settingTimezone").value.trim(),
@@ -1522,9 +1540,11 @@ async function saveSettings(event) {
     memoryPhotoLimit: Number($("settingMemoryPhotoLimit").value),
     memoryUploadPolicy: $("settingMemoryUploadPolicy").value,
     memoryPrintPages: Number($("settingMemoryPrintPages").value),
+    sessionIdleMinutes: Number($("settingSessionIdleMinutes").value),
     monthlyExpenseBudget: Number($("settingMonthlyExpenseBudget").value)||0,
     expenseSettlementEnabled: $("settingExpenseSettlementEnabled").checked
   }, "Family settings updated.");
+  if (result) resetIdleTimer();
 }
 async function refreshOdiaCalendarNow() {
   const result=await mutate("refreshOdiaFestivals",{},"Odia calendar refreshed.",null,"Downloading and calculating Odia calendar dates…");
@@ -2210,6 +2230,7 @@ function renderAdmin() {
   $("settingMemoryPhotoLimit").value=memoryPhotoLimit();
   $("settingMemoryUploadPolicy").value=state.data.settings.memoryUploadPolicy==="MEMBERS_WITH_ACCESS"?"MEMBERS_WITH_ACCESS":"ADMIN_ONLY";
   $("settingMemoryPrintPages").value=String(memoryPrintPages());
+  const idleTimeoutSupported=adjustableIdleTimeoutSupported(),idleSelect=$("settingSessionIdleMinutes"),idleHelp=$("sessionIdleTimeoutHelp"); idleSelect.value=String(idleTimeoutMinutes()); idleSelect.disabled=!idleTimeoutSupported; idleHelp.textContent=idleTimeoutSupported?("Current inactivity sign-out: "+idleTimeoutLabel(idleTimeoutMinutes())+". Closing or leaving the page still signs out immediately."):"Deploy BE v1.0.37 to enable this control. Until then, the existing 5-minute timeout remains active."; idleHelp.classList.toggle("version-warning",!idleTimeoutSupported);
   $("settingMonthlyExpenseBudget").value=Number(state.data.settings.monthlyExpenseBudget||0)||"";
   $("settingExpenseSettlementEnabled").checked=expenseSharingEnabled();
   const configuredCategories=expenseCategoryConfig(), activeCategories=configuredCategories.filter(function(category){return category.active!==false;}); $("adminExpenseCategorySummary").textContent=plural(configuredCategories.length,"category","categories")+" · "+activeCategories.length+" active";
@@ -2437,6 +2458,6 @@ function toast(message,type){
 }
 function friendlyApiError(error){
   const message=(error&&error.message)||"The change could not be saved.";
-  if(/UrlFetchApp\.fetch|script\.external_request/i.test(message))return "The Odia calendar service could not be reached by this browser and the backend is not yet authorized for external calendar access. Deploy BE v1.0.36, run setupFamilyDashboard(), approve access, and try again. You may save English-only meanwhile.";
+  if(/UrlFetchApp\.fetch|script\.external_request/i.test(message))return "The Odia calendar service could not be reached by this browser and the backend is not yet authorized for external calendar access. Deploy BE v1.0.37, run setupFamilyDashboard(), approve access, and try again. You may save English-only meanwhile.";
   return /Unknown dashboard action/i.test(message)?"Backend update required. Deploy the latest Code.gs as a New version, then refresh this page.":message;
 }

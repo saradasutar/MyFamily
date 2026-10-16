@@ -7,17 +7,17 @@
   <meta name="color-scheme" content="light">
   <meta name="description" content="Private family dashboard for expenses, goals, important dates and photos.">
   <title>Our Family Hub</title>
-  <link rel="icon" href="family-harmony-v1047-32.png" type="image/png" sizes="32x32">
-  <link rel="shortcut icon" href="family-harmony-v1047-32.png" type="image/png">
-  <link rel="apple-touch-icon" href="family-harmony-v1047-180.png" sizes="180x180">
-  <link rel="manifest" href="family-harmony-v1047.webmanifest">
+  <link rel="icon" href="family-unity-v1048-32.png" type="image/png" sizes="32x32">
+  <link rel="shortcut icon" href="family-unity-v1048-32.png" type="image/png">
+  <link rel="apple-touch-icon" href="family-unity-v1048-180.png" sizes="180x180">
+  <link rel="manifest" href="family-unity-v1048.webmanifest">
   <meta name="theme-color" content="#5b43b5">
   <link rel="preconnect" href="https://script.google.com">
   <link rel="dns-prefetch" href="//script.google.com">
   <link rel="preload" href="styles.css?v=1.0.45-family-logo" as="style">
-  <link rel="preload" href="config.js?v=1.0.47" as="script">
-  <link rel="preload" href="app.js?v=1.0.47" as="script">
-  <link rel="preload" href="family-harmony-v1047-192.png" as="image" type="image/png" fetchpriority="high">
+  <link rel="preload" href="config.js?v=1.0.48" as="script">
+  <link rel="preload" href="app.js?v=1.0.48" as="script">
+  <link rel="preload" href="family-unity-v1048-192.png" as="image" type="image/png" fetchpriority="high">
   <link rel="stylesheet" href="styles.css?v=1.0.45-family-logo">
 </head>
 <body>
@@ -36,7 +36,7 @@
       <p>One warm, private place for the things your family shares.</p>
     </div>
     <div class="login-card">
-      <div class="brand-mark family-bond-brand"><img src="family-harmony-v1047-192.png" alt="Four family members united around a shared heart" width="62" height="62" decoding="async" fetchpriority="high"></div>
+      <div class="brand-mark family-bond-brand"><img src="family-unity-v1048-192.png" alt="Four family members united around a shared heart" width="62" height="62" decoding="async" fetchpriority="high"></div>
       <p class="eyebrow">WELCOME HOME</p>
       <h1 id="loginFamilyName">Our Family Hub</h1>
       <p class="muted">Sign in with the username and password managed by your family administrator.</p>
@@ -52,8 +52,8 @@
         </label>
         <div class="login-options">
           <label class="remember-row"><input id="rememberUsername" type="checkbox" checked> Save username on this device</label>
-          <span class="version-pair"><b id="loginFrontendVersion">FE v1.0.47</b><b id="loginBackendVersion">BE checking…</b></span>
-          <span id="loginVersion" class="legacy-version hidden" aria-hidden="true">Version 1.0.47</span>
+          <span class="version-pair"><b id="loginFrontendVersion">FE v1.0.48</b><b id="loginBackendVersion">BE checking…</b></span>
+          <span id="loginVersion" class="legacy-version hidden" aria-hidden="true">Version 1.0.48</span>
         </div>
         <button class="primary-button wide" type="submit">Sign in securely</button>
         <button id="repairSessionButton" class="repair-session-button" type="button">↻ Repair browser cache / session</button>
@@ -67,11 +67,11 @@
   <div id="appShell" class="app-shell hidden">
     <aside id="sidebar" class="sidebar">
       <div class="sidebar-brand">
-        <div class="brand-mark small family-bond-brand"><img src="family-harmony-v1047-192.png" alt="MyFamily bond emblem" width="46" height="46" decoding="async" loading="lazy"></div>
+        <div class="brand-mark small family-bond-brand"><img src="family-unity-v1048-192.png" alt="MyFamily bond emblem" width="46" height="46" decoding="async" loading="lazy"></div>
         <div>
           <strong id="sidebarFamilyName">Our Family Hub</strong>
-          <span class="sidebar-version-pair"><b id="sidebarFrontendVersion">FE v1.0.47</b><b id="sidebarBackendVersion">BE checking…</b></span>
-          <b id="sidebarVersion" class="legacy-version hidden" aria-hidden="true">v1.0.47</b>
+          <span class="sidebar-version-pair"><b id="sidebarFrontendVersion">FE v1.0.48</b><b id="sidebarBackendVersion">BE checking…</b></span>
+          <b id="sidebarVersion" class="legacy-version hidden" aria-hidden="true">v1.0.48</b>
         </div>
       </div>
       <nav class="main-nav" aria-label="Main navigation">
@@ -751,12 +751,12 @@
   <div id="loadingOverlay" class="loading-overlay hidden" role="status" aria-live="polite" aria-atomic="true"><div class="spinner" aria-hidden="true"></div><p id="loadingText">Working…</p></div>
   <div id="toastRegion" class="toast-region" role="status" aria-live="polite" aria-atomic="true"></div>
 
-  <script src="config.js?v=1.0.47" defer></script>
-  <script src="app.js?v=1.0.47" defer></script>
+  <script src="config.js?v=1.0.48" defer></script>
+  <script src="app.js?v=1.0.48" defer></script>
   <script>
     if ("serviceWorker" in navigator) {
       window.addEventListener("load", function () {
-        navigator.serviceWorker.register("./sw.js?v=1.0.47-icon1", { scope: "./" }).catch(function () {});
+        navigator.serviceWorker.register("./sw.js?v=1.0.48-icon1", { scope: "./" }).catch(function () {});
       }, { once: true });
     }
   </script>

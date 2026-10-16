@@ -1,15 +1,15 @@
 "use strict";
 
-const CACHE_NAME = "myfamily-shell-v1047-icon1";
+const CACHE_NAME = "myfamily-shell-v1048-icon1";
 const SHELL_ASSETS = [
   "./",
   "./styles.css?v=1.0.45-family-logo",
-  "./config.js?v=1.0.47",
-  "./app.js?v=1.0.47",
-  "./family-harmony-v1047-32.png",
-  "./family-harmony-v1047-180.png",
-  "./family-harmony-v1047-192.png",
-  "./family-harmony-v1047.webmanifest"
+  "./config.js?v=1.0.48",
+  "./app.js?v=1.0.48",
+  "./family-unity-v1048-32.png",
+  "./family-unity-v1048-180.png",
+  "./family-unity-v1048-192.png",
+  "./family-unity-v1048.webmanifest"
 ];
 
 self.addEventListener("install", function (event) {

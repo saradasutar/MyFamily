@@ -2,7 +2,7 @@
 
 const CONFIG = window.FAMILY_DASHBOARD_CONFIG || {};
 const PLACEHOLDER_URL = "PASTE_YOUR_APPS_SCRIPT_WEB_APP_URL_HERE";
-const FRONTEND_VERSION = "1.0.50";
+const FRONTEND_VERSION = "1.0.51";
 const SAVED_USERNAME_KEY = "familyDashboardUsername";
 const SESSION_TOKEN_KEY = "familyDashboardToken";
 const DEFAULT_IDLE_TIMEOUT_MINUTES = 60;
@@ -201,10 +201,18 @@ function safeAnniversaryIso(year, month, day) {
   return [String(year),String(month).padStart(2,"0"),String(Math.min(Number(day),lastDay)).padStart(2,"0")].join("-");
 }
 function panchangTithiIndex(day) {
-  let numeric=Number(day&&day.tithi); const paksha=String(day&&day.paksha||"").toUpperCase();
+  const rawTithi=day&&day.tithi,tithiObject=rawTithi&&typeof rawTithi==="object"?rawTithi:null;
+  const paksha=String(tithiObject&&tithiObject.paksha||day&&day.paksha||"").toUpperCase();
+  let numeric=Number(tithiObject?(tithiObject.number!==undefined?tithiObject.number:tithiObject.index):rawTithi);
   if(Number.isFinite(numeric)&&numeric>=0&&numeric<=29){numeric=Math.floor(numeric);return paksha.includes("KRISHNA")&&numeric<15?15+numeric:numeric;}
-  const number=Number(day&&(day.tithi_number||day.tithiNumber));
-  return Number.isFinite(number)&&number>=1&&number<=15?(paksha.includes("KRISHNA")?15:0)+number-1:-1;
+  let number=Number(tithiObject&&(tithiObject.tithi_number||tithiObject.tithiNumber)||day&&(day.tithi_number||day.tithiNumber));
+  if(Number.isFinite(number)&&number>=1&&number<=15)return(paksha.includes("KRISHNA")?15:0)+number-1;
+  const name=String(tithiObject&&tithiObject.name||day&&(day.tithi_name||day.tithiName)||"").toLowerCase().replace(/[^a-z]/g,"");
+  if(["pournami","paurnami","purnima","poornima"].includes(name))return 14;
+  if(["amavasai","amavasya","amavas"].includes(name))return 29;
+  const names={prathamai:1,pratipada:1,pratipad:1,prathama:1,dwitiyai:2,dwitiya:2,dvitiya:2,tritiyai:3,tritiya:3,chaturthi:4,chaturti:4,panchami:5,shashti:6,shashthi:6,sasthi:6,saptami:7,ashtami:8,astami:8,navami:9,dashami:10,dasami:10,ekadashi:11,ekadasi:11,dwadashi:12,dvadashi:12,dwadasi:12,dvadasi:12,trayodashi:13,trayodasi:13,chaturdashi:14,chaturdasi:14};
+  number=names[name];
+  return number?(paksha.includes("KRISHNA")?15:0)+number-1:-1;
 }
 async function fetchBrowserPanchangDay(iso, cache) {
   if(cache[iso])return cache[iso];
@@ -2663,6 +2671,6 @@ function toast(message,type){
 }
 function friendlyApiError(error){
   const message=(error&&error.message)||"The change could not be saved.";
-  if(/UrlFetchApp\.fetch|script\.external_request/i.test(message))return "The Odia calendar service could not be reached by this browser and the backend is not yet authorized for external calendar access. Deploy BE v1.0.37, run setupFamilyDashboard(), approve access, and try again. You may save English-only meanwhile.";
+  if(/UrlFetchApp\.fetch|script\.external_request/i.test(message))return "The Odia calendar service could not be reached by this browser and the backend is not yet authorized for external calendar access. Deploy BE v1.0.38, run setupFamilyDashboard(), approve access, and try again. You may save English-only meanwhile.";
   return /Unknown dashboard action/i.test(message)?"Backend update required. Deploy the latest Code.gs as a New version, then refresh this page.":message;
 }

@@ -944,7 +944,7 @@ th { box-shadow:inset 0 -1px #e6e4ef; }
 .smart-paste-footnote { margin:0; color:var(--muted); font-size:.58rem; text-align:center; }.smart-paste-dialog .modal-actions { margin-top:14px; }
 @media (max-width:720px) { .smart-paste-top-button span { display:none; }.smart-paste-field-list { grid-template-columns:1fr; }.smart-paste-dialog textarea { min-height:180px; }.smart-paste-actions > button { flex:1; }.smart-paste-dialog .modal-actions { position:sticky; bottom:0; padding-top:10px; background:linear-gradient(0deg,#fff 70%,rgba(255,255,255,0)); } }
 
-/* v1.0.51 smooth mobile app experience and Odia tithi parser repair */
+/* v1.0.52 smooth mobile app experience and automatic Odia tithi conversion */
 .mobile-bottom-nav { display:none; }
 
 @media (max-width:720px) {

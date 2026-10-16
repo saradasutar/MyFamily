@@ -2,7 +2,7 @@
 
 const CONFIG = window.FAMILY_DASHBOARD_CONFIG || {};
 const PLACEHOLDER_URL = "PASTE_YOUR_APPS_SCRIPT_WEB_APP_URL_HERE";
-const FRONTEND_VERSION = "1.0.51";
+const FRONTEND_VERSION = "1.0.52";
 const SAVED_USERNAME_KEY = "familyDashboardUsername";
 const SESSION_TOKEN_KEY = "familyDashboardToken";
 const DEFAULT_IDLE_TIMEOUT_MINUTES = 60;
@@ -214,20 +214,44 @@ function panchangTithiIndex(day) {
   number=names[name];
   return number?(paksha.includes("KRISHNA")?15:0)+number-1:-1;
 }
+function degreesNormal(value){value=Number(value)%360;return value<0?value+360:value;}
+function sinDegrees(value){return Math.sin(Number(value)*Math.PI/180);}
+function cosDegrees(value){return Math.cos(Number(value)*Math.PI/180);}
+function atan2Degrees(y,x){return Math.atan2(y,x)*180/Math.PI;}
+function calculateBhubaneswarSunriseTithi(iso){
+  const valid=validIsoDate.apply(null,String(iso||"").split("-"));
+  if(!valid)throw new Error("Enter a valid English date.");
+  const instant=new Date(valid+"T00:30:00Z"),julianDay=instant.getTime()/86400000+2440587.5,d=julianDay-2451543.5;
+  const sunPerihelion=282.9404+4.70935e-5*d,sunEccentricity=.016709-1.151e-9*d,sunMeanAnomaly=degreesNormal(356.047+.9856002585*d);
+  const sunEccentricAnomaly=sunMeanAnomaly+180/Math.PI*sunEccentricity*sinDegrees(sunMeanAnomaly)*(1+sunEccentricity*cosDegrees(sunMeanAnomaly));
+  const sunX=cosDegrees(sunEccentricAnomaly)-sunEccentricity,sunY=Math.sqrt(1-sunEccentricity*sunEccentricity)*sinDegrees(sunEccentricAnomaly);
+  const sunLongitude=degreesNormal(atan2Degrees(sunY,sunX)+sunPerihelion),sunMeanLongitude=degreesNormal(sunMeanAnomaly+sunPerihelion);
+  const node=degreesNormal(125.1228-.0529538083*d),inclination=5.1454,moonPerigee=degreesNormal(318.0634+.1643573223*d),moonEccentricity=.0549,moonMeanAnomaly=degreesNormal(115.3654+13.0649929509*d);
+  let moonEccentricAnomaly=moonMeanAnomaly+180/Math.PI*moonEccentricity*sinDegrees(moonMeanAnomaly)*(1+moonEccentricity*cosDegrees(moonMeanAnomaly));
+  for(let iteration=0;iteration<3;iteration++)moonEccentricAnomaly-=(moonEccentricAnomaly-180/Math.PI*moonEccentricity*sinDegrees(moonEccentricAnomaly)-moonMeanAnomaly)/(1-moonEccentricity*cosDegrees(moonEccentricAnomaly));
+  const moonX=60.2666*(cosDegrees(moonEccentricAnomaly)-moonEccentricity),moonY=60.2666*Math.sqrt(1-moonEccentricity*moonEccentricity)*sinDegrees(moonEccentricAnomaly),moonTrueAnomaly=atan2Degrees(moonY,moonX),moonRadius=Math.sqrt(moonX*moonX+moonY*moonY),moonOrbitalLongitude=moonTrueAnomaly+moonPerigee;
+  const moonEclipticX=moonRadius*(cosDegrees(node)*cosDegrees(moonOrbitalLongitude)-sinDegrees(node)*sinDegrees(moonOrbitalLongitude)*cosDegrees(inclination)),moonEclipticY=moonRadius*(sinDegrees(node)*cosDegrees(moonOrbitalLongitude)+cosDegrees(node)*sinDegrees(moonOrbitalLongitude)*cosDegrees(inclination));
+  let moonLongitude=atan2Degrees(moonEclipticY,moonEclipticX);const moonMeanLongitude=degreesNormal(node+moonPerigee+moonMeanAnomaly),elongation=degreesNormal(moonMeanLongitude-sunMeanLongitude),argumentLatitude=degreesNormal(moonMeanLongitude-node);
+  moonLongitude+=-1.274*sinDegrees(moonMeanAnomaly-2*elongation)+.658*sinDegrees(2*elongation)-.186*sinDegrees(sunMeanAnomaly)-.059*sinDegrees(2*moonMeanAnomaly-2*elongation)-.057*sinDegrees(moonMeanAnomaly-2*elongation+sunMeanAnomaly)+.053*sinDegrees(moonMeanAnomaly+2*elongation)+.046*sinDegrees(2*elongation-sunMeanAnomaly)+.041*sinDegrees(moonMeanAnomaly-sunMeanAnomaly)-.035*sinDegrees(elongation)-.031*sinDegrees(moonMeanAnomaly+sunMeanAnomaly)-.015*sinDegrees(2*argumentLatitude-2*elongation)+.011*sinDegrees(moonMeanAnomaly-4*elongation);
+  const index=Math.floor(degreesNormal(moonLongitude-sunLongitude)/12);
+  return {tithi:index,tithi_name:index===29?"Amavasai":["Pratipada","Dwitiya","Tritiya","Chaturthi","Panchami","Shashti","Saptami","Ashtami","Navami","Dashami","Ekadashi","Dwadashi","Trayodashi","Chaturdashi","Pournami"][index%15],paksha:index>=15?"Krishna":"Shukla",calculation:"Bhubaneswar sunrise astronomical fallback"};
+}
 async function fetchBrowserPanchangDay(iso, cache) {
   if(cache[iso])return cache[iso];
+  if(String(iso)<"2026-10-14"||String(iso)>"2027-12-31"){const fallback=calculateBhubaneswarSunriseTithi(iso);cache[iso]=fallback;return fallback;}
   const controller=new AbortController(),timeout=setTimeout(function(){controller.abort();},12000);
   try {
     const response=await fetch(ODIA_PERSONAL_PANCHANG_API+encodeURIComponent(iso)+".json",{method:"GET",mode:"cors",cache:"no-store",signal:controller.signal,headers:{Accept:"application/json"}});
     if(!response.ok)throw new Error("Panchang service returned HTTP "+response.status+".");
     const payload=await response.json(),day=payload.day||payload.data||payload;
-    if(!day||day.tithi===undefined)throw new Error("Panchang data was incomplete.");
+    if(!day||day.tithi===undefined||panchangTithiIndex(day)<0)throw new Error("Panchang data was incomplete.");
     cache[iso]=day; return day;
+  } catch(error) {
+    const fallback=calculateBhubaneswarSunriseTithi(iso); cache[iso]=fallback; return fallback;
   } finally { clearTimeout(timeout); }
 }
 async function deriveBrowserOdiaTithi(eventDate, cache) {
-  const iso=String(eventDate||"").slice(0,10),year=Number(iso.slice(0,4));
-  if(year<1950)throw new Error("Automatic Odia-tithi lookup supports English dates from 1950 onward.");
+  const iso=String(eventDate||"").slice(0,10);
   const index=panchangTithiIndex(await fetchBrowserPanchangDay(iso,cache));
   if(index<0)throw new Error("The Panchang source did not return a usable tithi.");
   return {odiaPaksha:index>=15?"KRISHNA":"SHUKLA",odiaTithi:index%15+1};
@@ -264,8 +288,12 @@ function updateImportantDateConversion() {
     if(gregorian){saka=gregorianToSaka(gregorian);$("importantDateValue").value=gregorian;}
   } else if(system==="ODIA"){gregorian=$("importantDateOdiaEquivalent").value;saka=gregorianToSaka(gregorian);if(gregorian)$("importantDateValue").value=gregorian;}
   else {gregorian=$("importantDateValue").value;saka=gregorianToSaka(gregorian);if(saka){$("importantDateSakaYear").value=saka.year;$("importantDateSakaMonth").value=String(saka.month);$("importantDateSakaDay").value=saka.day;}}
-  const odiaPreview=system==="ODIA"?formatOdiaPanjika({odiaYear:$("importantDateOdiaYear").value,odiaMonth:$("importantDateOdiaMonth").value,odiaPaksha:$("importantDateOdiaPaksha").value,odiaTithi:$("importantDateOdiaTithi").value}):"";
-  $("importantDateConversion").textContent=gregorian&&saka?("English: "+formatEnglishDate(gregorian)+" · Odia: "+formatOdiaScriptDate(gregorian)+(odiaPreview?" · Kohinoor/Panjika: "+odiaPreview:"")):(system==="SAKA"?"Enter a valid saved legacy date.":system==="ODIA"?"Enter the Kohinoor/Panjika details and its verified English equivalent date.":"Choose a date to see English and Odia formats.");
+  let odiaPreview="";
+  if(gregorian){
+    if(system==="ODIA")odiaPreview=formatOdiaPanjika({odiaYear:$("importantDateOdiaYear").value,odiaMonth:$("importantDateOdiaMonth").value,odiaPaksha:$("importantDateOdiaPaksha").value,odiaTithi:$("importantDateOdiaTithi").value});
+    else try{const calculated=calculateBhubaneswarSunriseTithi(gregorian),index=panchangTithiIndex(calculated);odiaPreview=formatOdiaPanjika({odiaMonth:"AUTO",odiaPaksha:index>=15?"KRISHNA":"SHUKLA",odiaTithi:index%15+1});}catch(error){odiaPreview="";}
+  }
+  $("importantDateConversion").textContent=gregorian&&saka?("English: "+formatEnglishDate(gregorian)+" · Odia-script date: "+formatOdiaScriptDate(gregorian)+(odiaPreview?" · Odia tithi: "+odiaPreview:"")):(system==="SAKA"?"Enter a valid saved legacy date.":system==="ODIA"?"Enter the Kohinoor/Panjika details and its verified English equivalent date.":"Choose an English date to see its Odia tithi automatically.");
 }
 function syncRecurringFrequency() { const custom=$("recurringExpenseFrequency").value==="CUSTOM"; $("recurringCustomIntervalLabel").classList.toggle("hidden",!custom); $("recurringExpenseIntervalMonths").required=custom; }
 function money(value) {
@@ -2671,6 +2699,6 @@ function toast(message,type){
 }
 function friendlyApiError(error){
   const message=(error&&error.message)||"The change could not be saved.";
-  if(/UrlFetchApp\.fetch|script\.external_request/i.test(message))return "The Odia calendar service could not be reached by this browser and the backend is not yet authorized for external calendar access. Deploy BE v1.0.38, run setupFamilyDashboard(), approve access, and try again. You may save English-only meanwhile.";
+  if(/UrlFetchApp\.fetch|script\.external_request/i.test(message))return "Deploy BE v1.0.39 and run repairOdiaCalendarRecords(). Personal Odia tithi conversion will then use the built-in Bhubaneswar-sunrise fallback even if the external service is unavailable.";
   return /Unknown dashboard action/i.test(message)?"Backend update required. Deploy the latest Code.gs as a New version, then refresh this page.":message;
 }

@@ -1,11 +1,11 @@
 "use strict";
 
-const CACHE_NAME = "myfamily-shell-v1045-speed1";
+const CACHE_NAME = "myfamily-shell-v1046-speed1";
 const SHELL_ASSETS = [
   "./",
   "./styles.css?v=1.0.45-family-logo",
-  "./config.js?v=1.0.45",
-  "./app.js?v=1.0.45",
+  "./config.js?v=1.0.46",
+  "./app.js?v=1.0.46",
   "./family-bond-v1045-32.png",
   "./family-bond-v1045-180.png",
   "./family-bond-v1045-192.png",

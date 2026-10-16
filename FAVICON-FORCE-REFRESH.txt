@@ -1,0 +1,17 @@
+MYFAMILY FAVICON FORCE REFRESH — FE v1.0.45
+
+WHY THE OLD ICON MAY REMAIN
+
+Chrome stores favicons and installed-site icons separately from normal website files. A hard refresh may therefore update the page but retain an older icon.
+
+THIS PATCH
+
+- Uses completely new physical filenames instead of only a query-string version.
+- Adds both icon and shortcut-icon declarations.
+- Uses a new manifest filename and new 192 px / 512 px installed-app icon filenames.
+
+UPLOAD
+
+Upload index.html and every family-bond-v1045* file directly to the MyFamily repository root, then commit the changes.
+
+If an old installed shortcut still shows the previous icon, remove that shortcut/PWA once and install or add it again after GitHub Pages publishes this patch.

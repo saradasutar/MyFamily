@@ -1,0 +1,39 @@
+MYFAMILY FRONTEND v1.0.49 — SMART PASTE
+========================================
+
+This ZIP contains the complete GitHub Pages frontend for:
+https://saradasutar.github.io/MyFamily/
+
+WHAT IS NEW
+- Private Smart Paste dialog.
+- Automatically detects expense/payment text or itinerary/event text.
+- Extracts date, amount, recipient, account/payment mode, category and notes.
+- Itinerary/event text is prepared in the Important Date / Calendar form.
+- All extracted information remains editable before saving.
+- Available from the top bar, Expenditure and Reminders.
+
+UPLOAD STEPS
+1. Extract this ZIP.
+2. Upload every extracted file to the ROOT of the MyFamily GitHub repository.
+3. Replace the existing files when GitHub asks.
+4. Commit the changes and wait for GitHub Pages to finish publishing.
+5. Open https://saradasutar.github.io/MyFamily/?fresh=1049
+
+IMPORTANT
+- Do not place these files inside another folder.
+- Do not replace Code.gs for this update. The backend is unchanged.
+- config.js already contains the existing deployed Apps Script /exec URL.
+- The login page must show FE v1.0.49 after publication.
+
+FILES
+- index.html
+- app.js
+- styles.css
+- config.js
+- sw.js
+- family-unity-v1048-32.png
+- family-unity-v1048-180.png
+- family-unity-v1048-192.png
+- family-unity-v1048-512.png
+- family-unity-v1048.webmanifest
+

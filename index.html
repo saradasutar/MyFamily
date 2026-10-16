@@ -14,11 +14,11 @@
   <meta name="theme-color" content="#5b43b5">
   <link rel="preconnect" href="https://script.google.com">
   <link rel="dns-prefetch" href="//script.google.com">
-  <link rel="preload" href="styles.css?v=1.0.49-smart-paste" as="style">
-  <link rel="preload" href="config.js?v=1.0.49" as="script">
-  <link rel="preload" href="app.js?v=1.0.49" as="script">
+  <link rel="preload" href="styles.css?v=1.0.50-mobile-smooth" as="style">
+  <link rel="preload" href="config.js?v=1.0.50" as="script">
+  <link rel="preload" href="app.js?v=1.0.50" as="script">
   <link rel="preload" href="family-unity-v1048-192.png" as="image" type="image/png" fetchpriority="high">
-  <link rel="stylesheet" href="styles.css?v=1.0.49-smart-paste">
+  <link rel="stylesheet" href="styles.css?v=1.0.50-mobile-smooth">
 </head>
 <body>
   <a class="skip-link" href="#mainContent">Skip to dashboard content</a>
@@ -52,8 +52,8 @@
         </label>
         <div class="login-options">
           <label class="remember-row"><input id="rememberUsername" type="checkbox" checked> Save username on this device</label>
-          <span class="version-pair"><b id="loginFrontendVersion">FE v1.0.49</b><b id="loginBackendVersion">BE checking…</b></span>
-          <span id="loginVersion" class="legacy-version hidden" aria-hidden="true">Version 1.0.49</span>
+          <span class="version-pair"><b id="loginFrontendVersion">FE v1.0.50</b><b id="loginBackendVersion">BE checking…</b></span>
+          <span id="loginVersion" class="legacy-version hidden" aria-hidden="true">Version 1.0.50</span>
         </div>
         <button class="primary-button wide" type="submit">Sign in securely</button>
         <button id="repairSessionButton" class="repair-session-button" type="button">↻ Repair browser cache / session</button>
@@ -70,8 +70,8 @@
         <div class="brand-mark small family-bond-brand"><img src="family-unity-v1048-192.png" alt="MyFamily bond emblem" width="46" height="46" decoding="async" loading="lazy"></div>
         <div>
           <strong id="sidebarFamilyName">Our Family Hub</strong>
-          <span class="sidebar-version-pair"><b id="sidebarFrontendVersion">FE v1.0.49</b><b id="sidebarBackendVersion">BE checking…</b></span>
-          <b id="sidebarVersion" class="legacy-version hidden" aria-hidden="true">v1.0.49</b>
+          <span class="sidebar-version-pair"><b id="sidebarFrontendVersion">FE v1.0.50</b><b id="sidebarBackendVersion">BE checking…</b></span>
+          <b id="sidebarVersion" class="legacy-version hidden" aria-hidden="true">v1.0.50</b>
         </div>
       </div>
       <nav class="main-nav" aria-label="Main navigation">
@@ -764,15 +764,23 @@
     <div class="viewer-caption"><strong id="viewerTitle"></strong><span id="viewerMeta"></span><p id="viewerText"></p></div>
   </dialog>
 
+  <nav id="mobileBottomNav" class="mobile-bottom-nav" aria-label="Mobile dashboard navigation">
+    <button class="nav-button mobile-nav-button active" type="button" data-view="home" aria-current="page"><span aria-hidden="true">⌂</span><small>Home</small></button>
+    <button class="nav-button mobile-nav-button" type="button" data-view="dates" data-module="DATES"><span aria-hidden="true">◫</span><small>Reminders</small></button>
+    <button class="mobile-add-button" type="button" data-open="expenseDialog" data-module="EXPENSES" aria-label="Add expenditure"><span aria-hidden="true">＋</span><small>Add</small></button>
+    <button class="nav-button mobile-nav-button" type="button" data-view="expenses" data-module="EXPENSES"><span aria-hidden="true">₹</span><small>Expenses</small></button>
+    <button id="mobileMoreButton" class="mobile-nav-button mobile-more-button" type="button" aria-label="Open all sections"><span aria-hidden="true">•••</span><small>More</small></button>
+  </nav>
+
   <div id="loadingOverlay" class="loading-overlay hidden" role="status" aria-live="polite" aria-atomic="true"><div class="spinner" aria-hidden="true"></div><p id="loadingText">Working…</p></div>
   <div id="toastRegion" class="toast-region" role="status" aria-live="polite" aria-atomic="true"></div>
 
-  <script src="config.js?v=1.0.49" defer></script>
-  <script src="app.js?v=1.0.49" defer></script>
+  <script src="config.js?v=1.0.50" defer></script>
+  <script src="app.js?v=1.0.50" defer></script>
   <script>
     if ("serviceWorker" in navigator) {
       window.addEventListener("load", function () {
-        navigator.serviceWorker.register("./sw.js?v=1.0.49-smart-paste", { scope: "./" }).catch(function () {});
+        navigator.serviceWorker.register("./sw.js?v=1.0.50-mobile-smooth", { scope: "./" }).catch(function () {});
       }, { once: true });
     }
   </script>

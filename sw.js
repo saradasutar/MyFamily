@@ -1,11 +1,11 @@
 "use strict";
 
-const CACHE_NAME = "myfamily-shell-v1049-smart-paste";
+const CACHE_NAME = "myfamily-shell-v1050-mobile-smooth";
 const SHELL_ASSETS = [
   "./",
-  "./styles.css?v=1.0.49-smart-paste",
-  "./config.js?v=1.0.49",
-  "./app.js?v=1.0.49",
+  "./styles.css?v=1.0.50-mobile-smooth",
+  "./config.js?v=1.0.50",
+  "./app.js?v=1.0.50",
   "./family-unity-v1048-32.png",
   "./family-unity-v1048-180.png",
   "./family-unity-v1048-192.png",

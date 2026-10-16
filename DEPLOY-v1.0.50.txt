@@ -1,0 +1,23 @@
+MYFAMILY FRONTEND v1.0.50 — SMOOTH MOBILE EXPERIENCE
+
+What changed
+- Mobile app-style header with compact live date/time.
+- Fixed bottom navigation for Home, Reminders, Add, Expenses and More.
+- Large central Add button opens Add expenditure directly.
+- Administration and less-used sections remain available through More.
+- Cleaner mobile greeting, family card, summaries and expenditure cards.
+- Bottom-sheet forms, larger touch targets and smoother scrolling.
+- Compact non-blocking Updating indicator.
+- Existing desktop layout, backend connection and family data are unchanged.
+
+Deployment
+1. Upload every file in this folder to the ROOT of saradasutar/MyFamily.
+2. Replace index.html, styles.css, app.js, config.js and sw.js.
+3. Keep all favicon / manifest files in the repository root.
+4. Wait for GitHub Pages to finish, then open:
+   https://saradasutar.github.io/MyFamily/?v=1050
+5. If an installed home-screen icon still opens the old shell, close it fully and reopen once.
+
+Backend
+- No Apps Script replacement is required for this mobile-only update.
+- The existing /exec URL has been preserved in config.js.

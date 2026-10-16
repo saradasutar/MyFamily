@@ -2,7 +2,7 @@
 
 const CONFIG = window.FAMILY_DASHBOARD_CONFIG || {};
 const PLACEHOLDER_URL = "PASTE_YOUR_APPS_SCRIPT_WEB_APP_URL_HERE";
-const FRONTEND_VERSION = "1.0.49";
+const FRONTEND_VERSION = "1.0.50";
 const SAVED_USERNAME_KEY = "familyDashboardUsername";
 const SESSION_TOKEN_KEY = "familyDashboardToken";
 const DEFAULT_IDLE_TIMEOUT_MINUTES = 60;
@@ -575,6 +575,7 @@ function bindNavigation() {
   });
   all("[data-go]").forEach(function (button) { button.addEventListener("click", function () { goTo(button.dataset.go); }); });
   $("menuButton").addEventListener("click", function () { $("sidebar").classList.toggle("open"); $("sidebarShade").classList.toggle("show"); });
+  if ($("mobileMoreButton")) $("mobileMoreButton").addEventListener("click", function () { $("sidebar").classList.add("open"); $("sidebarShade").classList.add("show"); });
   $("sidebarShade").addEventListener("click", closeSidebar);
   $("logoutButton").addEventListener("click", logout);
   $("globalSearchButton").addEventListener("click", function () { openDialog("searchDialog"); setTimeout(function () { $("globalSearch").focus(); }, 50); });

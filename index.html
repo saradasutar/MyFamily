@@ -15,8 +15,8 @@
   <link rel="preconnect" href="https://script.google.com">
   <link rel="dns-prefetch" href="//script.google.com">
   <link rel="preload" href="styles.css?v=1.0.45-family-logo" as="style">
-  <link rel="preload" href="config.js?v=1.0.45" as="script">
-  <link rel="preload" href="app.js?v=1.0.45" as="script">
+  <link rel="preload" href="config.js?v=1.0.46" as="script">
+  <link rel="preload" href="app.js?v=1.0.46" as="script">
   <link rel="preload" href="family-bond-v1045-192.png" as="image" type="image/png" fetchpriority="high">
   <link rel="stylesheet" href="styles.css?v=1.0.45-family-logo">
 </head>
@@ -52,13 +52,13 @@
         </label>
         <div class="login-options">
           <label class="remember-row"><input id="rememberUsername" type="checkbox" checked> Save username on this device</label>
-          <span class="version-pair"><b id="loginFrontendVersion">FE v1.0.45</b><b id="loginBackendVersion">BE checking…</b></span>
-          <span id="loginVersion" class="legacy-version hidden" aria-hidden="true">Version 1.0.45</span>
+          <span class="version-pair"><b id="loginFrontendVersion">FE v1.0.46</b><b id="loginBackendVersion">BE checking…</b></span>
+          <span id="loginVersion" class="legacy-version hidden" aria-hidden="true">Version 1.0.46</span>
         </div>
         <button class="primary-button wide" type="submit">Sign in securely</button>
         <button id="repairSessionButton" class="repair-session-button" type="button">↻ Repair browser cache / session</button>
       </form>
-      <p class="session-safety-note">For privacy, the dashboard signs out after 5 inactive minutes and after this page is closed or left.</p>
+      <p class="session-safety-note">For privacy, inactivity sign-out is controlled by the administrator. Closing or leaving this page signs out immediately.</p>
       <p id="setupHint" class="setup-hint hidden">Open <strong>config.js</strong> and paste your Apps Script Web App URL first.</p>
       <p class="login-footnote">Your Google Sheet and Drive folder remain under the dashboard owner's Google account.</p>
     </div>
@@ -70,8 +70,8 @@
         <div class="brand-mark small family-bond-brand"><img src="family-bond-v1045-192.png" alt="Sutar family bond emblem" width="46" height="46" decoding="async" loading="lazy"></div>
         <div>
           <strong id="sidebarFamilyName">Our Family Hub</strong>
-          <span class="sidebar-version-pair"><b id="sidebarFrontendVersion">FE v1.0.45</b><b id="sidebarBackendVersion">BE checking…</b></span>
-          <b id="sidebarVersion" class="legacy-version hidden" aria-hidden="true">v1.0.45</b>
+          <span class="sidebar-version-pair"><b id="sidebarFrontendVersion">FE v1.0.46</b><b id="sidebarBackendVersion">BE checking…</b></span>
+          <b id="sidebarVersion" class="legacy-version hidden" aria-hidden="true">v1.0.46</b>
         </div>
       </div>
       <nav class="main-nav" aria-label="Main navigation">
@@ -321,6 +321,10 @@
                 <label>Family dashboard name<input id="settingFamilyName" required maxlength="60"></label>
                 <div class="two-fields"><label>Currency<select id="settingCurrency"><option value="INR">₹ INR</option><option value="USD">$ USD</option><option value="EUR">€ EUR</option><option value="GBP">£ GBP</option></select></label><label>Time zone<input id="settingTimezone" required placeholder="Asia/Kolkata"></label></div>
                 <label>Calendar display across dashboard<select id="settingCalendarDisplayMode"><option value="ENGLISH_ODIA">English + Odia (recommended)</option><option value="ENGLISH">English only</option><option value="ODIA">Odia only</option></select><small>Keeps the site neat: Saka stays hidden. Kohinoor/Panjika tithi reminders remain separately highlighted in rose.</small></label>
+                <fieldset class="memory-admin-settings"><legend>Security &amp; session</legend>
+                  <label>Automatic sign-out after inactivity<select id="settingSessionIdleMinutes"><option value="5">5 minutes</option><option value="15">15 minutes</option><option value="30">30 minutes</option><option value="60">1 hour (recommended)</option><option value="120">2 hours</option></select></label>
+                  <small id="sessionIdleTimeoutHelp">Closing or leaving the page always signs out immediately.</small>
+                </fieldset>
                 <fieldset class="memory-admin-settings odia-auto-settings"><legend>Automatic Odia Panchang</legend>
                   <label class="check-row"><input id="settingOdiaFestivalAutoEnabled" type="checkbox"> Automatically download official Odia festival dates</label>
                   <label class="check-row"><input id="settingOdiaPersonalAutoEnabled" type="checkbox"> Automatically calculate personal Odia-tithi birthdays and anniversaries</label>
@@ -747,12 +751,12 @@
   <div id="loadingOverlay" class="loading-overlay hidden" role="status" aria-live="polite" aria-atomic="true"><div class="spinner" aria-hidden="true"></div><p id="loadingText">Working…</p></div>
   <div id="toastRegion" class="toast-region" role="status" aria-live="polite" aria-atomic="true"></div>
 
-  <script src="config.js?v=1.0.45" defer></script>
-  <script src="app.js?v=1.0.45" defer></script>
+  <script src="config.js?v=1.0.46" defer></script>
+  <script src="app.js?v=1.0.46" defer></script>
   <script>
     if ("serviceWorker" in navigator) {
       window.addEventListener("load", function () {
-        navigator.serviceWorker.register("./sw.js?v=1.0.45-speed1", { scope: "./" }).catch(function () {});
+        navigator.serviceWorker.register("./sw.js?v=1.0.46-speed1", { scope: "./" }).catch(function () {});
       }, { once: true });
     }
   </script>

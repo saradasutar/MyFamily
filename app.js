@@ -2,7 +2,7 @@
 
 const CONFIG = window.FAMILY_DASHBOARD_CONFIG || {};
 const PLACEHOLDER_URL = "PASTE_YOUR_APPS_SCRIPT_WEB_APP_URL_HERE";
-const FRONTEND_VERSION = "1.0.52";
+const FRONTEND_VERSION = "1.0.53";
 const SAVED_USERNAME_KEY = "familyDashboardUsername";
 const SESSION_TOKEN_KEY = "familyDashboardToken";
 const DEFAULT_IDLE_TIMEOUT_MINUTES = 60;
@@ -288,12 +288,26 @@ function updateImportantDateConversion() {
     if(gregorian){saka=gregorianToSaka(gregorian);$("importantDateValue").value=gregorian;}
   } else if(system==="ODIA"){gregorian=$("importantDateOdiaEquivalent").value;saka=gregorianToSaka(gregorian);if(gregorian)$("importantDateValue").value=gregorian;}
   else {gregorian=$("importantDateValue").value;saka=gregorianToSaka(gregorian);if(saka){$("importantDateSakaYear").value=saka.year;$("importantDateSakaMonth").value=String(saka.month);$("importantDateSakaDay").value=saka.day;}}
-  let odiaPreview="";
+  let odiaPreview="",automaticOdia=null;
   if(gregorian){
     if(system==="ODIA")odiaPreview=formatOdiaPanjika({odiaYear:$("importantDateOdiaYear").value,odiaMonth:$("importantDateOdiaMonth").value,odiaPaksha:$("importantDateOdiaPaksha").value,odiaTithi:$("importantDateOdiaTithi").value});
-    else try{const calculated=calculateBhubaneswarSunriseTithi(gregorian),index=panchangTithiIndex(calculated);odiaPreview=formatOdiaPanjika({odiaMonth:"AUTO",odiaPaksha:index>=15?"KRISHNA":"SHUKLA",odiaTithi:index%15+1});}catch(error){odiaPreview="";}
+    else try{
+      const calculated=calculateBhubaneswarSunriseTithi(gregorian),index=panchangTithiIndex(calculated);
+      automaticOdia={odiaPaksha:index>=15?"KRISHNA":"SHUKLA",odiaTithi:index%15+1};
+      odiaPreview=formatOdiaPanjika({odiaMonth:"AUTO",odiaPaksha:automaticOdia.odiaPaksha,odiaTithi:automaticOdia.odiaTithi});
+    }catch(error){odiaPreview="";automaticOdia=null;}
   }
-  $("importantDateConversion").textContent=gregorian&&saka?("English: "+formatEnglishDate(gregorian)+" · Odia-script date: "+formatOdiaScriptDate(gregorian)+(odiaPreview?" · Odia tithi: "+odiaPreview:"")):(system==="SAKA"?"Enter a valid saved legacy date.":system==="ODIA"?"Enter the Kohinoor/Panjika details and its verified English equivalent date.":"Choose an English date to see its Odia tithi automatically.");
+  const autoPanel=$("importantDateAutoOdiaPanel"),autoValue=$("importantDateAutoOdiaValue");
+  const showAutomatic=system==="GREGORIAN"&&!!gregorian&&!!automaticOdia;
+  if(autoPanel)autoPanel.classList.toggle("hidden",!showAutomatic);
+  if(autoValue)autoValue.textContent=showAutomatic?odiaPreview:"—";
+  if(showAutomatic){
+    $("importantDateConversion").textContent="English date: "+formatEnglishDate(gregorian)+" · Odia equivalent calculated automatically. No second date entry is required.";
+  }else if(gregorian&&saka&&system==="ODIA"){
+    $("importantDateConversion").textContent="Verified English equivalent: "+formatEnglishDate(gregorian)+(odiaPreview?" · Entered Odia Panjika date: "+odiaPreview:"");
+  }else{
+    $("importantDateConversion").textContent=system==="SAKA"?"Enter a valid saved legacy date.":system==="ODIA"?"Use this manual mode only to override the automatic result with a verified Kohinoor/Panjika entry.":"Choose an English date; the corresponding Odia paksha and tithi will appear automatically.";
+  }
 }
 function syncRecurringFrequency() { const custom=$("recurringExpenseFrequency").value==="CUSTOM"; $("recurringCustomIntervalLabel").classList.toggle("hidden",!custom); $("recurringExpenseIntervalMonths").required=custom; }
 function money(value) {
@@ -661,7 +675,7 @@ function bindDialogs() {
   $("expenseShareMembers").addEventListener("change", syncExpenseSharingFields);
   $("recurringExpenseCategory").addEventListener("change", function () { populateSubcategoryOptions("recurringExpenseCategory", "recurringExpenseSubcategory", "recurringExpenseSubcategoryOptions", true); });
   $("recurringExpenseFrequency").addEventListener("change", syncRecurringFrequency);
-  $("importantDateCalendarSystem").addEventListener("change", function(){if(!$("importantDateId").value&&isAdmin())$("importantDateReminderBasis").value=$("importantDateCalendarSystem").value==="ODIA"?"GREGORIAN_ODIA":"GREGORIAN";syncImportantDateCalendar();});
+  $("importantDateCalendarSystem").addEventListener("change", function(){if(!$("importantDateId").value&&isAdmin())$("importantDateReminderBasis").value="GREGORIAN_ODIA";syncImportantDateCalendar();});
   $("importantDateValue").addEventListener("input", updateImportantDateConversion);
   ["importantDateSakaYear","importantDateSakaMonth","importantDateSakaDay"].forEach(function(id){$(id).addEventListener("input",updateImportantDateConversion);$(id).addEventListener("change",updateImportantDateConversion);});
   ["importantDateOdiaYear","importantDateOdiaMonth","importantDateOdiaPaksha","importantDateOdiaTithi","importantDateOdiaEquivalent"].forEach(function(id){$(id).addEventListener("input",updateImportantDateConversion);$(id).addEventListener("change",updateImportantDateConversion);});
@@ -698,7 +712,7 @@ function prepareNewDialog(id) {
   if (id === "incomeDialog") { $("incomeDialogTitle").textContent = "Add income"; fillMemberSelect($("incomeReceivedBy"), state.data.user.id); }
   if (id === "targetDialog") { $("targetForm").reset(); $("targetDueDate").value = todayIso(); fillMemberSelect($("targetOwner"), state.data.user.id, true); }
   if (id === "contributionDialog") { $("contributionForm").reset(); $("contributionDate").value = todayIso(); }
-  if (id === "dateDialog") { $("dateDialogTitle").textContent = "Add important date"; $("importantDateCalendarSystem").value="GREGORIAN"; $("importantDateReminderBasis").value="GREGORIAN"; $("importantDateOdiaMonth").value="BAISAKHA"; $("importantDateOdiaPaksha").value="SHUKLA"; $("importantDateOdiaTithi").value="1"; $("importantDateOdiaEquivalent").value=todayIso(); state.pendingImportantDatePhoto=null; state.removeImportantDatePhoto=false; $("importantDatePhotoFile").value=""; setImportantDatePhotoPreview(null); $("importantDateAdminControls").classList.toggle("hidden",!isAdmin()); const saka=gregorianToSaka($("importantDateValue").value||todayIso()); if(saka){$("importantDateSakaYear").value=saka.year;$("importantDateSakaMonth").value=String(saka.month);$("importantDateSakaDay").value=saka.day;} syncImportantDateCalendar(); $("notifyEveryone").checked = true; $("recipientChecks").classList.add("hidden"); renderRecipientChecks([]); }
+  if (id === "dateDialog") { $("dateDialogTitle").textContent = "Add important date"; $("importantDateCalendarSystem").value="GREGORIAN"; $("importantDateReminderBasis").value="GREGORIAN_ODIA"; $("importantDateOdiaMonth").value="BAISAKHA"; $("importantDateOdiaPaksha").value="SHUKLA"; $("importantDateOdiaTithi").value="1"; $("importantDateOdiaEquivalent").value=todayIso(); state.pendingImportantDatePhoto=null; state.removeImportantDatePhoto=false; $("importantDatePhotoFile").value=""; setImportantDatePhotoPreview(null); $("removeImportantDatePhoto").classList.add("hidden"); $("importantDateAdminControls").classList.toggle("hidden",!isAdmin()); const saka=gregorianToSaka($("importantDateValue").value||todayIso()); if(saka){$("importantDateSakaYear").value=saka.year;$("importantDateSakaMonth").value=String(saka.month);$("importantDateSakaDay").value=saka.day;} syncImportantDateCalendar(); $("notifyEveryone").checked = true; $("recipientChecks").classList.add("hidden"); renderRecipientChecks([]); }
   if (id === "photoDialog") { $("photoForm").reset(); $("photoTakenDate").value = todayIso(); $("photoPreview").classList.add("hidden"); state.pendingPhoto = null; }
   if (id === "memberDialog") { $("memberDialogTitle").textContent = "Add family member"; $("memberActive").checked = true; $("memberPassword").required = true; setMemberPermissions(["EXPENSES","INCOME","TARGETS","DATES","CALENDAR","PHOTOS","EXPERIENCES","DIARY"]); syncMemberAccessRole(); }
   if (id === "experienceDialog") $("experienceDialogTitle").textContent = "Add experience";
@@ -893,7 +907,7 @@ function applySmartPasteResult() {
   $("importantDateOccasion").value = result.fields.occasionLabel;
   $("importantDateType").value = result.fields.eventType;
   $("importantDateRepeat").checked = result.fields.repeatYearly;
-  $("importantDateReminderBasis").value = "GREGORIAN";
+  $("importantDateReminderBasis").value = "GREGORIAN_ODIA";
   $("importantDateNotes").value = result.fields.notes.slice(0,300);
   $("dateDialogTitle").textContent = "Review pasted itinerary / event";
   syncImportantDateCalendar();

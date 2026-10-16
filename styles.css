@@ -702,6 +702,13 @@ th { box-shadow:inset 0 -1px #e6e4ef; }
 .dual-date-line strong { color:#713d00; font-size:.67rem; font-weight:850; }
 .saka-date-icon { width:26px; height:26px; display:grid; place-items:center; border-radius:8px; color:#fff; background:linear-gradient(135deg,#e9a02d,#b96a00); box-shadow:0 3px 8px rgba(151,82,0,.20); font-size:.68rem; font-weight:950; }
 .important-date-conversion,.calendar-conversion { margin:9px 0; padding:9px 11px; border-left:4px solid var(--violet); border-radius:8px; color:#514789; background:#f2efff; font-size:.7rem; font-weight:700; }
+.auto-odia-panel { display:flex; align-items:flex-start; gap:10px; margin:10px 0 2px; padding:12px 13px; border:1px solid #e5b84b; border-radius:14px; background:linear-gradient(135deg,#fff9dc,#fff4fa 55%,#eef8ff); box-shadow:0 8px 22px rgba(97,70,150,.09); }
+.auto-odia-panel.hidden { display:none; }
+.auto-odia-badge { flex:0 0 auto; margin-top:2px; padding:4px 7px; border-radius:999px; background:#5d45b8; color:#fff; font-size:.62rem; font-weight:900; letter-spacing:.08em; }
+.auto-odia-panel div { min-width:0; display:grid; gap:3px; }
+.auto-odia-panel small { color:#8b6511; font-size:.68rem; font-weight:900; text-transform:uppercase; letter-spacing:.05em; }
+.auto-odia-panel strong { color:#3f286f; font-size:1rem; line-height:1.35; overflow-wrap:anywhere; }
+.auto-odia-panel div>span { color:#625b6f; font-size:.72rem; font-weight:650; line-height:1.4; }
 
 @media (hover:hover) and (pointer:fine) {
   .summary-card:hover,.panel:hover,.target-card:hover,.date-card:hover,.experience-card:hover,.recurring-card:hover,.major-plan-card:hover { transform:translateY(-2px); border-color:#d5d0e8; box-shadow:var(--shadow-raised); }

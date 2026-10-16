@@ -14,11 +14,11 @@
   <meta name="theme-color" content="#5b43b5">
   <link rel="preconnect" href="https://script.google.com">
   <link rel="dns-prefetch" href="//script.google.com">
-  <link rel="preload" href="styles.css?v=1.0.52-odia-auto" as="style">
-  <link rel="preload" href="config.js?v=1.0.52" as="script">
-  <link rel="preload" href="app.js?v=1.0.52" as="script">
+  <link rel="preload" href="styles.css?v=1.0.53-odia-direct" as="style">
+  <link rel="preload" href="config.js?v=1.0.53" as="script">
+  <link rel="preload" href="app.js?v=1.0.53" as="script">
   <link rel="preload" href="family-unity-v1048-192.png" as="image" type="image/png" fetchpriority="high">
-  <link rel="stylesheet" href="styles.css?v=1.0.52-odia-auto">
+  <link rel="stylesheet" href="styles.css?v=1.0.53-odia-direct">
 </head>
 <body>
   <a class="skip-link" href="#mainContent">Skip to dashboard content</a>
@@ -52,8 +52,8 @@
         </label>
         <div class="login-options">
           <label class="remember-row"><input id="rememberUsername" type="checkbox" checked> Save username on this device</label>
-          <span class="version-pair"><b id="loginFrontendVersion">FE v1.0.52</b><b id="loginBackendVersion">BE checking…</b></span>
-          <span id="loginVersion" class="legacy-version hidden" aria-hidden="true">Version 1.0.52</span>
+          <span class="version-pair"><b id="loginFrontendVersion">FE v1.0.53</b><b id="loginBackendVersion">BE checking…</b></span>
+          <span id="loginVersion" class="legacy-version hidden" aria-hidden="true">Version 1.0.53</span>
         </div>
         <button class="primary-button wide" type="submit">Sign in securely</button>
         <button id="repairSessionButton" class="repair-session-button" type="button">↻ Repair browser cache / session</button>
@@ -70,8 +70,8 @@
         <div class="brand-mark small family-bond-brand"><img src="family-unity-v1048-192.png" alt="MyFamily bond emblem" width="46" height="46" decoding="async" loading="lazy"></div>
         <div>
           <strong id="sidebarFamilyName">Our Family Hub</strong>
-          <span class="sidebar-version-pair"><b id="sidebarFrontendVersion">FE v1.0.52</b><b id="sidebarBackendVersion">BE checking…</b></span>
-          <b id="sidebarVersion" class="legacy-version hidden" aria-hidden="true">v1.0.52</b>
+          <span class="sidebar-version-pair"><b id="sidebarFrontendVersion">FE v1.0.53</b><b id="sidebarBackendVersion">BE checking…</b></span>
+          <b id="sidebarVersion" class="legacy-version hidden" aria-hidden="true">v1.0.53</b>
         </div>
       </div>
       <nav class="main-nav" aria-label="Main navigation">
@@ -598,16 +598,22 @@
       <label>Title<input id="importantDateTitle" required maxlength="100" placeholder="e.g. Maa's birthday"></label>
       <label>Occasion wording<input id="importantDateOccasion" maxlength="140" placeholder="e.g. Death Anniversary of X as per Odia Kohinoor Calendar"><small>This exact description appears on the reminder card and email.</small></label>
       <div class="two-fields"><label>Enter original date using<select id="importantDateCalendarSystem"><option value="GREGORIAN">English / Gregorian calendar</option><option value="ODIA">Odia Kohinoor / Panjika</option><option value="SAKA" hidden>Legacy saved Saka date</option></select></label><label>Type<select id="importantDateType"><option>Birthday</option><option>Anniversary</option><option>Death anniversary</option><option>Appointment</option><option>Renewal</option><option>Payment</option><option>Other</option></select></label></div>
-      <div id="importantDateGregorianFields"><label>English / Gregorian date<input id="importantDateValue" type="date" required></label></div>
+      <div id="importantDateGregorianFields">
+        <label>English / Gregorian date<input id="importantDateValue" type="date" required></label>
+        <div id="importantDateAutoOdiaPanel" class="auto-odia-panel hidden" aria-live="polite">
+          <span class="auto-odia-badge">AUTO</span>
+          <div><small>Corresponding Odia calendar tithi</small><strong id="importantDateAutoOdiaValue">—</strong><span>No separate Odia-date entry is needed. For yearly alerts choose “Both English + Odia” below.</span></div>
+        </div>
+      </div>
       <div id="importantDateSakaFields" class="three-fields hidden"><label>Saka year<input id="importantDateSakaYear" type="number" min="1" max="9999" step="1"></label><label>Saka month<select id="importantDateSakaMonth"><option value="1">Chaitra</option><option value="2">Vaishakha</option><option value="3">Jyeshtha</option><option value="4">Ashadha</option><option value="5">Shravana</option><option value="6">Bhadra</option><option value="7">Ashvina</option><option value="8">Kartika</option><option value="9">Agrahayana</option><option value="10">Pausha</option><option value="11">Magha</option><option value="12">Phalguna</option></select></label><label>Saka day<input id="importantDateSakaDay" type="number" min="1" max="31" step="1"></label></div>
       <div id="importantDateOdiaFields" class="odia-panjika-fields hidden">
         <div class="four-fields"><label>Odia Sal / year<input id="importantDateOdiaYear" maxlength="20" placeholder="e.g. 1433"></label><label>Odia month<select id="importantDateOdiaMonth"><option value="CHAITA">ଚୈତ୍ର</option><option value="BAISAKHA">ବୈଶାଖ</option><option value="JYESTHA">ଜ୍ୟେଷ୍ଠ</option><option value="ASADHA">ଆଷାଢ଼</option><option value="SRABANA">ଶ୍ରାବଣ</option><option value="BHADRA">ଭାଦ୍ରବ</option><option value="ASWINA">ଆଶ୍ୱିନ</option><option value="KARTIKA">କାର୍ତ୍ତିକ</option><option value="MARGASIRA">ମାର୍ଗଶିର</option><option value="PAUSA">ପୌଷ</option><option value="MAGHA">ମାଘ</option><option value="PHALGUNA">ଫାଲ୍ଗୁନ</option></select></label><label>Paksha<select id="importantDateOdiaPaksha"><option value="SHUKLA">ଶୁକ୍ଳ ପକ୍ଷ</option><option value="KRISHNA">କୃଷ୍ଣ ପକ୍ଷ</option></select></label><label>Tithi<input id="importantDateOdiaTithi" type="number" min="1" max="15" step="1"></label></div>
         <label>Verified English equivalent for this Odia year<input id="importantDateOdiaEquivalent" type="date"><small>Check a trusted Odia Panjika. Tithi dates are astronomical and are not calculated by fixed arithmetic.</small></label>
       </div>
-      <p id="importantDateConversion" class="calendar-conversion" role="status">Choose an English date to see its Odia tithi automatically.</p>
+      <p id="importantDateConversion" class="calendar-conversion" role="status">Choose an English date; the corresponding Odia paksha and tithi will appear automatically.</p>
       <div class="check-row"><label><input id="importantDateRepeat" type="checkbox"> Repeat every year</label></div>
       <div id="importantDateAdminControls" class="admin-date-controls hidden">
-        <label>Receive and display this yearly reminder by<select id="importantDateReminderBasis"><option value="GREGORIAN">English date only</option><option value="ODIA">Odia calendar tithi only</option><option value="GREGORIAN_ODIA">Both English + Odia</option><option value="SAKA" hidden>Legacy saved Saka date</option><option value="GREGORIAN_SAKA" hidden>Legacy English + Saka</option><option value="SAKA_ODIA" hidden>Legacy Saka + Odia</option><option value="ALL" hidden>Legacy all calendars</option></select><small>Example: enter Simadri’s English birth date as 20-10-1983. Its Bhubaneswar-sunrise Odia paksha and tithi now appear immediately; choose English, Odia, or both for yearly reminders. “Odia years” remains available for a printed Kohinoor correction.</small></label>
+        <label>Receive and display this yearly reminder by<select id="importantDateReminderBasis"><option value="GREGORIAN">English date only</option><option value="ODIA">Odia calendar tithi only</option><option value="GREGORIAN_ODIA" selected>Both English + Odia</option><option value="SAKA" hidden>Legacy saved Saka date</option><option value="GREGORIAN_SAKA" hidden>Legacy English + Saka</option><option value="SAKA_ODIA" hidden>Legacy Saka + Odia</option><option value="ALL" hidden>Legacy all calendars</option></select><small>Recommended: enter Simadri’s English birth date as 20-10-1983 and leave “Both English + Odia” selected. The app calculates the Bhubaneswar-sunrise Odia paksha and tithi automatically. Use manual Odia Panjika entry only for a verified printed-Kohinoor correction.</small></label>
         <div class="occasion-photo-editor">
           <div id="importantDatePhotoPreview" class="occasion-photo-preview"><span>◎</span></div>
           <label class="upload-drop compact-upload"><input id="importantDatePhotoFile" type="file" accept="image/jpeg,image/png,image/webp"><span>▧</span><strong>Add person or occasion photo</strong><small>Administrator only · stored in private Google Drive folder</small></label>
@@ -775,12 +781,12 @@
   <div id="loadingOverlay" class="loading-overlay hidden" role="status" aria-live="polite" aria-atomic="true"><div class="spinner" aria-hidden="true"></div><p id="loadingText">Working…</p></div>
   <div id="toastRegion" class="toast-region" role="status" aria-live="polite" aria-atomic="true"></div>
 
-  <script src="config.js?v=1.0.52" defer></script>
-  <script src="app.js?v=1.0.52" defer></script>
+  <script src="config.js?v=1.0.53" defer></script>
+  <script src="app.js?v=1.0.53" defer></script>
   <script>
     if ("serviceWorker" in navigator) {
       window.addEventListener("load", function () {
-        navigator.serviceWorker.register("./sw.js?v=1.0.52-odia-auto", { scope: "./" }).catch(function () {});
+        navigator.serviceWorker.register("./sw.js?v=1.0.53-odia-direct", { scope: "./" }).catch(function () {});
       }, { once: true });
     }
   </script>

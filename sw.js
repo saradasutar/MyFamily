@@ -1,11 +1,11 @@
 "use strict";
 
-const CACHE_NAME = "myfamily-shell-v1052-odia-auto";
+const CACHE_NAME = "myfamily-shell-v1053-odia-direct";
 const SHELL_ASSETS = [
   "./",
-  "./styles.css?v=1.0.52-odia-auto",
-  "./config.js?v=1.0.52",
-  "./app.js?v=1.0.52",
+  "./styles.css?v=1.0.53-odia-direct",
+  "./config.js?v=1.0.53",
+  "./app.js?v=1.0.53",
   "./family-unity-v1048-32.png",
   "./family-unity-v1048-180.png",
   "./family-unity-v1048-192.png",

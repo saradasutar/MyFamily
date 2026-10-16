@@ -1,0 +1,12 @@
+MYFAMILY FRONTEND v1.0.51 — ODIA TITHI RESPONSE FIX
+
+Replace the files in the root of the MyFamily GitHub repository.
+Preserve the existing API_URL in config.js.
+
+This update reads both the older numeric Panchang response and the current
+named response, for example {"name":"Shashti","paksha":"Shukla"}.
+
+After GitHub Pages publishes, open:
+https://saradasutar.github.io/MyFamily/?v=1051
+
+Confirm FE v1.0.51 and BE v1.0.38.

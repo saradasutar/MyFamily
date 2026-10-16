@@ -12,6 +12,12 @@
   <link rel="apple-touch-icon" href="family-bond-v1045-180.png" sizes="180x180">
   <link rel="manifest" href="family-bond-v1045.webmanifest">
   <meta name="theme-color" content="#5b43b5">
+  <link rel="preconnect" href="https://script.google.com">
+  <link rel="dns-prefetch" href="//script.google.com">
+  <link rel="preload" href="styles.css?v=1.0.45-family-logo" as="style">
+  <link rel="preload" href="config.js?v=1.0.45" as="script">
+  <link rel="preload" href="app.js?v=1.0.45" as="script">
+  <link rel="preload" href="family-bond-v1045-192.png" as="image" type="image/png" fetchpriority="high">
   <link rel="stylesheet" href="styles.css?v=1.0.45-family-logo">
 </head>
 <body>
@@ -30,7 +36,7 @@
       <p>One warm, private place for the things your family shares.</p>
     </div>
     <div class="login-card">
-      <div class="brand-mark family-bond-brand"><img src="family-bond-v1045-192.png" alt="Sutar family bond emblem" width="62" height="62" decoding="async"></div>
+      <div class="brand-mark family-bond-brand"><img src="family-bond-v1045-192.png" alt="Sutar family bond emblem" width="62" height="62" decoding="async" fetchpriority="high"></div>
       <p class="eyebrow">WELCOME HOME</p>
       <h1 id="loginFamilyName">Our Family Hub</h1>
       <p class="muted">Sign in with the username and password managed by your family administrator.</p>
@@ -61,7 +67,7 @@
   <div id="appShell" class="app-shell hidden">
     <aside id="sidebar" class="sidebar">
       <div class="sidebar-brand">
-        <div class="brand-mark small family-bond-brand"><img src="family-bond-v1045-192.png" alt="Sutar family bond emblem" width="46" height="46" decoding="async"></div>
+        <div class="brand-mark small family-bond-brand"><img src="family-bond-v1045-192.png" alt="Sutar family bond emblem" width="46" height="46" decoding="async" loading="lazy"></div>
         <div>
           <strong id="sidebarFamilyName">Our Family Hub</strong>
           <span class="sidebar-version-pair"><b id="sidebarFrontendVersion">FE v1.0.45</b><b id="sidebarBackendVersion">BE checking…</b></span>
@@ -743,5 +749,12 @@
 
   <script src="config.js?v=1.0.45" defer></script>
   <script src="app.js?v=1.0.45" defer></script>
+  <script>
+    if ("serviceWorker" in navigator) {
+      window.addEventListener("load", function () {
+        navigator.serviceWorker.register("./sw.js?v=1.0.45-speed1", { scope: "./" }).catch(function () {});
+      }, { once: true });
+    }
+  </script>
 </body>
 </html>

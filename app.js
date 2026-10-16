@@ -2,7 +2,7 @@
 
 const CONFIG = window.FAMILY_DASHBOARD_CONFIG || {};
 const PLACEHOLDER_URL = "PASTE_YOUR_APPS_SCRIPT_WEB_APP_URL_HERE";
-const FRONTEND_VERSION = "1.0.46";
+const FRONTEND_VERSION = "1.0.47";
 const SAVED_USERNAME_KEY = "familyDashboardUsername";
 const SESSION_TOKEN_KEY = "familyDashboardToken";
 const DEFAULT_IDLE_TIMEOUT_MINUTES = 60;

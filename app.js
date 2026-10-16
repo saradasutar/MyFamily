@@ -2,7 +2,7 @@
 
 const CONFIG = window.FAMILY_DASHBOARD_CONFIG || {};
 const PLACEHOLDER_URL = "PASTE_YOUR_APPS_SCRIPT_WEB_APP_URL_HERE";
-const FRONTEND_VERSION = "1.0.34";
+const FRONTEND_VERSION = "1.0.45";
 const SAVED_USERNAME_KEY = "familyDashboardUsername";
 const SESSION_TOKEN_KEY = "familyDashboardToken";
 const IDLE_TIMEOUT_MS = 5 * 60 * 1000;
@@ -15,6 +15,7 @@ const state = {
   calendarCursor: new Date(new Date().getFullYear(), new Date().getMonth(), 1),
   pendingPhoto: null,
   pendingMemberPhoto: null,
+  pendingParentsPortrait: null,
   pendingImportantDatePhoto: null,
   removeImportantDatePhoto: false,
   stickyView: "active",
@@ -37,7 +38,9 @@ const state = {
   categoryEditIds: new Set(),
   subcategoryEditIds: new Set(),
   clockTimer: null,
-  odiaMappingDateId: ""
+  odiaMappingDateId: "",
+  lastToastText: "",
+  lastToastAt: 0
 };
 const pendingRequests = new Map();
 const viewTitles = {
@@ -144,6 +147,7 @@ function dayParts(iso) {
 const SAKA_MONTHS = ["Chaitra","Vaishakha","Jyeshtha","Ashadha","Shravana","Bhadra","Ashvina","Kartika","Agrahayana","Pausha","Magha","Phalguna"];
 const ODIA_MONTHS = {AUTO:"ଭୁବନେଶ୍ୱର ସୂର୍ୟ୍ୟୋଦୟ ତିଥି",CHAITA:"ଚୈତ୍ର",BAISAKHA:"ବୈଶାଖ",JYESTHA:"ଜ୍ୟେଷ୍ଠ",ASADHA:"ଆଷାଢ଼",SRABANA:"ଶ୍ରାବଣ",BHADRA:"ଭାଦ୍ରବ",ASWINA:"ଆଶ୍ୱିନ",KARTIKA:"କାର୍ତ୍ତିକ",MARGASIRA:"ମାର୍ଗଶିର",PAUSA:"ପୌଷ",MAGHA:"ମାଘ",PHALGUNA:"ଫାଲ୍ଗୁନ"};
 const ODIA_TITHIS = ["ପ୍ରତିପଦା","ଦ୍ୱିତୀୟା","ତୃତୀୟା","ଚତୁର୍ଥୀ","ପଞ୍ଚମୀ","ଷଷ୍ଠୀ","ସପ୍ତମୀ","ଅଷ୍ଟମୀ","ନବମୀ","ଦଶମୀ","ଏକାଦଶୀ","ଦ୍ୱାଦଶୀ","ତ୍ରୟୋଦଶୀ","ଚତୁର୍ଦ୍ଦଶୀ"];
+const ODIA_PERSONAL_PANCHANG_API = "https://shastrapanchangam.com/api/v1/city/bhubaneswar/";
 function isGregorianLeapYear(year) { return year % 4 === 0 && (year % 100 !== 0 || year % 400 === 0); }
 function sakaMonthLengths(gregorianStartYear) { return [isGregorianLeapYear(gregorianStartYear) ? 31 : 30,31,31,31,31,31,30,30,30,30,30,30]; }
 function sakaIso(year,month,day) { return String(year).padStart(4,"0")+"-"+String(month).padStart(2,"0")+"-"+String(day).padStart(2,"0"); }
@@ -169,6 +173,53 @@ function formatOdiaPanjika(item, mappedYear) {
   if(!item||!item.odiaMonth)return "Not recorded";
   const number=Number(item.odiaTithi||0),tithi=number===15?(item.odiaPaksha==="SHUKLA"?"ପୂର୍ଣ୍ଣିମା":"ଅମାବାସ୍ୟା"):(ODIA_TITHIS[number-1]||"ତିଥି");
   return (ODIA_MONTHS[item.odiaMonth]||item.odiaMonth)+" · "+(item.odiaPaksha==="SHUKLA"?"ଶୁକ୍ଳ ପକ୍ଷ":"କୃଷ୍ଣ ପକ୍ଷ")+" · "+tithi+((mappedYear||item.odiaYear)?" · ଓଡ଼ିଆ ସାଲ "+(mappedYear||item.odiaYear):"");
+}
+function addDaysIso(iso, days) {
+  const parts=String(iso||"").slice(0,10).split("-").map(Number),date=new Date(Date.UTC(parts[0],parts[1]-1,parts[2]));
+  date.setUTCDate(date.getUTCDate()+Number(days||0)); return date.toISOString().slice(0,10);
+}
+function safeAnniversaryIso(year, month, day) {
+  const lastDay=new Date(Date.UTC(Number(year),Number(month),0)).getUTCDate();
+  return [String(year),String(month).padStart(2,"0"),String(Math.min(Number(day),lastDay)).padStart(2,"0")].join("-");
+}
+function panchangTithiIndex(day) {
+  let numeric=Number(day&&day.tithi); const paksha=String(day&&day.paksha||"").toUpperCase();
+  if(Number.isFinite(numeric)&&numeric>=0&&numeric<=29){numeric=Math.floor(numeric);return paksha.includes("KRISHNA")&&numeric<15?15+numeric:numeric;}
+  const number=Number(day&&(day.tithi_number||day.tithiNumber));
+  return Number.isFinite(number)&&number>=1&&number<=15?(paksha.includes("KRISHNA")?15:0)+number-1:-1;
+}
+async function fetchBrowserPanchangDay(iso, cache) {
+  if(cache[iso])return cache[iso];
+  const controller=new AbortController(),timeout=setTimeout(function(){controller.abort();},12000);
+  try {
+    const response=await fetch(ODIA_PERSONAL_PANCHANG_API+encodeURIComponent(iso)+".json",{method:"GET",mode:"cors",cache:"no-store",signal:controller.signal,headers:{Accept:"application/json"}});
+    if(!response.ok)throw new Error("Panchang service returned HTTP "+response.status+".");
+    const payload=await response.json(),day=payload.day||payload.data||payload;
+    if(!day||day.tithi===undefined)throw new Error("Panchang data was incomplete.");
+    cache[iso]=day; return day;
+  } finally { clearTimeout(timeout); }
+}
+async function deriveBrowserOdiaTithi(eventDate, cache) {
+  const iso=String(eventDate||"").slice(0,10),year=Number(iso.slice(0,4));
+  if(year<1950)throw new Error("Automatic Odia-tithi lookup supports English dates from 1950 onward.");
+  const index=panchangTithiIndex(await fetchBrowserPanchangDay(iso,cache));
+  if(index<0)throw new Error("The Panchang source did not return a usable tithi.");
+  return {odiaPaksha:index>=15?"KRISHNA":"SHUKLA",odiaTithi:index%15+1};
+}
+async function resolveBrowserOdiaOccurrence(eventDate, odiaPaksha, odiaTithi, cache) {
+  const parts=String(eventDate).split("-").map(Number),today=todayIso(); let targetYear=Number(today.slice(0,4));
+  if(addDaysIso(safeAnniversaryIso(targetYear,parts[1],parts[2]),24)<today)targetYear++;
+  const targetIndex=(String(odiaPaksha).toUpperCase()==="KRISHNA"?15:0)+Math.max(0,Math.min(14,Number(odiaTithi)-1));
+  for(let attempt=0;attempt<2;attempt++){
+    const year=targetYear+attempt,base=safeAnniversaryIso(year,parts[1],parts[2]),currentIndex=panchangTithiIndex(await fetchBrowserPanchangDay(base,cache));
+    if(currentIndex<0)continue;
+    const forward=(targetIndex-currentIndex+30)%30,delta=forward>15?forward-30:forward,estimate=addDaysIso(base,delta);
+    for(const offset of [0,-1,1,-2,2,-3,3]){
+      const candidate=addDaysIso(estimate,offset),day=await fetchBrowserPanchangDay(candidate,cache);
+      if(panchangTithiIndex(day)===targetIndex&&candidate>=today)return candidate;
+    }
+  }
+  return "";
 }
 function syncImportantDateCalendar() {
   const system=$("importantDateCalendarSystem").value;
@@ -776,6 +827,9 @@ function bindForms() {
   $("memberRole").addEventListener("change", syncMemberAccessRole);
   $("memberPhotoFile").addEventListener("change", previewMemberPhoto);
   $("deleteMemberPhoto").addEventListener("click", deleteMemberPhoto);
+  $("parentsPortraitFile").addEventListener("change", previewParentsPortrait);
+  $("saveParentsPortrait").addEventListener("click", saveParentsPortrait);
+  $("removeParentsPortrait").addEventListener("click", deleteParentsPortrait);
   $("importantDatePhotoFile").addEventListener("change", previewImportantDatePhoto);
   $("removeImportantDatePhoto").addEventListener("click", removeImportantDatePhotoPreview);
   $("settingDashboardClockHighlight").addEventListener("input", function (event) { previewDashboardClockHighlight(event.target.value); });
@@ -1298,11 +1352,32 @@ async function saveImportantDate(event) {
   };
   showLoading(state.pendingImportantDatePhoto?"Saving reminder and photo to Google Drive…":"Saving reminder…");
   try {
+    let browserOdiaOccurrence="";
+    if(isAdmin()&&calendarSystem!=="ODIA"&&reminderBasisIncludes(payload.reminderBasis,"ODIA")){
+      $("loadingText").textContent="Identifying the Bhubaneswar sunrise tithi…";
+      try {
+        const panchangCache={},derived=await deriveBrowserOdiaTithi(eventDate,panchangCache);
+        payload.autoOdiaPaksha=derived.odiaPaksha; payload.autoOdiaTithi=derived.odiaTithi;
+        if(payload.repeatYearly)browserOdiaOccurrence=await resolveBrowserOdiaOccurrence(eventDate,derived.odiaPaksha,derived.odiaTithi,panchangCache);
+      } catch(browserLookupError) {
+        console.warn("Browser Panchang fallback unavailable; the backend will try.",browserLookupError);
+      }
+      $("loadingText").textContent=state.pendingImportantDatePhoto?"Saving reminder and photo to Google Drive…":"Saving reminder…";
+    }
     const saved=await api(id?"updateImportantDate":"createImportantDate",payload),savedId=saved.id;
-    if(isAdmin()&&state.removeImportantDatePhoto&&id)await api("deleteImportantDatePhoto",{id:savedId});
-    if(isAdmin()&&state.pendingImportantDatePhoto)await api("uploadImportantDatePhoto",{id:savedId,fileName:state.pendingImportantDatePhoto.name,fullData:state.pendingImportantDatePhoto.fullData,thumbData:state.pendingImportantDatePhoto.thumbData});
+    let odiaMappingWarning="",photoWarning="";
+    if(browserOdiaOccurrence){
+      try { await api("saveAutomaticOdiaReminderMapping",{dateId:savedId,gregorianDate:browserOdiaOccurrence}); }
+      catch(mappingError){ odiaMappingWarning="The reminder was saved, but its next Odia occurrence could not be cached. Use Odia years to add it manually."; console.warn(mappingError); }
+    }
+    try {
+      if(isAdmin()&&state.removeImportantDatePhoto&&id)await api("deleteImportantDatePhoto",{id:savedId});
+      if(isAdmin()&&state.pendingImportantDatePhoto)await api("uploadImportantDatePhoto",{id:savedId,fileName:state.pendingImportantDatePhoto.name,fullData:state.pendingImportantDatePhoto.fullData,thumbData:state.pendingImportantDatePhoto.thumbData});
+    } catch(photoError) { photoWarning="The reminder was saved, but the photo could not be stored. Edit this reminder and try the photo again."; console.warn(photoError); }
     if($("dateDialog").open)$("dateDialog").close();
     await refreshData(); toast("Reminder saved for " + reminderBasisLabel(payload.reminderBasis) + ".","success");
+    if(odiaMappingWarning)toast(odiaMappingWarning,"error");
+    if(photoWarning)toast(photoWarning,"error");
   } catch(error){if(!handleSessionError(error))toast(friendlyApiError(error),"error");}
   finally{hideLoading();}
 }
@@ -1443,6 +1518,7 @@ async function saveSettings(event) {
     odiaFestivalAutoEnabled: $("settingOdiaFestivalAutoEnabled").checked,
     odiaPersonalAutoEnabled: $("settingOdiaPersonalAutoEnabled").checked,
     dashboardClockHighlight: safeClockHighlight($("settingDashboardClockHighlight").value),
+    parentsPortraitCaption: $("settingParentsPortraitCaption").value.trim(),
     memoryPhotoLimit: Number($("settingMemoryPhotoLimit").value),
     memoryUploadPolicy: $("settingMemoryUploadPolicy").value,
     memoryPrintPages: Number($("settingMemoryPrintPages").value),
@@ -1738,11 +1814,20 @@ function renderHome() {
   const upcoming = upcomingDates(30);
   const greetingParts = dateTimeParts(new Date()); let hour = Number(greetingParts.hour) || 0; if (String(greetingParts.dayPeriod).toUpperCase() === "PM" && hour < 12) hour += 12; if (String(greetingParts.dayPeriod).toUpperCase() === "AM" && hour === 12) hour = 0; const greeting = hour < 12 ? "Good morning" : hour < 17 ? "Good afternoon" : "Good evening";
   $("welcomeHeading").textContent = greeting + ", " + state.data.user.name.split(" ")[0] + ".";
+  renderParentsPortrait();
   $("monthSpend").textContent = money(expenseTotal); $("monthExpenseCount").textContent = plural(monthExpenses.length, "entry", "entries");
   $("monthIncome").textContent = money(incomeTotal); $("monthIncomeCount").textContent = plural(monthIncome.length, "entry", "entries");
   $("targetProgress").textContent = targetPct + "%"; $("targetCaption").textContent = state.data.targets.length ? plural(state.data.targets.length, "active target") : "No active targets";
   $("reminderCount").textContent = plural(state.data.importantDates.length, "reminder"); $("upcomingCount").textContent = upcoming.length + " in next 30 days"; $("photoCount").textContent = plural(state.data.photos.length, "photo"); $("experienceCount").textContent = plural(state.data.experiences.length, "story", "stories");
   renderFamilyMembers(); renderCategoryBars(monthExpenses); renderUpcoming(upcoming); renderActivity();
+}
+function parentsPortraitCaption() { return String(state.data && state.data.settings && state.data.settings.parentsPortraitCaption || "Our roots, our strength."); }
+function setParentsPortraitPreview(target, dataUrl) { target.innerHTML=dataUrl?'<img src="'+h(dataUrl)+'" alt="Parents portrait">':'<span>♡</span>'; }
+function renderParentsPortrait() {
+  const settings=state.data.settings||{},thumb=String(settings.parentsPortraitThumbData||"");
+  setParentsPortraitPreview($("parentsPortraitImage"),thumb);
+  $("parentsPortraitCard").classList.toggle("has-photo",!!thumb);
+  $("parentsPortraitCaption").textContent=parentsPortraitCaption();
 }
 function renderFamilyMembers() { const members=state.data.members||[]; $("homeMemberCount").textContent=plural(members.length,"member"); $("homeMemberList").innerHTML=members.map(function(member){return '<span class="family-chip">'+memberAvatarMarkup(member.id,"small")+'<span>'+h(member.name||"Family member")+'</span></span>';}).join(""); }
 function renderCategoryBars(items) {
@@ -2121,6 +2206,7 @@ function renderAdmin() {
   $("settingOdiaPersonalAutoEnabled").checked=String(state.data.settings.odiaPersonalAutoEnabled===undefined?"true":state.data.settings.odiaPersonalAutoEnabled).toLowerCase()!=="false";
   const odiaStatus=$("odiaCalendarAutoStatus"),last=state.data.settings.odiaFestivalLastRefreshAt||"",personalLast=state.data.settings.odiaPersonalLastRefreshAt||"",failure=state.data.settings.odiaFestivalLastError||state.data.settings.odiaPersonalLastError||"",statusTime=last||personalLast; odiaStatus.textContent=failure?("⚠ Cached dates retained · "+failure):statusTime?("● Automatic calendar current · "+new Date(statusTime).toLocaleString("en-IN",{dateStyle:"medium",timeStyle:"short"})):(state.data.odiaFestivals.length?"● Automatic festival cache ready":"Not refreshed yet"); odiaStatus.classList.toggle("success",!failure&&!!(statusTime||state.data.odiaFestivals.length));
   $("settingDashboardClockHighlight").value=dashboardClockHighlight(); previewDashboardClockHighlight(dashboardClockHighlight());
+  const parentsThumb=String(state.data.settings.parentsPortraitThumbData||""); state.pendingParentsPortrait=null; $("parentsPortraitFile").value=""; setParentsPortraitPreview($("adminParentsPortraitPreview"),parentsThumb); $("settingParentsPortraitCaption").value=parentsPortraitCaption(); $("removeParentsPortrait").classList.toggle("hidden",!parentsThumb); const parentsFolder=$("parentsPortraitFolderLink"),parentsFolderUrl=state.data.parentsPortraitFolderUrl||""; parentsFolder.classList.toggle("hidden",!parentsFolderUrl); if(parentsFolderUrl)parentsFolder.href=parentsFolderUrl;
   $("settingMemoryPhotoLimit").value=memoryPhotoLimit();
   $("settingMemoryUploadPolicy").value=state.data.settings.memoryUploadPolicy==="MEMBERS_WITH_ACCESS"?"MEMBERS_WITH_ACCESS":"ADMIN_ONLY";
   $("settingMemoryPrintPages").value=String(memoryPrintPages());
@@ -2270,6 +2356,28 @@ async function previewMemberPhoto() {
   } catch(error) { toast("This member photo could not be prepared.","error"); }
   finally { hideLoading(); }
 }
+async function previewParentsPortrait() {
+  const file=$("parentsPortraitFile").files[0]; if(!file)return;
+  if(!isAdmin())return toast("Only an administrator can change the parents’ portrait.","error");
+  if(!/^image\/(jpeg|png|webp)$/.test(file.type))return toast("Choose a JPG, PNG or WebP image.","error");
+  showLoading("Preparing parents’ portrait…");
+  try {
+    const full=await resizeImage(file,1400,.86),thumb=await resizeImage(file,300,.68);
+    if(thumb.length>48000)throw new Error("The portrait is still too large after resizing.");
+    state.pendingParentsPortrait={name:file.name.replace(/[^A-Za-z0-9._-]/g,"_"),fullData:full,thumbData:thumb};
+    setParentsPortraitPreview($("adminParentsPortraitPreview"),thumb);
+  } catch(error){toast(error.message||"This portrait could not be prepared.","error");}
+  finally{hideLoading();}
+}
+async function saveParentsPortrait() {
+  if(!state.pendingParentsPortrait)return toast("Choose your mother and father’s photo first.","error");
+  const portrait=state.pendingParentsPortrait;
+  await mutate("uploadParentsPortrait",{fileName:portrait.name,fullData:portrait.fullData,thumbData:portrait.thumbData,caption:$("settingParentsPortraitCaption").value.trim()},"Parents’ portrait updated.",null,"Saving parents’ portrait privately to Google Drive…");
+}
+async function deleteParentsPortrait() {
+  if(!window.confirm("Remove the parents’ portrait from the dashboard? The private Drive file will be moved to Trash."))return;
+  await mutate("deleteParentsPortrait",{},"Parents’ portrait removed.",null,"Removing parents’ portrait…");
+}
 function setImportantDatePhotoPreview(dataUrl) {
   const preview=$("importantDatePhotoPreview");
   preview.innerHTML=dataUrl?'<img src="'+h(dataUrl)+'" alt="Reminder photo preview">':'<span>◎</span>';
@@ -2320,5 +2428,15 @@ function receiveApiMessage(event) {
 function cleanupRequest(id){const req=pendingRequests.get(id);if(!req)return;clearTimeout(req.timeout);req.form.remove();req.iframe.remove();pendingRequests.delete(id);}
 function showLoading(text){$("loadingText").textContent=text||"Working…";$("loadingOverlay").classList.remove("hidden");$("mainContent").setAttribute("aria-busy","true");}
 function hideLoading(){$("loadingOverlay").classList.add("hidden");$("mainContent").removeAttribute("aria-busy");}
-function toast(message,type){const el=document.createElement("div");el.className="toast "+(type||"");el.setAttribute("role",type==="error"?"alert":"status");el.textContent=message;$("toastRegion").appendChild(el);setTimeout(function(){el.remove();},4200);}
-function friendlyApiError(error){const message=(error&&error.message)||"The change could not be saved.";return /Unknown dashboard action/i.test(message)?"Backend update required. Deploy the latest Code.gs as a New version, then refresh this page.":message;}
+function toast(message,type){
+  const text=String(message||""),now=Date.now(),region=$("toastRegion");
+  if(text===state.lastToastText&&now-state.lastToastAt<6000)return;
+  state.lastToastText=text; state.lastToastAt=now;
+  all(".toast",region).filter(function(item){return item.textContent===text;}).forEach(function(item){item.remove();});
+  const el=document.createElement("div");el.className="toast "+(type||"");el.setAttribute("role",type==="error"?"alert":"status");el.textContent=text;region.appendChild(el);setTimeout(function(){el.remove();},5200);
+}
+function friendlyApiError(error){
+  const message=(error&&error.message)||"The change could not be saved.";
+  if(/UrlFetchApp\.fetch|script\.external_request/i.test(message))return "The Odia calendar service could not be reached by this browser and the backend is not yet authorized for external calendar access. Deploy BE v1.0.36, run setupFamilyDashboard(), approve access, and try again. You may save English-only meanwhile.";
+  return /Unknown dashboard action/i.test(message)?"Backend update required. Deploy the latest Code.gs as a New version, then refresh this page.":message;
+}

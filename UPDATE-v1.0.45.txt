@@ -1,0 +1,27 @@
+MYFAMILY FRONTEND UPDATE — v1.0.45
+
+NEW PARENTS’ PORTRAIT
+
+- The dashboard welcome card now includes a tasteful gold-framed portrait area.
+- Until a photograph is uploaded, it shows a clean heart placeholder.
+- An administrator can upload, replace or remove the parents’ photograph under:
+  Administration → Parents’ portrait.
+- The administrator can also change the short caption displayed with the portrait.
+- The full photograph stays in a dedicated private Google Drive folder.
+- Only an optimized thumbnail is sent to the dashboard for fast loading.
+- On small mobile screens the portrait remains compact and the caption hides automatically.
+
+FAVICON
+
+- The distinctive four-brothers shield remains the browser favicon.
+- The figures have natural proportions and clearer interlocking hands/fingers.
+
+VERSION
+
+- Frontend: FE v1.0.45
+- Required backend: BE v1.0.36
+
+UPLOAD
+
+Upload every file in this folder directly to the root of the MyFamily GitHub repository.
+Do not upload the enclosing folder or ZIP file.

@@ -7,8 +7,11 @@
   <meta name="color-scheme" content="light">
   <meta name="description" content="Private family dashboard for expenses, goals, important dates and photos.">
   <title>Our Family Hub</title>
-  <link rel="icon" href="favicon.svg?v=1.0.34" type="image/svg+xml">
-  <link rel="stylesheet" href="styles.css?v=1.0.34">
+  <link rel="icon" href="favicon-32.png?v=1.0.45" type="image/png" sizes="32x32">
+  <link rel="apple-touch-icon" href="apple-touch-icon.png?v=1.0.45" sizes="180x180">
+  <link rel="manifest" href="site.webmanifest?v=1.0.45">
+  <meta name="theme-color" content="#5b43b5">
+  <link rel="stylesheet" href="styles.css?v=1.0.45">
 </head>
 <body>
   <a class="skip-link" href="#mainContent">Skip to dashboard content</a>
@@ -42,8 +45,8 @@
         </label>
         <div class="login-options">
           <label class="remember-row"><input id="rememberUsername" type="checkbox" checked> Save username on this device</label>
-          <span class="version-pair"><b id="loginFrontendVersion">FE v1.0.34</b><b id="loginBackendVersion">BE checking…</b></span>
-          <span id="loginVersion" class="legacy-version hidden" aria-hidden="true">Version 1.0.34</span>
+          <span class="version-pair"><b id="loginFrontendVersion">FE v1.0.45</b><b id="loginBackendVersion">BE checking…</b></span>
+          <span id="loginVersion" class="legacy-version hidden" aria-hidden="true">Version 1.0.45</span>
         </div>
         <button class="primary-button wide" type="submit">Sign in securely</button>
         <button id="repairSessionButton" class="repair-session-button" type="button">↻ Repair browser cache / session</button>
@@ -60,8 +63,8 @@
         <div class="brand-mark small">FH</div>
         <div>
           <strong id="sidebarFamilyName">Our Family Hub</strong>
-          <span class="sidebar-version-pair"><b id="sidebarFrontendVersion">FE v1.0.34</b><b id="sidebarBackendVersion">BE checking…</b></span>
-          <b id="sidebarVersion" class="legacy-version hidden" aria-hidden="true">v1.0.34</b>
+          <span class="sidebar-version-pair"><b id="sidebarFrontendVersion">FE v1.0.45</b><b id="sidebarBackendVersion">BE checking…</b></span>
+          <b id="sidebarVersion" class="legacy-version hidden" aria-hidden="true">v1.0.45</b>
         </div>
       </div>
       <nav class="main-nav" aria-label="Main navigation">
@@ -104,11 +107,15 @@
       <div class="content-area">
         <section id="view-home" class="view active">
           <div class="hero-card">
-            <div>
+            <div class="hero-copy">
               <span class="soft-label">FAMILY AT A GLANCE</span>
               <h3 id="welcomeHeading">Good to see you.</h3>
               <p>Track shared spending, celebrate progress and never miss a special day.</p>
             </div>
+            <figure id="parentsPortraitCard" class="parents-portrait-card" aria-label="Parents portrait">
+              <div id="parentsPortraitImage" class="parents-portrait-image"><span>♡</span></div>
+              <figcaption id="parentsPortraitCaption">Our roots, our strength.</figcaption>
+            </figure>
             <button class="light-button" data-open="expenseDialog" data-module="EXPENSES">＋ Add expenditure</button>
           </div>
 
@@ -319,6 +326,15 @@
                   <span id="clockHighlightPreview" class="clock-highlight-preview">◆ Date &amp; time preview</span>
                   <small id="clockHighlightHelp">This administrator colour is used for the live date/time capsule on every member’s dashboard.</small>
                 </div>
+                <fieldset class="memory-admin-settings parents-portrait-settings"><legend>Parents’ portrait</legend>
+                  <div class="parents-portrait-editor">
+                    <div id="adminParentsPortraitPreview" class="parents-portrait-admin-preview"><span>♡</span></div>
+                    <label class="upload-drop compact-upload"><input id="parentsPortraitFile" type="file" accept="image/jpeg,image/png,image/webp"><span>▧</span><strong>Choose parents’ photo</strong><small>One photo containing both parents works best · stored privately in Google Drive</small></label>
+                  </div>
+                  <label>Portrait caption<input id="settingParentsPortraitCaption" maxlength="80" placeholder="Our roots, our strength."></label>
+                  <div class="parents-portrait-admin-actions"><a id="parentsPortraitFolderLink" class="text-button hidden" target="_blank" rel="noopener">Open portrait folder</a><button id="removeParentsPortrait" class="danger-button hidden" type="button">Remove photo</button><button id="saveParentsPortrait" class="primary-button" type="button">Save / replace photo</button></div>
+                  <small>The optimized portrait appears only in the dashboard welcome card. The full image remains in the owner’s private Drive folder.</small>
+                </fieldset>
                 <fieldset class="memory-admin-settings"><legend>Family Memories control</legend>
                   <label>Maximum photos<input id="settingMemoryPhotoLimit" type="number" min="1" max="24" step="1" required></label>
                   <label>Who can add photos<select id="settingMemoryUploadPolicy"><option value="ADMIN_ONLY">Administrators only</option><option value="MEMBERS_WITH_ACCESS">Members having Photos access</option></select></label>
@@ -564,7 +580,7 @@
       <p id="importantDateConversion" class="calendar-conversion" role="status">Choose a date to see both calendar formats.</p>
       <div class="check-row"><label><input id="importantDateRepeat" type="checkbox"> Repeat every year</label></div>
       <div id="importantDateAdminControls" class="admin-date-controls hidden">
-        <label>Receive and display this yearly reminder by<select id="importantDateReminderBasis"><option value="GREGORIAN">English date only</option><option value="ODIA">Odia calendar tithi only</option><option value="GREGORIAN_ODIA">Both English + Odia</option><option value="SAKA" hidden>Legacy saved Saka date</option><option value="GREGORIAN_SAKA" hidden>Legacy English + Saka</option><option value="SAKA_ODIA" hidden>Legacy Saka + Odia</option><option value="ALL" hidden>Legacy all calendars</option></select><small>Example: enter Simadri’s English birth date as 20-10-1983, then choose English, Odia, or both. For an English original date, its Bhubaneswar sunrise tithi is identified automatically. “Odia years” remains available for a printed Kohinoor correction.</small></label>
+        <label>Receive and display this yearly reminder by<select id="importantDateReminderBasis"><option value="GREGORIAN">English date only</option><option value="ODIA">Odia calendar tithi only</option><option value="GREGORIAN_ODIA">Both English + Odia</option><option value="SAKA" hidden>Legacy saved Saka date</option><option value="GREGORIAN_SAKA" hidden>Legacy English + Saka</option><option value="SAKA_ODIA" hidden>Legacy Saka + Odia</option><option value="ALL" hidden>Legacy all calendars</option></select><small>Example: enter Simadri’s English birth date as 20-10-1983, then choose English, Odia, or both. The page securely identifies its Bhubaneswar sunrise tithi before saving, including on mobile. “Odia years” remains available for a printed Kohinoor correction.</small></label>
         <div class="occasion-photo-editor">
           <div id="importantDatePhotoPreview" class="occasion-photo-preview"><span>◎</span></div>
           <label class="upload-drop compact-upload"><input id="importantDatePhotoFile" type="file" accept="image/jpeg,image/png,image/webp"><span>▧</span><strong>Add person or occasion photo</strong><small>Administrator only · stored in private Google Drive folder</small></label>
@@ -724,7 +740,7 @@
   <div id="loadingOverlay" class="loading-overlay hidden" role="status" aria-live="polite" aria-atomic="true"><div class="spinner" aria-hidden="true"></div><p id="loadingText">Working…</p></div>
   <div id="toastRegion" class="toast-region" role="status" aria-live="polite" aria-atomic="true"></div>
 
-  <script src="config.js?v=1.0.34" defer></script>
-  <script src="app.js?v=1.0.34" defer></script>
+  <script src="config.js?v=1.0.45" defer></script>
+  <script src="app.js?v=1.0.45" defer></script>
 </body>
 </html>

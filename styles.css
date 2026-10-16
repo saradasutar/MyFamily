@@ -873,7 +873,7 @@ th { box-shadow:inset 0 -1px #e6e4ef; }
 @media (max-width:1000px) { .expense-overview-cards { grid-template-columns:repeat(2,minmax(0,1fr)); }.expense-visual-grid { grid-template-columns:1fr; } }
 @media (max-width:620px) { .expense-overview-dashboard { padding:14px; border-radius:17px; }.expense-overview-cards { grid-template-columns:1fr; }.expense-overview-card { min-height:82px; }.expense-donut-layout { grid-template-columns:125px minmax(0,1fr); gap:10px; }.expense-donut { width:120px; }.expense-share-members { grid-template-columns:1fr; }.settlement-card { grid-template-columns:auto minmax(0,1fr) auto; }.settlement-card .settlement-arrow,.settlement-card > .member-avatar { display:none; }.settlement-card > b { grid-column:2; }.settlement-card > button { grid-column:3; grid-row:1 / span 2; }.expense-hero-heading { align-items:flex-start; }.expense-period-badge { max-width:130px; white-space:normal; text-align:center; } }
 
-/* v1.0.34 English, Saka and Odia calendar system */
+/* v1.0.35 English, Saka and Odia calendar system */
 .four-fields { display:grid; grid-template-columns:repeat(4,minmax(0,1fr)); gap:10px; }
 .odia-panjika-fields { margin:6px 0 2px; padding:13px; border:1px solid #efb9cd; border-radius:14px; background:linear-gradient(135deg,#fff7fb,#fff9eb); }
 .odia-panjika-fields small { color:#7b6170; }
@@ -891,3 +891,29 @@ th { box-shadow:inset 0 -1px #e6e4ef; }
 .odia-mapping-dialog { width:min(720px,calc(100vw - 24px)); }.odia-panjika-banner { padding:11px 13px; border:1px solid #edb2c9; border-radius:12px; color:#8f2e58; background:linear-gradient(135deg,#fff0f6,#fff7e8); font-weight:850; }.odia-mapping-list { display:grid; gap:8px; margin-top:14px; }.odia-mapping-row { display:flex; align-items:center; justify-content:space-between; gap:12px; padding:10px 12px; border:1px solid #e4dfeb; border-radius:12px; background:#fff; }.odia-mapping-row strong,.odia-mapping-row small { display:block; }.odia-mapping-row small { margin-top:3px; color:var(--muted); font-size:.62rem; }.compact-empty { padding:13px; }
 @media (max-width:800px) { .four-fields { grid-template-columns:1fr 1fr; }.original-calendar-pair.three-calendars { grid-template-columns:1fr; } }
 @media (max-width:520px) { .four-fields { grid-template-columns:1fr; }.odia-mapping-row { align-items:flex-start; flex-direction:column; }.odia-mapping-row button { width:100%; } }
+
+/* v1.0.45 administrator-controlled parents portrait */
+.hero-card { display:grid; grid-template-columns:minmax(0,1fr) auto auto; }
+.hero-copy { position:relative; z-index:1; min-width:0; }
+.parents-portrait-card { position:relative; z-index:2; display:grid; grid-template-columns:72px minmax(92px,140px); align-items:center; gap:9px; margin:0; padding:6px 10px 6px 6px; border:1px solid rgba(255,255,255,.28); border-radius:999px; background:rgba(28,22,83,.22); box-shadow:inset 0 1px 0 rgba(255,255,255,.16); backdrop-filter:blur(8px); }
+.parents-portrait-image { width:70px; height:70px; display:grid; place-items:center; overflow:hidden; border:3px solid #f8d879; border-radius:50%; color:#ffe6a3; background:linear-gradient(145deg,#34296e,#7257c4); box-shadow:0 0 0 2px rgba(255,255,255,.22),0 7px 18px rgba(21,17,59,.2); font-size:1.75rem; }
+.parents-portrait-image img { width:100%; height:100%; display:block; object-fit:cover; object-position:center; }
+.parents-portrait-card figcaption { max-width:140px; color:#fff7d5; font-family:Georgia,serif; font-size:.69rem; font-weight:700; font-style:italic; line-height:1.25; text-align:left; }
+.parents-portrait-card:not(.has-photo) { opacity:.86; }
+.parents-portrait-editor { display:grid; grid-template-columns:150px minmax(0,1fr); align-items:stretch; gap:13px; }
+.parents-portrait-admin-preview { width:150px; height:150px; display:grid; place-items:center; overflow:hidden; border:5px solid #f2d98d; border-radius:50%; color:#fff; background:linear-gradient(145deg,#5743a8,#31a19c); box-shadow:0 10px 25px rgba(57,43,112,.17); font-size:3rem; }
+.parents-portrait-admin-preview img { width:100%; height:100%; display:block; object-fit:cover; object-position:center; }
+.parents-portrait-editor .upload-drop { min-height:150px; }
+.parents-portrait-admin-actions { display:flex; align-items:center; justify-content:flex-end; flex-wrap:wrap; gap:8px; }
+@media (max-width:760px) {
+  .hero-card { grid-template-columns:minmax(0,1fr) auto; align-items:center; }
+  .parents-portrait-card { grid-column:2; grid-row:1; grid-template-columns:58px; padding:5px; }
+  .parents-portrait-image { width:56px; height:56px; }
+  .parents-portrait-card figcaption { display:none; }
+  .hero-card > button { grid-column:1 / -1; width:100%; }
+}
+@media (max-width:540px) {
+  .parents-portrait-editor { grid-template-columns:1fr; }
+  .parents-portrait-admin-preview { margin:auto; }
+  .parents-portrait-admin-actions > * { flex:1; text-align:center; }
+}

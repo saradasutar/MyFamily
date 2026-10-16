@@ -2,7 +2,7 @@
 
 const CONFIG = window.FAMILY_DASHBOARD_CONFIG || {};
 const PLACEHOLDER_URL = "PASTE_YOUR_APPS_SCRIPT_WEB_APP_URL_HERE";
-const FRONTEND_VERSION = "1.0.48";
+const FRONTEND_VERSION = "1.0.49";
 const SAVED_USERNAME_KEY = "familyDashboardUsername";
 const SESSION_TOKEN_KEY = "familyDashboardToken";
 const DEFAULT_IDLE_TIMEOUT_MINUTES = 60;
@@ -41,6 +41,7 @@ const state = {
   subcategoryEditIds: new Set(),
   clockTimer: null,
   odiaMappingDateId: "",
+  smartPasteResult: null,
   lastToastText: "",
   lastToastAt: 0
 };
@@ -598,6 +599,9 @@ function bindDialogs() {
     button.addEventListener("click", function () { prepareNewDialog(button.dataset.open); openDialog(button.dataset.open); });
   });
   all("[data-close]").forEach(function (button) { button.addEventListener("click", function () { button.closest("dialog").close(); }); });
+  all("[data-smart-paste]").forEach(function (button) {
+    button.addEventListener("click", function () { openSmartPaste(button.dataset.smartPaste || "auto"); });
+  });
   all("dialog").forEach(function (dialog) {
     dialog.addEventListener("click", function (event) {
       const box = dialog.getBoundingClientRect();
@@ -632,6 +636,11 @@ function bindDialogs() {
   $("expenseCategoryAddForm").addEventListener("submit", addExpenseCategoryDraft);
   $("saveExpenseCategories").addEventListener("click", saveExpenseCategories);
   $("odiaMappingForm").addEventListener("submit", saveOdiaReminderMapping);
+  $("smartPasteAnalyze").addEventListener("click", analyzeSmartPaste);
+  $("smartPasteClear").addEventListener("click", resetSmartPaste);
+  $("smartPasteUse").addEventListener("click", applySmartPasteResult);
+  $("smartPasteType").addEventListener("change", function () { if ($("smartPasteText").value.trim()) analyzeSmartPaste(); });
+  $("smartPasteText").addEventListener("paste", function () { setTimeout(function () { if ($("smartPasteText").value.trim()) analyzeSmartPaste(); }, 80); });
 }
 function openDialog(id) { const dialog = $(id); if (dialog && !dialog.open) dialog.showModal(); }
 function prepareNewDialog(id) {
@@ -658,6 +667,201 @@ function prepareNewDialog(id) {
   if (id === "experienceDialog") $("experienceDialogTitle").textContent = "Add experience";
   if (id === "diaryDialog") $("diaryDialogTitle").textContent = "Write diary entry";
   if (id === "expenseCategoryDialog") { state.categoryDraft = JSON.parse(JSON.stringify(expenseCategoryConfig())); state.categoryEditIds.clear(); state.subcategoryEditIds.clear(); $("newExpenseCategoryName").value = ""; renderExpenseCategoryManager(); }
+}
+
+function openSmartPaste(preferredType) {
+  resetSmartPaste();
+  const choice = String(preferredType || "auto").toUpperCase();
+  $("smartPasteType").value = ["EXPENSE", "EVENT"].indexOf(choice) >= 0 ? choice : "AUTO";
+  openDialog("smartPasteDialog");
+  setTimeout(function () { $("smartPasteText").focus(); }, 60);
+}
+
+function resetSmartPaste() {
+  state.smartPasteResult = null;
+  $("smartPasteText").value = "";
+  $("smartPastePreview").classList.add("hidden");
+  $("smartPasteFieldList").innerHTML = "";
+  $("smartPasteWarning").textContent = "";
+  $("smartPasteWarning").classList.add("hidden");
+  $("smartPasteUse").disabled = true;
+}
+
+function smartPasteValidIso(year, month, day) {
+  const y = Number(year), m = Number(month), d = Number(day), date = new Date(y, m - 1, d);
+  if (y < 1900 || y > 2200 || m < 1 || m > 12 || d < 1 || date.getFullYear() !== y || date.getMonth() !== m - 1 || date.getDate() !== d) return "";
+  return [String(y).padStart(4, "0"), String(m).padStart(2, "0"), String(d).padStart(2, "0")].join("-");
+}
+
+function smartPasteDate(text) {
+  const source = String(text || ""), lower = source.toLowerCase(), now = new Date();
+  if (/\btomorrow\b/.test(lower)) { now.setDate(now.getDate() + 1); return [now.getFullYear(), String(now.getMonth() + 1).padStart(2, "0"), String(now.getDate()).padStart(2, "0")].join("-"); }
+  if (/\btoday\b/.test(lower)) return todayIso();
+  let match = source.match(/\b(20\d{2}|19\d{2})[\/.\-](\d{1,2})[\/.\-](\d{1,2})\b/);
+  if (match) return smartPasteValidIso(match[1], match[2], match[3]);
+  match = source.match(/\b(\d{1,2})[\/.\-](\d{1,2})[\/.\-](20\d{2}|19\d{2})\b/);
+  if (match) return smartPasteValidIso(match[3], match[2], match[1]);
+  const months = { jan:1,january:1,feb:2,february:2,mar:3,march:3,apr:4,april:4,may:5,jun:6,june:6,jul:7,july:7,aug:8,august:8,sep:9,sept:9,september:9,oct:10,october:10,nov:11,november:11,dec:12,december:12 };
+  match = lower.match(/\b(\d{1,2})(?:st|nd|rd|th)?\s+([a-z]{3,9})[,]?\s+(20\d{2}|19\d{2})\b/);
+  if (match && months[match[2]]) return smartPasteValidIso(match[3], months[match[2]], match[1]);
+  match = lower.match(/\b([a-z]{3,9})\s+(\d{1,2})(?:st|nd|rd|th)?[,]?\s+(20\d{2}|19\d{2})\b/);
+  if (match && months[match[1]]) return smartPasteValidIso(match[3], months[match[1]], match[2]);
+  return "";
+}
+
+function smartPasteAmount(text) {
+  const source = String(text || "");
+  let match = source.match(/(?:₹|\brs\.?|\binr\b)\s*[:=\-]?\s*([0-9][0-9,]*(?:\.\d{1,2})?)/i);
+  if (!match) match = source.match(/\b(?:amount|total|paid|spent|cost|fare|bill)\s*(?:is|was|of|:|=|\-)?\s*(?:₹|rs\.?|inr)?\s*([0-9][0-9,]*(?:\.\d{1,2})?)/i);
+  return match ? Number(match[1].replace(/,/g, "")) : 0;
+}
+
+function smartPasteTime(text) {
+  const match = String(text || "").match(/\b(?:at\s+)?(\d{1,2}[:.]\d{2}\s*(?:a\.?m\.?|p\.?m\.?)?|\d{1,2}\s*(?:a\.?m\.?|p\.?m\.?))\b/i);
+  return match ? match[1].replace(".", ":").replace(/\./g, "").toUpperCase() : "";
+}
+
+function smartPasteCleanValue(value) {
+  return String(value || "").replace(/^[\s:;,.\-]+|[\s:;,.\-]+$/g, "").split(/\s+(?:on|via|using|through|from|for|dated)\s+/i)[0].trim().slice(0, 100);
+}
+
+function smartPastePayee(text) {
+  const source = String(text || "");
+  let match = source.match(/\b(?:merchant|vendor|payee|send\s+to)\s*[:=\-]\s*([^\n;]+)/i);
+  if (!match) match = source.match(/\b(?:paid|sent|transferred)(?:\s+(?:₹|rs\.?|inr)?\s*[0-9][0-9,.]*)?\s+to\s+([^\n;,]+)/i);
+  return match ? smartPasteCleanValue(match[1]) : "";
+}
+
+function smartPasteAccount(text) {
+  const source = String(text || "");
+  let match = source.match(/\b(?:from\s+(?:account|acct)|account|acct)\s*[:=\-]?\s*([^\n;,]+)/i);
+  if (!match) match = source.match(/\b(?:via|using|through|by)\s+(UPI|cash|credit card|debit card|[^\n;,]+)/i);
+  return match ? smartPasteCleanValue(match[1]) : "";
+}
+
+function smartPasteCategory(text) {
+  const lower = String(text || "").toLowerCase(), categories = activeExpenseCategories();
+  const groups = [
+    ["Travel", ["travel","trip","flight","train","hotel","ticket","tour"]], ["Transport", ["fuel","petrol","diesel","taxi","cab","uber","ola","parking","vehicle","bus"]],
+    ["Food", ["food","grocery","groceries","restaurant","dining","vegetable","milk","snack"]], ["Health", ["doctor","hospital","medicine","medical","clinic","test","pharmacy"]],
+    ["Utilities", ["electricity","water bill","gas bill","internet","mobile bill","broadband","dth"]], ["Education", ["school","college","tuition","course","book","fees","stationery"]],
+    ["Home", ["house","home","cement","contractor","repair","maintenance","furniture","rent"]], ["Tax & insurance", ["tax","insurance","khajana"]],
+    ["Shopping", ["shopping","clothes","clothing","electronics","household","gift"]], ["Entertainment", ["movie","subscription","event","hobby"]],
+    ["Family transfer", ["family transfer","monthly support","loan","emergency support","sent to brother"]]
+  ];
+  const direct = categories.find(function (category) { return lower.indexOf(String(category.name).toLowerCase()) >= 0; });
+  if (direct) return direct.name;
+  for (let index = 0; index < groups.length; index += 1) {
+    if (!groups[index][1].some(function (word) { return lower.indexOf(word) >= 0; })) continue;
+    const match = categories.find(function (category) { return normalize(category.name) === normalize(groups[index][0]); });
+    if (match) return match.name;
+  }
+  const other = categories.find(function (category) { return normalize(category.name) === "other"; });
+  return other ? other.name : (categories[0] ? categories[0].name : "Other");
+}
+
+function smartPasteSubcategory(category, text) {
+  const lower = String(text || "").toLowerCase(), names = expenseSubcategoryNames(category, false);
+  const direct = names.find(function (name) { return lower.indexOf(String(name).toLowerCase()) >= 0; });
+  if (direct) return direct;
+  const aliases = [["Fuel",["petrol","diesel","fuel"]],["Taxi",["taxi","cab","uber","ola"]],["Tickets",["ticket","flight","train"]],["Hotel",["hotel","stay","accommodation"]],["Medicine",["medicine","pharmacy"]],["Doctor",["doctor","clinic"]],["Groceries",["grocery","groceries"]],["Electricity",["electricity","power bill"]],["Internet",["internet","broadband"]],["Maintenance",["maintenance","repair"]],["General",[]]];
+  for (let index = 0; index < aliases.length; index += 1) {
+    if (aliases[index][1].some(function (word) { return lower.indexOf(word) >= 0; })) {
+      const match = names.find(function (name) { return normalize(name) === normalize(aliases[index][0]); });
+      if (match) return match;
+    }
+  }
+  return names[0] || "General";
+}
+
+function smartPasteEventType(text) {
+  const lower = String(text || "").toLowerCase();
+  if (lower.indexOf("death anniversary") >= 0) return "Death anniversary";
+  if (lower.indexOf("birthday") >= 0 || lower.indexOf("birth day") >= 0) return "Birthday";
+  if (lower.indexOf("anniversary") >= 0) return "Anniversary";
+  if (/appointment|meeting|doctor|interview/.test(lower)) return "Appointment";
+  if (/renew|expiry|expires/.test(lower)) return "Renewal";
+  if (/payment|pay by|due/.test(lower)) return "Payment";
+  return "Other";
+}
+
+function smartPasteEventTitle(text) {
+  const lines = String(text || "").split(/\n+/).map(function (line) { return line.replace(/^\s*[-*•\d.)]+\s*/, "").trim(); }).filter(Boolean);
+  const preferred = lines.find(function (line) { return /flight|train|hotel|trip|travel|visit|meeting|appointment|birthday|anniversary|renewal|departure|arrival/i.test(line); }) || lines[0] || "New event";
+  return preferred.replace(/\b(?:20\d{2}|19\d{2})[\/.\-]\d{1,2}[\/.\-]\d{1,2}\b/g, "").replace(/\b\d{1,2}[\/.\-]\d{1,2}[\/.\-](?:20\d{2}|19\d{2})\b/g, "").replace(/\s{2,}/g, " ").replace(/[,:;\-\s]+$/g, "").slice(0, 100) || "New event";
+}
+
+function parseSmartPaste(text, preferredType) {
+  const source = String(text || "").replace(/\r/g, "").trim(), lower = source.toLowerCase();
+  if (!source) return null;
+  const amount = smartPasteAmount(source), date = smartPasteDate(source), time = smartPasteTime(source);
+  const expenseScore = (amount ? 3 : 0) + ((source.indexOf("₹") >= 0 || /\brs\.?\b|\binr\b/.test(lower)) ? 2 : 0) + (/paid|spent|expense|payment|bill|receipt|upi|cash|account|merchant/.test(lower) ? 3 : 0);
+  const eventScore = (date ? 2 : 0) + (/itinerary|flight|train|hotel|travel|trip|departure|arrival|visit|meeting|appointment|birthday|anniversary|check.?in|boarding/.test(lower) ? 4 : 0) + (time ? 1 : 0);
+  const selected = String(preferredType || "AUTO").toUpperCase(), kind = selected === "EXPENSE" || selected === "EVENT" ? selected : (expenseScore > eventScore ? "EXPENSE" : "EVENT");
+  if (kind === "EXPENSE") {
+    const category = smartPasteCategory(source), payee = smartPastePayee(source), account = smartPasteAccount(source), warnings = [];
+    if (!amount) warnings.push("No amount was recognised. Enter it before saving.");
+    if (!date) warnings.push("No complete date was recognised. Today has been inserted—please check it.");
+    if (!payee) warnings.push("Recipient / merchant was not clear.");
+    if (!account) warnings.push("Payment account or mode was not clear.");
+    return { kind:kind, confidence:Math.min(98, 28 + (amount?24:0) + (date?18:0) + (payee?14:0) + (account?8:0) + (category?8:0)), warnings:warnings, fields:{ date:date || todayIso(), amount:amount || "", sentTo:payee, fromAccount:account, category:category, subcategory:smartPasteSubcategory(category, source), reason:source.slice(0,500) } };
+  }
+  const eventType = smartPasteEventType(source), title = smartPasteEventTitle(source), eventWarnings = [];
+  if (!date) eventWarnings.push("No complete date was recognised. Today has been inserted—please check it.");
+  if (!time) eventWarnings.push("No time was recognised; add it to Notes if required.");
+  const annual = ["Birthday","Anniversary","Death anniversary"].indexOf(eventType) >= 0;
+  return { kind:kind, confidence:Math.min(98, 35 + (date?30:0) + (title?20:0) + (time?8:0)), warnings:eventWarnings, fields:{ date:date || todayIso(), title:title, eventType:eventType, occasionLabel:annual ? title + " as per English calendar" : (/itinerary|travel|trip|flight|train|hotel/i.test(source) ? "Travel itinerary" : "Imported from pasted text"), repeatYearly:annual, notes:(time ? "Time: " + time + "\n" : "") + source.slice(0,260) } };
+}
+
+function analyzeSmartPaste() {
+  const text = $("smartPasteText").value.trim();
+  if (!text) return toast("Paste an expense, itinerary or event message first.", "error");
+  const result = parseSmartPaste(text, $("smartPasteType").value);
+  if (!result) return;
+  state.smartPasteResult = result;
+  const labels = result.kind === "EXPENSE" ? [["Date",result.fields.date],["Amount",result.fields.amount ? money(result.fields.amount) : "Needs entry"],["Send to",result.fields.sentTo || "Needs entry"],["From account",result.fields.fromAccount || "Needs entry"],["Category",result.fields.category + " / " + result.fields.subcategory],["Reason",result.fields.reason]] : [["Date",result.fields.date],["Title",result.fields.title],["Type",result.fields.eventType],["Repeat",result.fields.repeatYearly ? "Every year" : "One time"],["Details",result.fields.notes]];
+  $("smartPastePreviewTitle").textContent = result.kind === "EXPENSE" ? "Expense detected" : "Itinerary / event detected";
+  $("smartPasteConfidence").textContent = result.confidence + "% confidence";
+  $("smartPasteConfidence").classList.toggle("needs-review", result.confidence < 75);
+  $("smartPasteFieldList").innerHTML = labels.map(function (item) { return '<div><span>'+h(item[0])+'</span><strong>'+h(item[1])+'</strong></div>'; }).join("");
+  $("smartPasteWarning").textContent = result.warnings.join(" ");
+  $("smartPasteWarning").classList.toggle("hidden", !result.warnings.length);
+  $("smartPastePreview").classList.remove("hidden");
+  $("smartPasteUse").disabled = false;
+  $("smartPasteUse").textContent = result.kind === "EXPENSE" ? "Review in Expenditure form" : "Review in Important Date form";
+}
+
+function applySmartPasteResult() {
+  const result = state.smartPasteResult;
+  if (!result) return;
+  $("smartPasteDialog").close();
+  if (result.kind === "EXPENSE") {
+    prepareNewDialog("expenseDialog");
+    $("expenseDate").value = result.fields.date;
+    $("expenseAmount").value = result.fields.amount;
+    fillExpenseCategorySelect($("expenseCategory"), result.fields.category);
+    fillExpenseSubcategorySelect($("expenseSubcategory"), result.fields.category, result.fields.subcategory);
+    $("expenseSendTo").value = result.fields.sentTo;
+    $("expenseFromAccount").value = result.fields.fromAccount;
+    $("expenseReason").value = result.fields.reason;
+    $("expenseDialogTitle").textContent = "Review pasted expenditure";
+    openDialog("expenseDialog");
+    setTimeout(function () { (result.fields.amount ? (result.fields.sentTo ? (result.fields.fromAccount ? $("expenseReason") : $("expenseFromAccount")) : $("expenseSendTo")) : $("expenseAmount")).focus(); }, 80);
+    return;
+  }
+  prepareNewDialog("dateDialog");
+  $("importantDateCalendarSystem").value = "GREGORIAN";
+  $("importantDateValue").value = result.fields.date;
+  $("importantDateTitle").value = result.fields.title;
+  $("importantDateOccasion").value = result.fields.occasionLabel;
+  $("importantDateType").value = result.fields.eventType;
+  $("importantDateRepeat").checked = result.fields.repeatYearly;
+  $("importantDateReminderBasis").value = "GREGORIAN";
+  $("importantDateNotes").value = result.fields.notes.slice(0,300);
+  $("dateDialogTitle").textContent = "Review pasted itinerary / event";
+  syncImportantDateCalendar();
+  updateImportantDateConversion();
+  openDialog("dateDialog");
 }
 
 function syncExpenseEntryType() {

@@ -14,11 +14,11 @@
   <meta name="theme-color" content="#5b43b5">
   <link rel="preconnect" href="https://script.google.com">
   <link rel="dns-prefetch" href="//script.google.com">
-  <link rel="preload" href="styles.css?v=1.0.45-family-logo" as="style">
-  <link rel="preload" href="config.js?v=1.0.48" as="script">
-  <link rel="preload" href="app.js?v=1.0.48" as="script">
+  <link rel="preload" href="styles.css?v=1.0.49-smart-paste" as="style">
+  <link rel="preload" href="config.js?v=1.0.49" as="script">
+  <link rel="preload" href="app.js?v=1.0.49" as="script">
   <link rel="preload" href="family-unity-v1048-192.png" as="image" type="image/png" fetchpriority="high">
-  <link rel="stylesheet" href="styles.css?v=1.0.45-family-logo">
+  <link rel="stylesheet" href="styles.css?v=1.0.49-smart-paste">
 </head>
 <body>
   <a class="skip-link" href="#mainContent">Skip to dashboard content</a>
@@ -52,8 +52,8 @@
         </label>
         <div class="login-options">
           <label class="remember-row"><input id="rememberUsername" type="checkbox" checked> Save username on this device</label>
-          <span class="version-pair"><b id="loginFrontendVersion">FE v1.0.48</b><b id="loginBackendVersion">BE checking…</b></span>
-          <span id="loginVersion" class="legacy-version hidden" aria-hidden="true">Version 1.0.48</span>
+          <span class="version-pair"><b id="loginFrontendVersion">FE v1.0.49</b><b id="loginBackendVersion">BE checking…</b></span>
+          <span id="loginVersion" class="legacy-version hidden" aria-hidden="true">Version 1.0.49</span>
         </div>
         <button class="primary-button wide" type="submit">Sign in securely</button>
         <button id="repairSessionButton" class="repair-session-button" type="button">↻ Repair browser cache / session</button>
@@ -70,8 +70,8 @@
         <div class="brand-mark small family-bond-brand"><img src="family-unity-v1048-192.png" alt="MyFamily bond emblem" width="46" height="46" decoding="async" loading="lazy"></div>
         <div>
           <strong id="sidebarFamilyName">Our Family Hub</strong>
-          <span class="sidebar-version-pair"><b id="sidebarFrontendVersion">FE v1.0.48</b><b id="sidebarBackendVersion">BE checking…</b></span>
-          <b id="sidebarVersion" class="legacy-version hidden" aria-hidden="true">v1.0.48</b>
+          <span class="sidebar-version-pair"><b id="sidebarFrontendVersion">FE v1.0.49</b><b id="sidebarBackendVersion">BE checking…</b></span>
+          <b id="sidebarVersion" class="legacy-version hidden" aria-hidden="true">v1.0.49</b>
         </div>
       </div>
       <nav class="main-nav" aria-label="Main navigation">
@@ -103,6 +103,7 @@
         </div>
         <time id="dashboardDateTime" class="dashboard-date-time" aria-label="Current date and time">◆ Loading date and time…</time>
         <div class="topbar-actions">
+          <button class="search-pill smart-paste-top-button" type="button" data-smart-paste="auto">✦ <span>Smart paste</span></button>
           <button id="globalSearchButton" class="search-pill">⌕ <span>Search</span></button>
           <div class="user-chip">
             <span id="userAvatar" class="avatar">F</span>
@@ -181,7 +182,7 @@
         <section id="view-expenses" class="view">
           <div class="section-toolbar">
             <div><p class="section-intro">Record paid, preplanned and regular expenditure with category and subcategory.</p></div>
-            <div class="toolbar-actions"><button id="createMajorPlan" class="secondary-button hidden" data-open="majorPlanDialog">▣ New major plan</button><button id="manageExpenseCategoriesQuick" class="secondary-button category-quick-button hidden" data-open="expenseCategoryDialog">⚙ Categories &amp; subcategories</button><button id="exportExpenses" class="secondary-button">⇩ Export CSV</button><button id="printExpenses" class="secondary-button">⌑ Print</button><button class="secondary-button" data-open="bulkExpenseDialog">⇧ Import old records</button><button class="secondary-button" data-open="recurringExpenseDialog">↻ Add regular payment</button><button id="addPreplannedExpense" class="secondary-button">◷ Add preplanned</button><button class="primary-button" data-open="expenseDialog">＋ Add paid expenditure</button></div>
+            <div class="toolbar-actions"><button class="smart-paste-button" type="button" data-smart-paste="expense">✦ Paste expense text</button><button id="createMajorPlan" class="secondary-button hidden" data-open="majorPlanDialog">▣ New major plan</button><button id="manageExpenseCategoriesQuick" class="secondary-button category-quick-button hidden" data-open="expenseCategoryDialog">⚙ Categories &amp; subcategories</button><button id="exportExpenses" class="secondary-button">⇩ Export CSV</button><button id="printExpenses" class="secondary-button">⌑ Print</button><button class="secondary-button" data-open="bulkExpenseDialog">⇧ Import old records</button><button class="secondary-button" data-open="recurringExpenseDialog">↻ Add regular payment</button><button id="addPreplannedExpense" class="secondary-button">◷ Add preplanned</button><button class="primary-button" data-open="expenseDialog">＋ Add paid expenditure</button></div>
           </div>
           <section class="expense-overview-dashboard" aria-label="Expenditure overview">
             <div class="expense-hero-heading"><div><p class="eyebrow">FAMILY EXPENSES</p><h2>Expenses &amp; payments</h2><p>Budget, trends and family-wise spending in one clear view.</p></div><span id="expenseOverviewPeriod" class="expense-period-badge">This month</span></div>
@@ -254,7 +255,7 @@
         <section id="view-dates" class="view">
           <div class="section-toolbar">
             <div><p class="section-intro">Birthdays, anniversaries, renewals, appointments and other reminders.</p></div>
-            <button class="primary-button" data-open="dateDialog">＋ Add important date</button>
+            <div class="toolbar-actions"><button class="smart-paste-button" type="button" data-smart-paste="event">✦ Paste itinerary / event</button><button class="primary-button" data-open="dateDialog">＋ Add important date</button></div>
           </div>
           <div class="filter-bar dates-filter">
             <label>Type<select id="dateTypeFilter"><option value="">All types</option><option>Birthday</option><option>Anniversary</option><option>Death anniversary</option><option>Appointment</option><option>Renewal</option><option>Payment</option><option>Other</option></select></label>
@@ -444,6 +445,21 @@
       <div id="stickyPinnedCanvas" class="sticky-pinned-canvas"></div>
     </div>
   </div>
+
+  <dialog id="smartPasteDialog" class="modal smart-paste-dialog">
+    <div class="modal-head"><div><p class="eyebrow">QUICK CAPTURE</p><h3>Smart Paste</h3><small>Turn a receipt, payment message or itinerary into an editable dashboard entry.</small></div><button class="modal-close" type="button" data-close>×</button></div>
+    <div class="smart-paste-privacy"><span>◆</span><div><strong>Private on this device</strong><small>The text is analysed inside your browser and is not sent to an external AI service.</small></div></div>
+    <label>What are you pasting?<select id="smartPasteType"><option value="AUTO">Detect automatically</option><option value="EXPENSE">Expense / payment</option><option value="EVENT">Itinerary / event / reminder</option></select></label>
+    <label>Paste text<textarea id="smartPasteText" rows="8" maxlength="6000" spellcheck="true" placeholder="Example: Paid ₹2,450 to ABC Hardware on 16/10/2026 via HDFC for cement&#10;&#10;or&#10;&#10;Train to Bhubaneswar on 18 Oct 2026 at 7:30 AM, boarding from Cuttack"></textarea></label>
+    <div class="smart-paste-actions"><button id="smartPasteClear" class="secondary-button" type="button">Clear</button><button id="smartPasteAnalyze" class="smart-paste-button" type="button">✦ Read pasted text</button></div>
+    <section id="smartPastePreview" class="smart-paste-preview hidden" aria-live="polite">
+      <div class="smart-paste-preview-head"><div><p class="eyebrow">EDITABLE PREVIEW</p><h4 id="smartPastePreviewTitle">Detected entry</h4></div><span id="smartPasteConfidence" class="smart-paste-confidence">Review</span></div>
+      <div id="smartPasteFieldList" class="smart-paste-field-list"></div>
+      <p id="smartPasteWarning" class="smart-paste-warning hidden"></p>
+    </section>
+    <div class="modal-actions"><button type="button" class="secondary-button" data-close>Cancel</button><button id="smartPasteUse" type="button" class="primary-button" disabled>Use extracted fields</button></div>
+    <p class="smart-paste-footnote">You will review the normal Expenditure or Important Date form before anything is saved.</p>
+  </dialog>
 
   <dialog id="expenseDialog" class="modal">
     <form id="expenseForm" method="dialog">
@@ -751,12 +767,12 @@
   <div id="loadingOverlay" class="loading-overlay hidden" role="status" aria-live="polite" aria-atomic="true"><div class="spinner" aria-hidden="true"></div><p id="loadingText">Working…</p></div>
   <div id="toastRegion" class="toast-region" role="status" aria-live="polite" aria-atomic="true"></div>
 
-  <script src="config.js?v=1.0.48" defer></script>
-  <script src="app.js?v=1.0.48" defer></script>
+  <script src="config.js?v=1.0.49" defer></script>
+  <script src="app.js?v=1.0.49" defer></script>
   <script>
     if ("serviceWorker" in navigator) {
       window.addEventListener("load", function () {
-        navigator.serviceWorker.register("./sw.js?v=1.0.48-icon1", { scope: "./" }).catch(function () {});
+        navigator.serviceWorker.register("./sw.js?v=1.0.49-smart-paste", { scope: "./" }).catch(function () {});
       }, { once: true });
     }
   </script>

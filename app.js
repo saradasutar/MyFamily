@@ -2,7 +2,7 @@
 
 const CONFIG = window.FAMILY_DASHBOARD_CONFIG || {};
 const PLACEHOLDER_URL = "PASTE_YOUR_APPS_SCRIPT_WEB_APP_URL_HERE";
-const FRONTEND_VERSION = "1.0.53";
+const FRONTEND_VERSION = "1.0.56";
 const SAVED_USERNAME_KEY = "familyDashboardUsername";
 const SESSION_TOKEN_KEY = "familyDashboardToken";
 const DEFAULT_IDLE_TIMEOUT_MINUTES = 60;
@@ -31,8 +31,6 @@ const state = {
   lastActivityResetAt: 0,
   lastKeepAliveAt: 0,
   stickyResize: null,
-  stickySideOpenId: "",
-  stickySideTimer: null,
   inlineExpenseId: "",
   inlineRecurringId: "",
   recurringEditAll: false,
@@ -162,8 +160,8 @@ function dayParts(iso) {
   const months = ["JAN", "FEB", "MAR", "APR", "MAY", "JUN", "JUL", "AUG", "SEP", "OCT", "NOV", "DEC"];
   return { day: Number(p[2]) || "—", month: months[(Number(p[1]) || 1) - 1] };
 }
-const SAKA_MONTHS = ["Chaitra","Vaishakha","Jyeshtha","Ashadha","Shravana","Bhadra","Ashvina","Kartika","Agrahayana","Pausha","Magha","Phalguna"];
 const ODIA_MONTHS = {AUTO:"ଭୁବନେଶ୍ୱର ସୂର୍ୟ୍ୟୋଦୟ ତିଥି",CHAITA:"ଚୈତ୍ର",BAISAKHA:"ବୈଶାଖ",JYESTHA:"ଜ୍ୟେଷ୍ଠ",ASADHA:"ଆଷାଢ଼",SRABANA:"ଶ୍ରାବଣ",BHADRA:"ଭାଦ୍ରବ",ASWINA:"ଆଶ୍ୱିନ",KARTIKA:"କାର୍ତ୍ତିକ",MARGASIRA:"ମାର୍ଗଶିର",PAUSA:"ପୌଷ",MAGHA:"ମାଘ",PHALGUNA:"ଫାଲ୍ଗୁନ"};
+const ODIA_LUNAR_MONTH_BY_SUN_SIGN = ["BAISAKHA","JYESTHA","ASADHA","SRABANA","BHADRA","ASWINA","KARTIKA","MARGASIRA","PAUSA","MAGHA","PHALGUNA","CHAITA"];
 const ODIA_TITHIS = ["ପ୍ରତିପଦା","ଦ୍ୱିତୀୟା","ତୃତୀୟା","ଚତୁର୍ଥୀ","ପଞ୍ଚମୀ","ଷଷ୍ଠୀ","ସପ୍ତମୀ","ଅଷ୍ଟମୀ","ନବମୀ","ଦଶମୀ","ଏକାଦଶୀ","ଦ୍ୱାଦଶୀ","ତ୍ରୟୋଦଶୀ","ଚତୁର୍ଦ୍ଦଶୀ"];
 const ODIA_PERSONAL_PANCHANG_API = "https://shastrapanchangam.com/api/v1/city/bhubaneswar/";
 function isGregorianLeapYear(year) { return year % 4 === 0 && (year % 100 !== 0 || year % 400 === 0); }
@@ -182,10 +180,6 @@ function sakaToGregorian(year,month,day,clamp) {
   const gregorianYear=year+78,lengths=sakaMonthLengths(gregorianYear); if(clamp)day=Math.max(1,Math.min(day,lengths[month-1]));
   if(day<1||day>lengths[month-1])return ""; let offset=day-1; for(let i=1;i<month;i++)offset+=lengths[i-1];
   const date=new Date(Date.UTC(gregorianYear,2,isGregorianLeapYear(gregorianYear)?21:22)); date.setUTCDate(date.getUTCDate()+offset); return date.toISOString().slice(0,10);
-}
-function formatSakaDate(value) {
-  const saka=typeof value==="string"?gregorianToSaka(value):value; if(!saka)return "—";
-  return saka.day+" "+SAKA_MONTHS[saka.month-1]+" "+saka.year+" Saka";
 }
 function formatOdiaPanjika(item, mappedYear) {
   if(!item||!item.odiaMonth)return "Not recorded";
@@ -218,6 +212,16 @@ function degreesNormal(value){value=Number(value)%360;return value<0?value+360:v
 function sinDegrees(value){return Math.sin(Number(value)*Math.PI/180);}
 function cosDegrees(value){return Math.cos(Number(value)*Math.PI/180);}
 function atan2Degrees(y,x){return Math.atan2(y,x)*180/Math.PI;}
+function sunLongitudeAtInstant(instant){
+  const julianDay=instant.getTime()/86400000+2440587.5,d=julianDay-2451543.5;
+  const perihelion=282.9404+4.70935e-5*d,eccentricity=.016709-1.151e-9*d,meanAnomaly=degreesNormal(356.047+.9856002585*d);
+  const eccentricAnomaly=meanAnomaly+180/Math.PI*eccentricity*sinDegrees(meanAnomaly)*(1+eccentricity*cosDegrees(meanAnomaly));
+  return degreesNormal(atan2Degrees(Math.sqrt(1-eccentricity*eccentricity)*sinDegrees(eccentricAnomaly),cosDegrees(eccentricAnomaly)-eccentricity)+perihelion);
+}
+function odiaSolarYearForGregorian(iso){
+  const date=new Date(String(iso).slice(0,10)+"T00:00:00Z"),month=date.getUTCMonth()+1,day=date.getUTCDate();
+  return date.getUTCFullYear()-((month>4||(month===4&&day>=14))?593:594);
+}
 function calculateBhubaneswarSunriseTithi(iso){
   const valid=validIsoDate.apply(null,String(iso||"").split("-"));
   if(!valid)throw new Error("Enter a valid English date.");
@@ -233,8 +237,28 @@ function calculateBhubaneswarSunriseTithi(iso){
   const moonEclipticX=moonRadius*(cosDegrees(node)*cosDegrees(moonOrbitalLongitude)-sinDegrees(node)*sinDegrees(moonOrbitalLongitude)*cosDegrees(inclination)),moonEclipticY=moonRadius*(sinDegrees(node)*cosDegrees(moonOrbitalLongitude)+cosDegrees(node)*sinDegrees(moonOrbitalLongitude)*cosDegrees(inclination));
   let moonLongitude=atan2Degrees(moonEclipticY,moonEclipticX);const moonMeanLongitude=degreesNormal(node+moonPerigee+moonMeanAnomaly),elongation=degreesNormal(moonMeanLongitude-sunMeanLongitude),argumentLatitude=degreesNormal(moonMeanLongitude-node);
   moonLongitude+=-1.274*sinDegrees(moonMeanAnomaly-2*elongation)+.658*sinDegrees(2*elongation)-.186*sinDegrees(sunMeanAnomaly)-.059*sinDegrees(2*moonMeanAnomaly-2*elongation)-.057*sinDegrees(moonMeanAnomaly-2*elongation+sunMeanAnomaly)+.053*sinDegrees(moonMeanAnomaly+2*elongation)+.046*sinDegrees(2*elongation-sunMeanAnomaly)+.041*sinDegrees(moonMeanAnomaly-sunMeanAnomaly)-.035*sinDegrees(elongation)-.031*sinDegrees(moonMeanAnomaly+sunMeanAnomaly)-.015*sinDegrees(2*argumentLatitude-2*elongation)+.011*sinDegrees(moonMeanAnomaly-4*elongation);
-  const index=Math.floor(degreesNormal(moonLongitude-sunLongitude)/12);
-  return {tithi:index,tithi_name:index===29?"Amavasai":["Pratipada","Dwitiya","Tritiya","Chaturthi","Panchami","Shashti","Saptami","Ashtami","Navami","Dashami","Ekadashi","Dwadashi","Trayodashi","Chaturdashi","Pournami"][index%15],paksha:index>=15?"Krishna":"Shukla",calculation:"Bhubaneswar sunrise astronomical fallback"};
+  const phaseAngle=degreesNormal(moonLongitude-sunLongitude),index=Math.floor(phaseAngle/12);
+  const estimatedNewMoon=new Date(instant.getTime()-(phaseAngle/12.19075)*86400000);
+  const newMoonJulianYear=(estimatedNewMoon.getTime()/86400000+2440587.5-2451545)/365.2425;
+  const lahiriAyanamsa=23.8531+.013969*newMoonJulianYear;
+  const siderealSunAtNewMoon=degreesNormal(sunLongitudeAtInstant(estimatedNewMoon)-lahiriAyanamsa);
+  const odiaMonth=ODIA_LUNAR_MONTH_BY_SUN_SIGN[Math.floor(siderealSunAtNewMoon/30)];
+  return {tithi:index,tithi_name:index===29?"Amavasai":["Pratipada","Dwitiya","Tritiya","Chaturthi","Panchami","Shashti","Saptami","Ashtami","Navami","Dashami","Ekadashi","Dwadashi","Trayodashi","Chaturdashi","Pournami"][index%15],paksha:index>=15?"Krishna":"Shukla",odiaYear:odiaSolarYearForGregorian(valid),odiaMonth:odiaMonth,calculation:"Bhubaneswar sunrise astronomical fallback"};
+}
+function automaticOdiaDetailsFromGregorian(iso){
+  const calculated=calculateBhubaneswarSunriseTithi(iso),index=panchangTithiIndex(calculated);
+  if(index<0)throw new Error("The Odia tithi could not be calculated.");
+  return {odiaYear:String(calculated.odiaYear),odiaMonth:calculated.odiaMonth,odiaPaksha:index>=15?"KRISHNA":"SHUKLA",odiaTithi:index%15+1};
+}
+function automaticGregorianDatesFromOdia(odiaYear,odiaMonth,odiaPaksha,odiaTithi){
+  const year=Number(odiaYear),tithi=Number(odiaTithi),month=String(odiaMonth||"").toUpperCase(),paksha=String(odiaPaksha||"").toUpperCase();
+  if(!Number.isInteger(year)||year<1||!ODIA_MONTHS[month]||month==="AUTO"||!["SHUKLA","KRISHNA"].includes(paksha)||!Number.isInteger(tithi)||tithi<1||tithi>15)return [];
+  const gregorianStartYear=year+593,start=new Date(Date.UTC(gregorianStartYear,3,1)),end=new Date(Date.UTC(gregorianStartYear+1,4,1)),matches=[];
+  for(let cursor=new Date(start);cursor<end;cursor.setUTCDate(cursor.getUTCDate()+1)){
+    const iso=cursor.toISOString().slice(0,10),details=automaticOdiaDetailsFromGregorian(iso);
+    if(Number(details.odiaYear)===year&&details.odiaMonth===month&&details.odiaPaksha===paksha&&Number(details.odiaTithi)===tithi)matches.push(iso);
+  }
+  return matches;
 }
 async function fetchBrowserPanchangDay(iso, cache) {
   if(cache[iso])return cache[iso];
@@ -282,31 +306,44 @@ function syncImportantDateCalendar() {
   updateImportantDateConversion();
 }
 function updateImportantDateConversion() {
-  const system=$("importantDateCalendarSystem").value; let gregorian="",saka=null;
+  const system=$("importantDateCalendarSystem").value; let gregorian="",saka=null,automaticOdia=null,reverseMatches=[];
   if(system==="SAKA"){
     gregorian=sakaToGregorian($("importantDateSakaYear").value,$("importantDateSakaMonth").value,$("importantDateSakaDay").value,false);
     if(gregorian){saka=gregorianToSaka(gregorian);$("importantDateValue").value=gregorian;}
-  } else if(system==="ODIA"){gregorian=$("importantDateOdiaEquivalent").value;saka=gregorianToSaka(gregorian);if(gregorian)$("importantDateValue").value=gregorian;}
+  } else if(system==="ODIA"){
+    reverseMatches=automaticGregorianDatesFromOdia($("importantDateOdiaYear").value,$("importantDateOdiaMonth").value,$("importantDateOdiaPaksha").value,$("importantDateOdiaTithi").value);
+    gregorian=reverseMatches[0]||$("importantDateOdiaEquivalent").value;
+    if(reverseMatches.length){$("importantDateOdiaEquivalent").value=gregorian;$("importantDateValue").value=gregorian;}
+    saka=gregorianToSaka(gregorian);
+  }
   else {gregorian=$("importantDateValue").value;saka=gregorianToSaka(gregorian);if(saka){$("importantDateSakaYear").value=saka.year;$("importantDateSakaMonth").value=String(saka.month);$("importantDateSakaDay").value=saka.day;}}
-  let odiaPreview="",automaticOdia=null;
+  let odiaPreview="";
   if(gregorian){
     if(system==="ODIA")odiaPreview=formatOdiaPanjika({odiaYear:$("importantDateOdiaYear").value,odiaMonth:$("importantDateOdiaMonth").value,odiaPaksha:$("importantDateOdiaPaksha").value,odiaTithi:$("importantDateOdiaTithi").value});
     else try{
-      const calculated=calculateBhubaneswarSunriseTithi(gregorian),index=panchangTithiIndex(calculated);
-      automaticOdia={odiaPaksha:index>=15?"KRISHNA":"SHUKLA",odiaTithi:index%15+1};
-      odiaPreview=formatOdiaPanjika({odiaMonth:"AUTO",odiaPaksha:automaticOdia.odiaPaksha,odiaTithi:automaticOdia.odiaTithi});
+      automaticOdia=automaticOdiaDetailsFromGregorian(gregorian);
+      odiaPreview=formatOdiaPanjika(automaticOdia);
+      if(system==="GREGORIAN"){
+        $("importantDateOdiaYear").value=automaticOdia.odiaYear;
+        $("importantDateOdiaMonth").value=automaticOdia.odiaMonth;
+        $("importantDateOdiaPaksha").value=automaticOdia.odiaPaksha;
+        $("importantDateOdiaTithi").value=automaticOdia.odiaTithi;
+        $("importantDateOdiaEquivalent").value=gregorian;
+      }
     }catch(error){odiaPreview="";automaticOdia=null;}
   }
-  const autoPanel=$("importantDateAutoOdiaPanel"),autoValue=$("importantDateAutoOdiaValue");
-  const showAutomatic=system==="GREGORIAN"&&!!gregorian&&!!automaticOdia;
-  if(autoPanel)autoPanel.classList.toggle("hidden",!showAutomatic);
-  if(autoValue)autoValue.textContent=showAutomatic?odiaPreview:"—";
-  if(showAutomatic){
-    $("importantDateConversion").textContent="English date: "+formatEnglishDate(gregorian)+" · Odia equivalent calculated automatically. No second date entry is required.";
-  }else if(gregorian&&saka&&system==="ODIA"){
-    $("importantDateConversion").textContent="Verified English equivalent: "+formatEnglishDate(gregorian)+(odiaPreview?" · Entered Odia Panjika date: "+odiaPreview:"");
+  const dualPanel=$("importantDateDualCalendar"),englishValue=$("importantDateEnglishResult"),odiaValue=$("importantDateOdiaResult");
+  const showDual=!!gregorian&&!!odiaPreview;
+  if(dualPanel)dualPanel.classList.toggle("hidden",!showDual);
+  if(englishValue)englishValue.textContent=showDual?formatEnglishDate(gregorian):"—";
+  if(odiaValue)odiaValue.textContent=showDual?odiaPreview:"—";
+  if(showDual&&system==="GREGORIAN"){
+    $("importantDateConversion").textContent="English → Odia conversion completed automatically. No second date entry is required.";
+  }else if(showDual&&system==="ODIA"){
+    $("importantDateConversion").textContent="Odia → English conversion completed automatically"+(reverseMatches.length>1?". This tithi occurs on more than one sunrise date; the first date is selected and may be corrected below.":". The English equivalent has been filled below.");
   }else{
-    $("importantDateConversion").textContent=system==="SAKA"?"Enter a valid saved legacy date.":system==="ODIA"?"Use this manual mode only to override the automatic result with a verified Kohinoor/Panjika entry.":"Choose an English date; the corresponding Odia paksha and tithi will appear automatically.";
+    if(dualPanel)dualPanel.classList.add("hidden");
+    $("importantDateConversion").textContent=system==="SAKA"?"Enter a valid saved legacy date.":system==="ODIA"?"Enter Odia Sal, month, paksha and tithi; the English equivalent will appear automatically.":"Choose an English date; the full Odia calendar result will appear automatically.";
   }
 }
 function syncRecurringFrequency() { const custom=$("recurringExpenseFrequency").value==="CUSTOM"; $("recurringCustomIntervalLabel").classList.toggle("hidden",!custom); $("recurringExpenseIntervalMonths").required=custom; }
@@ -326,6 +363,40 @@ function debounce(callback, delay) {
   };
 }
 function prefersReducedMotion() { return !!(window.matchMedia && window.matchMedia("(prefers-reduced-motion: reduce)").matches); }
+let interfaceRevealObserver = null;
+function prepareInterfaceReveal(root) {
+  if (!root) return;
+  const nodes = all(".hero-card,.family-strip,.summary-card,.panel,.expense-overview-dashboard,.expense-statement-intro,.target-card,.date-card,.experience-card,.diary-entry,.photo-card,.major-plan-card", root);
+  all("img", root).forEach(function (image) {
+    if (image.closest(".parents-portrait-image,.avatar,.brand-mark")) return;
+    if (!image.hasAttribute("loading")) image.loading = "lazy";
+    if (!image.hasAttribute("decoding")) image.decoding = "async";
+  });
+  if (prefersReducedMotion() || !("IntersectionObserver" in window)) {
+    nodes.forEach(function (node) { node.classList.add("ui-reveal", "is-visible"); });
+    return;
+  }
+  if (!interfaceRevealObserver) {
+    interfaceRevealObserver = new IntersectionObserver(function (entries) {
+      entries.forEach(function (entry) {
+        if (!entry.isIntersecting) return;
+        entry.target.classList.add("is-visible");
+        interfaceRevealObserver.unobserve(entry.target);
+      });
+    }, { threshold: .06, rootMargin: "0px 0px -28px 0px" });
+  }
+  nodes.forEach(function (node, index) {
+    if (node.classList.contains("is-visible")) return;
+    node.classList.add("ui-reveal");
+    node.style.setProperty("--reveal-delay", Math.min(index, 7) * 42 + "ms");
+    interfaceRevealObserver.observe(node);
+  });
+}
+function scheduleInterfaceReveal(view) {
+  const root = $("view-" + view);
+  if (!root) return;
+  requestAnimationFrame(function () { prepareInterfaceReveal(root); });
+}
 function safeClockHighlight(value) { return /^#[0-9a-f]{6}$/i.test(String(value || "")) ? String(value).toLowerCase() : "#f0a7cb"; }
 function mixHex(color, target, amount) {
   const source = safeClockHighlight(color).slice(1), destination = target.replace("#", "");
@@ -392,6 +463,7 @@ function stopDashboardClock() { if (state.clockTimer) clearTimeout(state.clockTi
 
 function init() {
   const now = new Date();
+  if (!prefersReducedMotion()) document.body.classList.add("js-motion");
   all("button:not([type])").forEach(function (button) { button.type = "button"; });
   renderVersionLabels();
   loadSavedUsername();
@@ -510,8 +582,7 @@ function stopIdleTimer() { if (state.idleTimer) clearTimeout(state.idleTimer); s
 
 function clearLocalSession() {
   stopIdleTimer();
-  clearTimeout(state.stickySideTimer);
-  state.token = ""; state.data = null; state.stickyView = "active"; state.stickySideOpenId = ""; state.lastKeepAliveAt = 0;
+  state.token = ""; state.data = null; state.stickyView = "active"; state.lastKeepAliveAt = 0;
   state.lastActivityResetAt = 0;
   sessionStorage.removeItem(SESSION_TOKEN_KEY);
   localStorage.removeItem(SESSION_TOKEN_KEY);
@@ -566,7 +637,6 @@ function normalizeBootstrapData(data) { const result = data || {}; ["members","e
 function majorPlanById(id) { return (state.data && state.data.majorPlans || []).find(function (item) { return item.id === id; }); }
 function majorPlanPhaseById(id) { return (state.data && state.data.majorPlanPhases || []).find(function (item) { return item.id === id; }); }
 function majorPlanPhases(planId, includeArchived) { return (state.data && state.data.majorPlanPhases || []).filter(function (item) { return item.majorPlanId === planId && (includeArchived || item.active !== false); }).sort(function (a,b) { return Number(a.sortOrder || 0) - Number(b.sortOrder || 0); }); }
-function activeMajorPlans() { return (state.data && state.data.majorPlans || []).filter(function (item) { return String(item.status || "ACTIVE").toUpperCase() === "ACTIVE"; }); }
 function majorPlanName(id) { const plan=majorPlanById(id); return plan ? plan.name : ""; }
 function majorPlanPhaseName(id) { const phase=majorPlanPhaseById(id); return phase ? phase.name : ""; }
 function majorPlanOptions(selected, includeClosed) {
@@ -654,6 +724,9 @@ function bindDialogs() {
     button.addEventListener("click", function () { openSmartPaste(button.dataset.smartPaste || "auto"); });
   });
   all("dialog").forEach(function (dialog) {
+    all("[data-close]", dialog).forEach(function (button) {
+      if (!button.hasAttribute("aria-label")) button.setAttribute("aria-label", "Close dialog");
+    });
     dialog.addEventListener("click", function (event) {
       const box = dialog.getBoundingClientRect();
       if (event.clientX < box.left || event.clientX > box.right || event.clientY < box.top || event.clientY > box.bottom) dialog.close();
@@ -678,7 +751,13 @@ function bindDialogs() {
   $("importantDateCalendarSystem").addEventListener("change", function(){if(!$("importantDateId").value&&isAdmin())$("importantDateReminderBasis").value="GREGORIAN_ODIA";syncImportantDateCalendar();});
   $("importantDateValue").addEventListener("input", updateImportantDateConversion);
   ["importantDateSakaYear","importantDateSakaMonth","importantDateSakaDay"].forEach(function(id){$(id).addEventListener("input",updateImportantDateConversion);$(id).addEventListener("change",updateImportantDateConversion);});
-  ["importantDateOdiaYear","importantDateOdiaMonth","importantDateOdiaPaksha","importantDateOdiaTithi","importantDateOdiaEquivalent"].forEach(function(id){$(id).addEventListener("input",updateImportantDateConversion);$(id).addEventListener("change",updateImportantDateConversion);});
+  ["importantDateOdiaYear","importantDateOdiaMonth","importantDateOdiaPaksha","importantDateOdiaTithi"].forEach(function(id){$(id).addEventListener("input",updateImportantDateConversion);$(id).addEventListener("change",updateImportantDateConversion);});
+  $("importantDateOdiaEquivalent").addEventListener("change",function(){
+    if($("importantDateCalendarSystem").value!=="ODIA"||!this.value)return;
+    $("importantDateValue").value=this.value;
+    $("importantDateEnglishResult").textContent=formatEnglishDate(this.value);
+    $("importantDateConversion").textContent="Verified English-date correction applied by the administrator.";
+  });
   $("expenseMajorPlan").addEventListener("change", function () { fillMajorPlanLinkSelects($("expenseMajorPlan"), $("expenseMajorPlanPhase"), $("expenseMajorPlan").value, "", false); });
   $("recurringExpenseMajorPlan").addEventListener("change", function () { fillMajorPlanLinkSelects($("recurringExpenseMajorPlan"), $("recurringExpenseMajorPlanPhase"), $("recurringExpenseMajorPlan").value, "", false); });
   $("addMajorPlanPhase").addEventListener("click", function () { addMajorPlanPhaseRow(); });
@@ -1237,8 +1316,6 @@ function bindActions() {
     if (action === "grow-sticky") changeStickyLayout(id, "grow");
     if (action === "shrink-sticky") changeStickyLayout(id, "shrink");
     if (action === "auto-fit-sticky") autoFitStickyNote(id);
-    if (action === "open-side-sticky") openSideSticky(id);
-    if (action === "close-side-sticky") closeSideSticky();
     if (["edit-category","finish-edit-category","delete-category","move-category-up","move-category-down","toggle-category-active","add-subcategory","edit-subcategory","finish-edit-subcategory","delete-subcategory","move-subcategory-up","move-subcategory-down","toggle-subcategory-active"].indexOf(action) >= 0) handleCategoryManagerAction(action, button);
   });
   document.addEventListener("input", function (event) {
@@ -1312,7 +1389,6 @@ function openStickyBoard(view) {
   $("stickyBoard").classList.remove("hidden");
   $("stickyBoardShade").classList.remove("hidden");
   $("stickyPinnedLayer").classList.add("hidden");
-  clearTimeout(state.stickySideTimer); state.stickySideOpenId = "";
   $("stickyLauncher").classList.add("hidden");
   $("stickyLauncher").setAttribute("aria-expanded", "true");
   renderStickyNotes();
@@ -1568,10 +1644,6 @@ function normalizeImportedColumns(columns) {
 function isImportedHeading(columns) { const first=normalize(columns[0]),second=normalize(columns[1]); return (/amt|amount/.test(first)&&/date/.test(second)) || (first==="sl no"&&/amt|amount/.test(second)); }
 function isMarkdownDivider(columns) { return columns.length > 1 && columns.every(function (value) { return /^\s*:?-{3,}:?\s*$/.test(String(value)); }); }
 
-function parseCsvLine(line) {
-  return parseDelimitedRows(String(line || ""), ",")[0].map(function(value){return value.trim();});
-}
-
 function parseImportedDate(value) {
   const text = String(value || "").trim().replace(/,/g, ""); let match;
   if ((match = text.match(/^(\d{4})-(\d{1,2})-(\d{1,2})$/))) return validIsoDate(match[1], match[2], match[3]);
@@ -1708,18 +1780,6 @@ async function saveQuickStickyNote(event) {
     state.stickyView = "active"; renderStickyNotes();
     const addPanel = $("stickyQuickForm").closest("details"); if (addPanel) addPanel.open = false;
   }
-}
-
-function prepareStickyNoteDialog(noteType) {
-  if (!canWriteStickyNotes()) return toast("Your administrator has not allowed sticky-note writing for your account.", "error");
-  const type = noteType === "REMINDER" ? "REMINDER" : "TARGET";
-  $("stickyNoteForm").reset();
-  $("stickyNoteId").value = "";
-  $("stickyNoteType").value = type;
-  configureStickyTypeChoices();
-  setStickyColour("yellow");
-  $("stickyNoteDialogTitle").textContent = type === "TARGET" ? "Add target note" : "Add reminder note";
-  openDialog("stickyNoteDialog");
 }
 
 function configureStickyTypeChoices() {
@@ -1895,34 +1955,18 @@ function editStickyNote(id) {
 async function completeStickyNote(id) {
   if (!canWriteStickyNotes()) return toast("Your administrator has not allowed sticky-note writing for your account.", "error");
   if (!window.confirm("Mark this sticky note complete? It will move to the separate Sticky Note Diary sheet.")) return;
-  state.stickySideOpenId = "";
   await mutate("completeStickyNote", { id: id }, "Completed and moved to the Sticky Note Diary sheet.");
 }
 function changeStickyLayout(id, change) {
   const note = state.data.stickyNotes.find(function (item) { return item.id === id; }); if (!note) return;
   if (change === "collapse" && note.pinned) return toast("This note is pinned open. Unpin it before collapsing.", "error");
   if (change === "collapse") note.collapsed = !note.collapsed;
-  if (change === "pin") { note.pinned = !note.pinned; note.collapsed = false; state.stickySideOpenId = ""; }
+  if (change === "pin") { note.pinned = !note.pinned; note.collapsed = false; }
   if (change === "grow") { note.width = Math.min(520, Number(note.width || 280) + 40); note.height = Math.min(500, Number(note.height || 220) + 35); }
   if (change === "shrink") { note.width = Math.max(220, Number(note.width || 280) - 40); note.height = Math.max(160, Number(note.height || 220) - 35); }
   renderStickyNotes();
   queueStickyLayoutSave(note);
   if (change === "pin") { toast(note.pinned ? "Pinned open above the dashboard. Close the panel, then drag Move note to reposition it." : "Unpinned and returned to the right-side sticky panel.", "success"); }
-}
-
-function openSideSticky(id) {
-  state.stickySideOpenId = id;
-  renderStickyPinnedLayer();
-  scheduleSideStickyCollapse();
-}
-
-function closeSideSticky() {
-  clearTimeout(state.stickySideTimer); state.stickySideOpenId = ""; renderStickyPinnedLayer();
-}
-
-function scheduleSideStickyCollapse(delay) {
-  clearTimeout(state.stickySideTimer);
-  state.stickySideTimer = setTimeout(function () { state.stickySideOpenId = ""; renderStickyPinnedLayer(); }, Number(delay) || 8000);
 }
 
 function autoFitStickyNote(id) {
@@ -2043,6 +2087,7 @@ function renderView(view) {
   if (view === "experiences") renderExperiences();
   if (view === "diary") renderDiary();
   if (view === "admin" && isAdmin()) renderAdmin();
+  scheduleInterfaceReveal(view);
 }
 function applyAccessUI() {
   all("[data-module]").forEach(function (el) { el.classList.toggle("hidden", !hasModuleAccess(el.dataset.module)); });
@@ -2165,6 +2210,8 @@ function openMajorPlanReport(id,autoPrint) {
 }
 function filteredExpenses() { const month=$("expenseMonth").value,status=$("expenseStatusFilter").value,member=$("expenseMemberFilter").value,category=$("expenseCategoryFilter").value,subcategory=$("expenseSubcategoryFilter").value,majorPlanId=$("expenseMajorPlanFilter").value,recipient=$("expenseSendToFilter").value,account=$("expenseAccountFilter").value,q=normalize($("expenseSearch").value); return state.data.expenses.map(normalizeExpense).filter(function(x){return (!month||String(x.date).slice(0,7)===month)&&(!status||x.status===status)&&(!member||expenseMemberId(x)===member)&&(!category||x.category===category)&&(!subcategory||x.subcategory===subcategory)&&(!majorPlanId||x.majorPlanId===majorPlanId)&&(!recipient||x.sentTo===recipient)&&(!account||x.fromAccount===account)&&(!q||normalize([x.status,memberName(expenseMemberId(x)),x.category,x.subcategory,majorPlanName(x.majorPlanId),majorPlanPhaseName(x.majorPlanPhaseId),x.sentTo,x.fromAccount,x.reason,x.date].join(" ")).includes(q));}); }
 function startInlineExpenseEdit(id) {
+  const item=state.data.expenses.find(function(entry){return entry.id===id;});
+  if(!item||!mayDelete(item))return toast("Only the person who added this expenditure or an administrator can edit it.","error");
   state.inlineExpenseId = id;
   renderExpenses();
   setTimeout(function () { const row = document.querySelector('tr[data-inline-expense-id="'+CSS.escape(id)+'"]'); const input = row && row.querySelector("input"); if (input) { input.focus(); input.select(); } }, 20);
@@ -2186,7 +2233,8 @@ function renderInlineExpenseRow(item) {
 function renderExpenseDisplayRow(item) {
   const plan=majorPlanName(item.majorPlanId),phase=majorPlanPhaseName(item.majorPlanPhaseId);
   const shared=item.splitMethod&&item.splitMethod!=="PERSONAL"?'<small class="expense-split-line">'+h(item.splitMethod==="EQUAL"?'Equal split':'Custom split')+' · paid by '+h(memberName(item.paidByMemberId))+'</small>':'';
-  return '<tr class="expense-'+h(item.status.toLowerCase())+'"><td><div class="expense-description-cell"><span class="expense-row-icon">₹</span><span><strong>'+h(item.reason||item.sentTo||"Expenditure")+'</strong><small>Paid to '+h(item.sentTo||"—")+' · From '+h(item.fromAccount||"—")+'</small>'+shared+'</span></div></td><td><strong>'+h(formatDate(item.date))+'</strong><span class="expense-status '+h(item.status.toLowerCase())+'">'+(item.status==="PLANNED"?'PREPLANNED':'PAID')+'</span></td><td><span class="expense-category-chip">'+h(item.category)+'</span><small class="expense-subcategory-line">'+h(item.subcategory)+'</small></td><td>'+memberIdentityMarkup(expenseMemberId(item),false)+'</td><td class="number expense-amount-cell"><strong>'+h(money(item.amount))+'</strong></td><td>'+(plan?'<span class="major-plan-link-chip">'+h(plan)+(phase?'<small>'+h(phase)+'</small>':'')+'</span>':'<span class="muted">—</span>')+'</td><td class="row-edit-cell"><div class="statement-actions">'+(item.status==="PLANNED"?'<button class="tiny-button paid-button" data-action="mark-planned-paid" data-id="'+h(item.id)+'">✓ Mark paid</button>':'')+'<button class="row-edit-primary" data-action="inline-edit-expense" data-id="'+h(item.id)+'">✎ Edit row</button><button class="tiny-button" data-action="edit-expense" data-id="'+h(item.id)+'" title="Open every field">Full form</button>'+(mayDelete(item)?'<button class="danger-button" data-action="delete-expense" data-id="'+h(item.id)+'">Delete</button>':"")+'</div></td></tr>';
+  const canEdit=mayDelete(item),actions=canEdit?((item.status==="PLANNED"?'<button class="tiny-button paid-button" data-action="mark-planned-paid" data-id="'+h(item.id)+'">✓ Mark paid</button>':'')+'<button class="row-edit-primary" data-action="inline-edit-expense" data-id="'+h(item.id)+'">✎ Edit row</button><button class="tiny-button" data-action="edit-expense" data-id="'+h(item.id)+'" title="Open every field">Full form</button><button class="danger-button" data-action="delete-expense" data-id="'+h(item.id)+'">Delete</button>'):'<span class="muted">View only</span>';
+  return '<tr class="expense-'+h(item.status.toLowerCase())+'"><td><div class="expense-description-cell"><span class="expense-row-icon">₹</span><span><strong>'+h(item.reason||item.sentTo||"Expenditure")+'</strong><small>Paid to '+h(item.sentTo||"—")+' · From '+h(item.fromAccount||"—")+'</small>'+shared+'</span></div></td><td><strong>'+h(formatDate(item.date))+'</strong><span class="expense-status '+h(item.status.toLowerCase())+'">'+(item.status==="PLANNED"?'PREPLANNED':'PAID')+'</span></td><td><span class="expense-category-chip">'+h(item.category)+'</span><small class="expense-subcategory-line">'+h(item.subcategory)+'</small></td><td>'+memberIdentityMarkup(expenseMemberId(item),false)+'</td><td class="number expense-amount-cell"><strong>'+h(money(item.amount))+'</strong></td><td>'+(plan?'<span class="major-plan-link-chip">'+h(plan)+(phase?'<small>'+h(phase)+'</small>':'')+'</span>':'<span class="muted">—</span>')+'</td><td class="row-edit-cell"><div class="statement-actions">'+actions+'</div></td></tr>';
 }
 async function saveInlineExpenseRow(button) {
   const row = button.closest("tr"), id = button.dataset.id;
@@ -2202,7 +2250,7 @@ async function saveInlineExpenseRow(button) {
 }
 function renderExpenses() {
   const items=filteredExpenses(),paid=items.filter(function(x){return x.status==="PAID";}),planned=items.filter(function(x){return x.status==="PLANNED";}),paidTotal=paid.reduce(function(s,x){return s+Number(x.amount||0);},0),plannedTotal=planned.reduce(function(s,x){return s+Number(x.amount||0);},0);
-  if (state.inlineExpenseId && !items.some(function (item) { return item.id === state.inlineExpenseId; })) state.inlineExpenseId = "";
+  if (state.inlineExpenseId && !items.some(function (item) { return item.id === state.inlineExpenseId&&mayDelete(item); })) state.inlineExpenseId = "";
   renderExpenseMemberQuickFilters();
   $("expenseStatementSnapshot").innerHTML='<span><small>Showing</small><strong>'+h(plural(items.length,"entry","entries"))+'</strong></span><span><small>Paid</small><strong>'+h(money(paidTotal))+'</strong></span>'+(planned.length?'<span><small>Preplanned</small><strong>'+h(money(plannedTotal))+'</strong></span>':'');
   $("expenseTotals").innerHTML='<span class="total-pill">'+plural(items.length,"entry","entries")+'</span><span class="total-pill">Paid '+h(money(paidTotal))+'</span>'+(planned.length?'<span class="total-pill planned">Preplanned '+h(money(plannedTotal))+'</span>':'');
@@ -2338,23 +2386,26 @@ function renderRecurringInlineRow(item) {
 }
 function renderRecurringViewRow(item) {
   const due=recurringDuePresentation(item),active=recurringIsActive(item),project=majorPlanName(item.majorPlanId),phase=majorPlanPhaseName(item.majorPlanPhaseId);
-  return '<tr class="recurring-view-row '+h(due.className)+'"><td><span class="schedule-status '+(active?'active':'inactive')+'">'+(active?'Active':'Inactive')+'</span></td><td><strong>'+h(item.title)+'</strong><small>'+h(item.reason||"")+'</small></td><td>'+memberIdentityMarkup(expenseMemberId(item),true)+'</td><td><span class="expense-category-chip">'+h(item.category||"Other")+'</span><small>'+h(item.subcategory||"General")+'</small></td><td><span class="frequency-chip">↻ '+h(recurringFrequencyLabel(item))+'</span></td><td class="number"><strong>'+(Number(item.estimatedAmount||0)>0?h(money(item.estimatedAmount)):'<span class="muted">At payment</span>')+'</strong></td><td><span class="due-chip '+h(due.className)+'">'+h(due.text)+'</span><small>'+h(formatDate(item.nextDueDate))+(item.lastPaidDate?' · Last '+h(formatDate(item.lastPaidDate)):'')+'</small></td><td>'+h(item.sentTo||"—")+'</td><td>'+h(item.fromAccount||"—")+'</td><td>'+(project?'<span class="major-plan-link-chip compact">'+h(project)+(phase?'<small>'+h(phase)+'</small>':'')+'</span>':'<span class="muted">—</span>')+'</td><td class="recurring-action-cell"><div class="recurring-row-actions">'+(active?'<button class="primary-button" data-action="pay-recurring-expense" data-id="'+h(item.id)+'">✓ Paid</button>':'')+'<button class="row-edit-primary" data-action="inline-edit-recurring" data-id="'+h(item.id)+'">✎ Edit row</button><button class="tiny-button" data-action="edit-recurring-expense" data-id="'+h(item.id)+'">↗ Form</button><button class="tiny-button" data-action="duplicate-recurring-expense" data-id="'+h(item.id)+'">Duplicate</button>'+(mayDelete(item)?'<button class="danger-button" data-action="delete-recurring-expense" data-id="'+h(item.id)+'">Delete</button>':'')+'</div></td></tr>';
+  const canEdit=mayDelete(item),actions=(canEdit?((active?'<button class="primary-button" data-action="pay-recurring-expense" data-id="'+h(item.id)+'">✓ Paid</button>':'')+'<button class="row-edit-primary" data-action="inline-edit-recurring" data-id="'+h(item.id)+'">✎ Edit row</button><button class="tiny-button" data-action="edit-recurring-expense" data-id="'+h(item.id)+'">↗ Form</button><button class="danger-button" data-action="delete-recurring-expense" data-id="'+h(item.id)+'">Delete</button>'):'<span class="muted">View only</span>')+'<button class="tiny-button" data-action="duplicate-recurring-expense" data-id="'+h(item.id)+'">Duplicate</button>';
+  return '<tr class="recurring-view-row '+h(due.className)+'"><td><span class="schedule-status '+(active?'active':'inactive')+'">'+(active?'Active':'Inactive')+'</span></td><td><strong>'+h(item.title)+'</strong><small>'+h(item.reason||"")+'</small></td><td>'+memberIdentityMarkup(expenseMemberId(item),true)+'</td><td><span class="expense-category-chip">'+h(item.category||"Other")+'</span><small>'+h(item.subcategory||"General")+'</small></td><td><span class="frequency-chip">↻ '+h(recurringFrequencyLabel(item))+'</span></td><td class="number"><strong>'+(Number(item.estimatedAmount||0)>0?h(money(item.estimatedAmount)):'<span class="muted">At payment</span>')+'</strong></td><td><span class="due-chip '+h(due.className)+'">'+h(due.text)+'</span><small>'+h(formatDate(item.nextDueDate))+(item.lastPaidDate?' · Last '+h(formatDate(item.lastPaidDate)):'')+'</small></td><td>'+h(item.sentTo||"—")+'</td><td>'+h(item.fromAccount||"—")+'</td><td>'+(project?'<span class="major-plan-link-chip compact">'+h(project)+(phase?'<small>'+h(phase)+'</small>':'')+'</span>':'<span class="muted">—</span>')+'</td><td class="recurring-action-cell"><div class="recurring-row-actions">'+actions+'</div></td></tr>';
 }
 function renderRecurringExpenses() {
   const allItems=state.data.recurringExpenses||[],items=filteredRecurringExpenses(),today=todayIso(),year=Number(today.slice(0,4)),month=Number(today.slice(5,7));
+  const canBulkEdit=isAdmin();
+  if(!canBulkEdit)state.recurringEditAll=false;
   const monthEnd=new Date(Date.UTC(year,month,0)).toISOString().slice(0,10),yearEnd=year+"-12-31",monthStart=today.slice(0,7)+"-01",yearStart=year+"-01-01";
   const active=allItems.filter(recurringIsActive),overdue=active.filter(function(item){return Number(item.daysUntil)<0;}),next30=active.filter(function(item){return Number(item.daysUntil)>=0&&Number(item.daysUntil)<=30;});
   $("recurringExpenseCount").textContent=plural(allItems.length,"payment")+(overdue.length?" · "+overdue.length+" overdue":"");
   $("recurringSummary").innerHTML='<article><small>Active schedules</small><strong>'+active.length+'</strong></article><article class="danger"><small>Overdue</small><strong>'+overdue.length+'</strong></article><article><small>Due in 30 days</small><strong>'+next30.length+'</strong></article><article><small>Expected this month</small><strong>'+h(money(recurringForecastBetween(allItems,monthStart,monthEnd)))+'</strong></article><article><small>Expected this year</small><strong>'+h(money(recurringForecastBetween(allItems,yearStart,yearEnd)))+'</strong></article>';
   if(state.inlineRecurringId&&!items.some(function(item){return item.id===state.inlineRecurringId;}))state.inlineRecurringId="";
-  $("recurringExpenseList").innerHTML=items.map(function(item){return state.recurringEditAll||item.id===state.inlineRecurringId?renderRecurringInlineRow(item):renderRecurringViewRow(item);}).join("");
-  $("recurringEditAll").classList.toggle("hidden",state.recurringEditAll);
+  $("recurringExpenseList").innerHTML=items.map(function(item){return (state.recurringEditAll||(item.id===state.inlineRecurringId&&mayDelete(item)))?renderRecurringInlineRow(item):renderRecurringViewRow(item);}).join("");
+  $("recurringEditAll").classList.toggle("hidden",state.recurringEditAll||!canBulkEdit);
   $("recurringCancelAll").classList.toggle("hidden",!state.recurringEditAll);
   $("recurringSaveAll").classList.toggle("hidden",!state.recurringEditAll);
   $("recurringExpenseEmpty").innerHTML=allItems.length?"No regular payment matches the selected filter.":"No regular payment added. Choose <strong>Add regular payment</strong> to add one now or later.";
   $("recurringExpenseEmpty").classList.toggle("hidden",items.length>0);
 }
-function startInlineRecurringEdit(id) { state.recurringEditAll=false;state.inlineRecurringId=id;renderRecurringExpenses();setTimeout(function(){const row=document.querySelector('tr[data-recurring-id="'+CSS.escape(id)+'"]'),input=row&&row.querySelector('[data-recurring-field="title"]');if(input){input.focus();input.select();}},20); }
+function startInlineRecurringEdit(id) { const item=(state.data.recurringExpenses||[]).find(function(entry){return entry.id===id;});if(!item||!mayDelete(item))return toast("Only the person who added this regular payment or an administrator can edit it.","error");state.recurringEditAll=false;state.inlineRecurringId=id;renderRecurringExpenses();setTimeout(function(){const row=document.querySelector('tr[data-recurring-id="'+CSS.escape(id)+'"]'),input=row&&row.querySelector('[data-recurring-field="title"]');if(input){input.focus();input.select();}},20); }
 function collectRecurringRow(row,item) {
   const element=function(field){return row.querySelector('[data-recurring-field="'+field+'"]');},value=function(field){const input=element(field);return input?String(input.value||"").trim():"";};
   const frequency=value("frequency"),intervalMonths=frequency==="CUSTOM"?Number(value("intervalMonths")):recurringIntervalMonthsClient({frequency:frequency});
@@ -2368,8 +2419,9 @@ async function saveInlineRecurringRow(button) {
   let payload;try{payload=collectRecurringRow(row,item);}catch(error){return toast(error.message,"error");}
   state.inlineRecurringId="";const result=await mutate("updateRecurringExpense",payload,"Regular payment row updated.",null,"Saving regular payment…");if(!result){state.inlineRecurringId=item.id;renderRecurringExpenses();}
 }
-function toggleRecurringEditAll(active) { state.recurringEditAll=!!active;state.inlineRecurringId="";renderRecurringExpenses(); }
+function toggleRecurringEditAll(active) { if(active&&!isAdmin())return toast("Only an administrator can edit all regular payments together.","error");state.recurringEditAll=!!active;state.inlineRecurringId="";renderRecurringExpenses(); }
 async function saveAllRecurringRows() {
+  if(!isAdmin())return toast("Only an administrator can save all regular payments together.","error");
   const rows=all("tr[data-recurring-id]",$("recurringExpenseList"));if(!rows.length)return toast("No regular-payment rows are visible to save.","error");
   let items;try{items=rows.map(function(row){const item=(state.data.recurringExpenses||[]).find(function(entry){return entry.id===row.dataset.recurringId;});return collectRecurringRow(row,item);});}catch(error){return toast(error.message,"error");}
   state.recurringEditAll=false;const result=await mutate("bulkUpdateRecurringExpenses",{items:items},plural(items.length,"regular payment")+" updated.",null,"Saving all regular payments…");if(!result){state.recurringEditAll=true;renderRecurringExpenses();}
@@ -2386,7 +2438,7 @@ function printRecurringExpenses() {
   report.document.write("<!doctype html><html><head><meta charset='utf-8'><title>Regular Payments</title><style>body{font:12px Arial;color:#24233d;margin:0;background:#f5f4fa}.report{max-width:1200px;margin:auto;padding:24px}.actions{text-align:right;margin-bottom:14px}button{padding:8px 12px;border:1px solid #6651c7;border-radius:8px;background:white;color:#513da8;font-weight:bold;margin-left:6px}h1{margin:0 0 5px}.meta{color:#68677b}.summary{display:flex;gap:8px;flex-wrap:wrap;margin:15px 0}.summary span{padding:8px 11px;border-radius:9px;background:#ede9ff;font-weight:bold}table{width:100%;border-collapse:collapse}th,td{padding:7px;border:1px solid #dddbe8;vertical-align:top}th{background:#e9e4fb;text-align:left;font-size:10px;text-transform:uppercase}tbody tr:nth-child(even){background:#eef6ff}.number{text-align:right}@media print{body{background:#fff}.report{max-width:none;padding:0}.actions{display:none}}</style></head><body><main class='report'><div class='actions'><button onclick='window.close()'>Close</button><button onclick='window.print()'>Print</button></div><h1>Regular Payments</h1><p class='meta'>"+h((state.data.settings&&state.data.settings.familyName)||"Our Family Hub")+" · Printed "+h(formatDate(todayIso()))+"</p><section class='summary'><span>"+h(plural(items.length,"schedule"))+"</span><span>FE v"+h(FRONTEND_VERSION)+"</span><span>BE v"+h(state.data.backendVersion||"—")+"</span></section><table><thead><tr><th>#</th><th>Active</th><th>Payment</th><th>Member</th><th>Category</th><th>Frequency</th><th>Expected</th><th>Next due</th><th>Send to</th><th>Account</th><th>Major plan</th></tr></thead><tbody>"+rows+"</tbody></table></main></body></html>");report.document.close();
 }
 function filteredIncome() { const month=$("incomeMonth").value,cat=$("incomeCategoryFilter").value,member=$("incomeMemberFilter").value,q=normalize($("incomeSearch").value); return state.data.income.filter(function(x){return (!month||String(x.date).slice(0,7)===month)&&(!cat||x.category===cat)&&(!member||x.receivedBy===member)&&(!q||normalize([x.source,x.category,x.receivingMode,memberName(x.receivedBy)].join(" ")).includes(q));}).map(function(x){return Object.assign({},x,{receivedByName:memberName(x.receivedBy)});}); }
-function renderIncome() { const items=filteredIncome(),total=items.reduce(function(s,x){return s+Number(x.amount||0);},0); $("incomeTotals").innerHTML='<span class="total-pill green">'+plural(items.length,"entry","entries")+'</span><span class="total-pill green">Total '+h(money(total))+'</span>'; $("incomeRows").innerHTML=items.map(function(x){return '<tr><td>'+h(formatDate(x.date))+'</td><td><strong>'+h(x.source)+'</strong></td><td>'+h(x.category)+'</td><td>'+memberIdentityMarkup(x.receivedBy,true)+'</td><td>'+h(x.receivingMode)+'</td><td class="number"><strong>'+h(money(x.amount))+'</strong></td><td><div class="row-actions"><button class="tiny-button" data-action="edit-income" data-id="'+h(x.id)+'">Edit</button>'+(mayDelete(x)?'<button class="danger-button" data-action="delete-income" data-id="'+h(x.id)+'">×</button>':"")+'</div></td></tr>';}).join(""); $("incomeEmpty").classList.toggle("hidden",items.length>0); }
+function renderIncome() { const items=filteredIncome(),total=items.reduce(function(s,x){return s+Number(x.amount||0);},0); $("incomeTotals").innerHTML='<span class="total-pill green">'+plural(items.length,"entry","entries")+'</span><span class="total-pill green">Total '+h(money(total))+'</span>'; $("incomeRows").innerHTML=items.map(function(x){return '<tr><td>'+h(formatDate(x.date))+'</td><td><strong>'+h(x.source)+'</strong></td><td>'+h(x.category)+'</td><td>'+memberIdentityMarkup(x.receivedBy,true)+'</td><td>'+h(x.receivingMode)+'</td><td class="number"><strong>'+h(money(x.amount))+'</strong></td><td><div class="row-actions">'+(mayDelete(x)?'<button class="tiny-button" data-action="edit-income" data-id="'+h(x.id)+'">Edit</button><button class="danger-button" data-action="delete-income" data-id="'+h(x.id)+'">×</button>':'<span class="muted">View only</span>')+'</div></td></tr>';}).join(""); $("incomeEmpty").classList.toggle("hidden",items.length>0); }
 
 function renderTargets() { const items=state.data.targets,total=items.reduce(function(s,x){return s+Number(x.targetAmount||0);},0),saved=items.reduce(function(s,x){return s+Number(x.currentAmount||0);},0); $("targetSummary").innerHTML=items.length?'<span class="total-pill">Total goal '+h(money(total))+'</span><span class="total-pill green">Progress '+h(money(saved))+'</span>':""; $("targetGrid").innerHTML=items.map(function(x){const pct=Number(x.targetAmount)?Math.min(100,Math.round(Number(x.currentAmount)/Number(x.targetAmount)*100)):0;return '<article class="target-card"><div class="target-top"><div><small>'+h(x.category)+' · '+h(x.ownerId==="ALL"?"Whole family":memberName(x.ownerId))+'</small><h3>'+h(x.title)+'</h3><small>Due '+h(formatDate(x.dueDate))+'</small></div><span class="target-icon">◎</span></div><div class="progress-track"><div class="progress-fill" style="width:'+pct+'%"></div></div><div class="target-numbers"><span><strong>'+h(money(x.currentAmount))+'</strong> saved</span><span>'+pct+'% of '+h(money(x.targetAmount))+'</span></div><div class="target-actions"><button class="primary-button" data-action="contribute" data-id="'+h(x.id)+'">＋ Add progress</button>'+(mayDelete(x)?'<button class="danger-button" data-action="delete-target" data-id="'+h(x.id)+'">Delete</button>':"")+'</div></article>';}).join(""); $("targetEmpty").classList.toggle("hidden",items.length>0); }
 function reminderBasis(item){let value=String(item&&item.reminderBasis||item&&item.calendarSystem||"GREGORIAN").toUpperCase();if(value==="BOTH")value="GREGORIAN_SAKA";return ["GREGORIAN","SAKA","ODIA","GREGORIAN_SAKA","GREGORIAN_ODIA","SAKA_ODIA","ALL"].includes(value)?value:"GREGORIAN";}
@@ -2402,7 +2454,8 @@ function renderDates() {
     const nextRows=(x.nextOccurrences||[{date:occurrence,basis:basis}]).map(function(next){return '<span class="next-occurrence '+h(String(next.basis||"").toLowerCase())+'"><b>'+h(reminderBasisLabel(next.basis))+" reminder</b> "+h(formatDate(next.date))+(reminderBasisIncludes(next.basis,"ODIA")&&x.odiaMonth?' · '+h(formatOdiaPanjika(x,next.odiaYear||"")):'')+'</span>';}).join("");
     const panjikaOriginal=x.odiaMonth?'<span class="odia-original"><small>'+(x.odiaMonth==="AUTO"?'AUTO-DERIVED ODIA TITHI':'ODIA KOHINOOR / PANJIKA')+'</small><strong>'+h(formatOdiaPanjika(x))+'</strong></span>':'';
     const mappingButton=isAdmin()?'<button class="tiny-button odia-map-button" data-action="manage-odia-mappings" data-id="'+h(x.id)+'">Odia years</button>':'';
-    return '<article class="date-card basis-'+h(basis.toLowerCase())+'"><div class="date-visual">'+photo+tile+'</div><div class="date-card-copy"><h3>'+h(x.title)+'</h3>'+(x.occasionLabel?'<p class="occasion-label">'+h(x.occasionLabel)+'</p>':'')+'<p>'+h(x.eventType)+'</p><div class="original-calendar-pair two-calendars'+(x.odiaMonth?'':' english-only')+'"><span><small>ENGLISH ORIGINAL</small><strong>'+h(formatEnglishDate(x.eventDate))+'</strong></span>'+panjikaOriginal+'</div>'+(x.repeatYearly?'<div class="next-occurrence-list">'+nextRows+(reminderBasisIncludes(basis,"ODIA")&&!(x.odiaMappings||[]).some(function(mapping){return String(mapping.gregorianDate)>=todayIso();})?'<span class="odia-mapping-warning"><b>Odia date pending</b> Use Refresh Odia calendar now; an administrator can add a Kohinoor correction under Odia years.</span>':'')+'</div>':'')+'<p>Email: '+h(reminderText(x.remindDays))+'</p>'+(x.repeatYearly?'<span class="repeat-chip">↻ Remind by '+h(reminderBasisLabel(basis))+'</span>':'<span class="repeat-chip one-time">One-time reminder · saved date</span>')+'</div><div class="row-actions">'+mappingButton+'<button class="tiny-button" data-action="edit-date" data-id="'+h(x.id)+'">Edit</button>'+(mayDelete(x)?'<button class="danger-button" data-action="delete-date" data-id="'+h(x.id)+'">×</button>':"")+'</div></article>';
+    const editActions=mayDelete(x)?'<button class="tiny-button" data-action="edit-date" data-id="'+h(x.id)+'">Edit</button><button class="danger-button" data-action="delete-date" data-id="'+h(x.id)+'">×</button>':'<span class="muted">View only</span>';
+    return '<article class="date-card basis-'+h(basis.toLowerCase())+'"><div class="date-visual">'+photo+tile+'</div><div class="date-card-copy"><h3>'+h(x.title)+'</h3>'+(x.occasionLabel?'<p class="occasion-label">'+h(x.occasionLabel)+'</p>':'')+'<p>'+h(x.eventType)+'</p><div class="original-calendar-pair two-calendars'+(x.odiaMonth?'':' english-only')+'"><span><small>ENGLISH ORIGINAL</small><strong>'+h(formatEnglishDate(x.eventDate))+'</strong></span>'+panjikaOriginal+'</div>'+(x.repeatYearly?'<div class="next-occurrence-list">'+nextRows+(reminderBasisIncludes(basis,"ODIA")&&!(x.odiaMappings||[]).some(function(mapping){return String(mapping.gregorianDate)>=todayIso();})?'<span class="odia-mapping-warning"><b>Odia date pending</b> Use Refresh Odia calendar now; an administrator can add a Kohinoor correction under Odia years.</span>':'')+'</div>':'')+'<p>Email: '+h(reminderText(x.remindDays))+'</p>'+(x.repeatYearly?'<span class="repeat-chip">↻ Remind by '+h(reminderBasisLabel(basis))+'</span>':'<span class="repeat-chip one-time">One-time reminder · saved date</span>')+'</div><div class="row-actions">'+mappingButton+editActions+'</div></article>';
   }).join("");
   $("dateEmpty").classList.toggle("hidden",items.length>0);
 }
@@ -2449,8 +2502,8 @@ function openMemoryPrintView() {
 }
 async function viewPhoto(id) { const item=state.data.photos.find(function(x){return x.id===id;}); if(!item)return; $("viewerTitle").textContent=item.title; $("viewerMeta").textContent=formatDate(item.takenDate||item.createdAt)+" · by "+memberName(item.uploadedBy); $("viewerText").textContent=item.caption||""; $("viewerImage").classList.add("hidden"); $("viewerLoading").classList.remove("hidden"); openDialog("photoViewer"); try{const result=await api("getPhoto",{id:id}); $("viewerImage").src=result.dataUrl; $("viewerImage").classList.remove("hidden"); $("viewerLoading").classList.add("hidden");}catch(error){if(!handleSessionError(error))$("viewerLoading").textContent=error.message;} }
 
-function renderExperiences() { const year=$("experienceYear").value,q=normalize($("experienceSearch").value); const items=state.data.experiences.filter(function(x){return (!year||String(x.experienceDate).slice(0,4)===year)&&(!q||normalize([x.title,x.place,x.story,x.tags,memberName(x.createdBy)].join(" ")).includes(q));}); $("experienceGrid").innerHTML=items.map(function(x){const tags=String(x.tags||"").split(",").map(function(t){return t.trim();}).filter(Boolean);return '<article class="experience-card"><div class="experience-meta"><span>'+h(formatDate(x.experienceDate))+'</span>'+(x.place?'<span>⌖ '+h(x.place)+'</span>':"")+'</div><h3>'+h(x.title)+'</h3><p class="story">'+h(x.story)+'</p><div class="tag-list">'+tags.map(function(t){return '<span class="tag">'+h(t)+'</span>';}).join("")+'</div><div class="experience-footer"><span class="writer">Written by '+h(memberName(x.createdBy))+'</span><div class="row-actions"><button class="tiny-button" data-action="edit-experience" data-id="'+h(x.id)+'">Edit</button>'+(mayDelete(x)?'<button class="danger-button" data-action="delete-experience" data-id="'+h(x.id)+'">×</button>':"")+'</div></div></article>';}).join(""); $("experienceEmpty").classList.toggle("hidden",items.length>0); }
-function renderDiary() { const month=$("diaryMonth").value,writer=$("diaryWriterFilter").value,q=normalize($("diarySearch").value); const items=state.data.diary.filter(function(x){return (!month||String(x.diaryDate).slice(0,7)===month)&&(!writer||x.createdBy===writer)&&(!q||normalize([x.title,x.body,x.mood,x.tags,memberName(x.createdBy)].join(" ")).includes(q));}); $("diaryTimeline").innerHTML=items.map(function(x){const p=dayParts(x.diaryDate),tags=String(x.tags||"").split(",").map(function(t){return t.trim();}).filter(Boolean);return '<article class="diary-entry"><div class="diary-date-badge"><strong>'+p.day+'</strong><span>'+p.month+'</span></div><div class="diary-entry-top"><div><h3>'+h(x.title)+'</h3><span class="writer">Written by '+h(memberName(x.createdBy))+'</span></div><span class="diary-mood">'+h(x.mood)+'</span></div><p class="diary-body">'+h(x.body)+'</p><div class="diary-entry-footer"><div class="tag-list">'+tags.map(function(t){return '<span class="tag">'+h(t)+'</span>';}).join("")+'</div><div class="row-actions"><button class="tiny-button" data-action="edit-diary" data-id="'+h(x.id)+'">Edit</button>'+(mayDelete(x)?'<button class="danger-button" data-action="delete-diary" data-id="'+h(x.id)+'">×</button>':"")+'</div></div></article>';}).join(""); $("diaryEmpty").classList.toggle("hidden",items.length>0); }
+function renderExperiences() { const year=$("experienceYear").value,q=normalize($("experienceSearch").value); const items=state.data.experiences.filter(function(x){return (!year||String(x.experienceDate).slice(0,4)===year)&&(!q||normalize([x.title,x.place,x.story,x.tags,memberName(x.createdBy)].join(" ")).includes(q));}); $("experienceGrid").innerHTML=items.map(function(x){const tags=String(x.tags||"").split(",").map(function(t){return t.trim();}).filter(Boolean),actions=mayDelete(x)?'<button class="tiny-button" data-action="edit-experience" data-id="'+h(x.id)+'">Edit</button><button class="danger-button" data-action="delete-experience" data-id="'+h(x.id)+'">×</button>':'<span class="muted">View only</span>';return '<article class="experience-card"><div class="experience-meta"><span>'+h(formatDate(x.experienceDate))+'</span>'+(x.place?'<span>⌖ '+h(x.place)+'</span>':"")+'</div><h3>'+h(x.title)+'</h3><p class="story">'+h(x.story)+'</p><div class="tag-list">'+tags.map(function(t){return '<span class="tag">'+h(t)+'</span>';}).join("")+'</div><div class="experience-footer"><span class="writer">Written by '+h(memberName(x.createdBy))+'</span><div class="row-actions">'+actions+'</div></div></article>';}).join(""); $("experienceEmpty").classList.toggle("hidden",items.length>0); }
+function renderDiary() { const month=$("diaryMonth").value,writer=$("diaryWriterFilter").value,q=normalize($("diarySearch").value); const items=state.data.diary.filter(function(x){return (!month||String(x.diaryDate).slice(0,7)===month)&&(!writer||x.createdBy===writer)&&(!q||normalize([x.title,x.body,x.mood,x.tags,memberName(x.createdBy)].join(" ")).includes(q));}); $("diaryTimeline").innerHTML=items.map(function(x){const p=dayParts(x.diaryDate),tags=String(x.tags||"").split(",").map(function(t){return t.trim();}).filter(Boolean),actions=mayDelete(x)?'<button class="tiny-button" data-action="edit-diary" data-id="'+h(x.id)+'">Edit</button><button class="danger-button" data-action="delete-diary" data-id="'+h(x.id)+'">×</button>':'<span class="muted">View only</span>';return '<article class="diary-entry"><div class="diary-date-badge"><strong>'+p.day+'</strong><span>'+p.month+'</span></div><div class="diary-entry-top"><div><h3>'+h(x.title)+'</h3><span class="writer">Written by '+h(memberName(x.createdBy))+'</span></div><span class="diary-mood">'+h(x.mood)+'</span></div><p class="diary-body">'+h(x.body)+'</p><div class="diary-entry-footer"><div class="tag-list">'+tags.map(function(t){return '<span class="tag">'+h(t)+'</span>';}).join("")+'</div><div class="row-actions">'+actions+'</div></div></article>';}).join(""); $("diaryEmpty").classList.toggle("hidden",items.length>0); }
 
 function importantDateMatchesIso(item,iso,cellSaka) {
   if(!item.repeatYearly)return item.eventDate===iso;
@@ -2525,7 +2578,7 @@ function renderStickyNotes() {
   renderStickyPinnedLayer(active);
 }
 
-function stickyNoteMarkup(note, index, pinnedOverlay, sideOpen) {
+function stickyNoteMarkup(note, index, pinnedOverlay) {
   const width = Math.max(220, Math.min(520, Number(note.width || 280)));
   const height = Math.max(160, Math.min(500, Number(note.height || 220)));
   let x = Math.max(0, Math.min(2000, Number(note.positionX || 20)));
@@ -2533,14 +2586,14 @@ function stickyNoteMarkup(note, index, pinnedOverlay, sideOpen) {
   if (pinnedOverlay && window.matchMedia("(max-width: 640px)").matches) { x = 0; y = 8 + index * 30; }
   const dueClass = note.dueDate && note.dueDate < todayIso() ? " overdue" : "";
   const dueText = note.dueDate ? ((dueClass ? "Overdue · " : "Due · ") + formatDate(note.dueDate)) : "No due date";
-  const z = note.pinned ? 5000 + index : sideOpen ? 4800 : 20 + index;
-  const collapseControl = note.pinned ? '<button class="sticky-locked-open" type="button" disabled title="Pinned notes stay open">🔒</button>' : sideOpen ? '<button type="button" data-action="close-side-sticky" title="Collapse to side tab">›</button>' : '<button type="button" data-action="collapse-sticky" data-id="'+h(note.id)+'" title="'+(note.collapsed?'Open note':'Collapse note')+'">'+(note.collapsed?'▾':'▴')+'</button>';
+  const z = note.pinned ? 5000 + index : 20 + index;
+  const collapseControl = note.pinned ? '<button class="sticky-locked-open" type="button" disabled title="Pinned notes stay open">🔒</button>' : '<button type="button" data-action="collapse-sticky" data-id="'+h(note.id)+'" title="'+(note.collapsed?'Open note':'Collapse note')+'">'+(note.collapsed?'▾':'▴')+'</button>';
   const titleControl = note.pinned ? '<strong class="sticky-note-title" title="This pinned note stays open">'+h(note.title)+'</strong>' : '<button class="sticky-note-title" type="button" data-action="collapse-sticky" data-id="'+h(note.id)+'" title="Open or collapse this note">'+h(note.title)+'</button>';
   const footerCollapse = note.pinned
     ? '<button class="collapse-action locked" type="button" disabled title="Unpin this note before collapsing it">🔒 Stays open</button>'
-    : sideOpen ? '<button class="collapse-action" type="button" data-action="close-side-sticky">› Side tab</button>' : '<button class="collapse-action" type="button" data-action="collapse-sticky" data-id="'+h(note.id)+'">▴ Collapse</button>';
+    : '<button class="collapse-action" type="button" data-action="collapse-sticky" data-id="'+h(note.id)+'">▴ Collapse</button>';
   const contentActions = canWriteStickyNotes() ? '<button type="button" data-action="edit-sticky" data-id="'+h(note.id)+'">Edit</button><button class="complete" type="button" data-action="complete-sticky" data-id="'+h(note.id)+'">✓ Complete</button>'+(mayDelete(note)?'<button class="delete" type="button" data-action="delete-sticky" data-id="'+h(note.id)+'">Delete</button>':'') : '<span class="sticky-readonly-chip">🔒 Read only</span>';
-  return '<article class="sticky-note sticky-'+h(note.color||"yellow")+(!note.pinned&&note.collapsed&&!sideOpen?' collapsed':'')+(note.pinned?' pinned':'')+(pinnedOverlay?' pinned-overlay-note':'')+(sideOpen?' side-open-note':'')+'" data-sticky-id="'+h(note.id)+'" style="left:'+x+'px;top:'+y+'px;--overlay-top:'+y+'px;width:'+width+'px;height:'+height+'px;z-index:'+z+'">'+
+  return '<article class="sticky-note sticky-'+h(note.color||"yellow")+(!note.pinned&&note.collapsed?' collapsed':'')+(note.pinned?' pinned':'')+(pinnedOverlay?' pinned-overlay-note':'')+'" data-sticky-id="'+h(note.id)+'" style="left:'+x+'px;top:'+y+'px;--overlay-top:'+y+'px;width:'+width+'px;height:'+height+'px;z-index:'+z+'">'+
     '<header class="sticky-note-head sticky-drag-handle"><span class="sticky-move-label">⠿ Move note</span><span class="sticky-type">'+(note.noteType==="REMINDER"?'REMINDER':'TARGET')+'</span>'+titleControl+'<div class="sticky-head-actions">'+collapseControl+'</div></header>'+
     '<div class="sticky-note-content"><span class="sticky-pinned-label '+(note.pinned?'':'hidden')+'">📌 PINNED OPEN</span><p>'+h(note.body)+'</p><small class="sticky-due'+dueClass+'">'+h(dueText)+'</small><small>Added by '+h(memberName(note.createdBy))+'</small></div>'+
     '<footer class="sticky-note-actions"><button class="pin-action" type="button" data-action="pin-sticky" data-id="'+h(note.id)+'">'+(note.pinned?'📌 Unpin':'📌 Pin open')+'</button>'+footerCollapse+contentActions+'<span class="sticky-size-actions"><button type="button" data-action="auto-fit-sticky" data-id="'+h(note.id)+'" title="Fit the note to its content">Auto-fit</button><button type="button" data-action="shrink-sticky" data-id="'+h(note.id)+'" title="Decrease note size">−</button><button type="button" data-action="grow-sticky" data-id="'+h(note.id)+'" title="Increase note size">＋</button></span></footer><span class="sticky-resize-handle" title="Drag to resize" aria-label="Resize sticky note"></span></article>';
@@ -2551,7 +2604,7 @@ function renderStickyPinnedLayer(activeNotes) {
   const notes = activeNotes || (state.data.stickyNotes || []).filter(function (note) { return note.status !== "COMPLETED"; });
   const pinned = notes.filter(function (note) { return note.pinned; });
   const boardOpen = !$("stickyBoard").classList.contains("hidden");
-  $("stickyPinnedCanvas").innerHTML = pinned.map(function (note, index) { return stickyNoteMarkup(note, index, true, false); }).join("");
+  $("stickyPinnedCanvas").innerHTML = pinned.map(function (note, index) { return stickyNoteMarkup(note, index, true); }).join("");
   $("stickyPinnedLayer").classList.toggle("hidden", boardOpen || !pinned.length);
 }
 
@@ -2559,7 +2612,7 @@ function startStickyDrag(event) {
   if (window.matchMedia("(max-width: 640px)").matches || event.button !== 0 || event.target.closest("button")) return;
   const handle = event.target.closest(".sticky-drag-handle"); if (!handle) return;
   const element = handle.closest(".sticky-note"), note = state.data.stickyNotes.find(function (item) { return item.id === element.dataset.stickyId; }); if (!note) return;
-  if (element.classList.contains("side-open-note") || element.closest("#stickyBoard")) return;
+  if (element.closest("#stickyBoard")) return;
   event.preventDefault();
   state.stickyHighestZ += 1; element.style.zIndex = note.pinned ? 3000 + state.stickyHighestZ : 300 + state.stickyHighestZ;
   element.classList.add("dragging");
@@ -2713,6 +2766,6 @@ function toast(message,type){
 }
 function friendlyApiError(error){
   const message=(error&&error.message)||"The change could not be saved.";
-  if(/UrlFetchApp\.fetch|script\.external_request/i.test(message))return "Deploy BE v1.0.39 and run repairOdiaCalendarRecords(). Personal Odia tithi conversion will then use the built-in Bhubaneswar-sunrise fallback even if the external service is unavailable.";
+  if(/UrlFetchApp\.fetch|script\.external_request/i.test(message))return "Deploy BE v1.0.40 and run repairOdiaCalendarRecords(). Personal Odia tithi conversion will then use the built-in Bhubaneswar-sunrise fallback even if the external service is unavailable.";
   return /Unknown dashboard action/i.test(message)?"Backend update required. Deploy the latest Code.gs as a New version, then refresh this page.":message;
 }

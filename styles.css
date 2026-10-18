@@ -1259,7 +1259,7 @@ th { box-shadow:inset 0 -1px #e6e4ef; }
 }
 
 /* ========================================================================== 
-   MyFamily v1.0.56 — cleaned premium responsive visual system
+   MyFamily v1.0.58 — cleaned premium responsive visual system
    Pure CSS enhancement: no external font, framework or render-blocking asset.
    ========================================================================== */
 :root {
@@ -1433,6 +1433,38 @@ html { scroll-padding-top:96px; }
 .premium-ui .modal { border:1px solid rgba(255,255,255,.65); box-shadow:0 28px 90px rgba(27,24,75,.25); }
 .premium-ui .modal::backdrop { background:rgba(24,24,56,.39); backdrop-filter:blur(7px); }
 
+/* Quick Expense keeps the common payment fields visible and progressively
+   reveals planning, project and sharing controls only when they are needed. */
+.premium-ui .quick-expense-hint {
+  display:grid;
+  grid-template-columns:auto auto minmax(0,1fr);
+  align-items:center;
+  gap:8px;
+  margin:0;
+  padding:10px 12px;
+  border:1px solid rgba(17,143,136,.18);
+  border-radius:13px;
+  color:#246b63;
+  background:linear-gradient(135deg,#eaf8f5 0%,#f5f2ff 100%);
+}
+.premium-ui .quick-expense-hint > span { display:grid; width:28px; height:28px; place-items:center; border-radius:9px; background:#fff; box-shadow:0 5px 13px rgba(28,100,91,.10); }
+.premium-ui .quick-expense-hint strong { color:#176f68; font-size:.75rem; white-space:nowrap; }
+.premium-ui .quick-expense-hint small { color:#5e6780; font-size:.65rem; line-height:1.35; }
+.premium-ui .expense-more-details { overflow:hidden; border:1px solid rgba(96,89,146,.18); border-radius:14px; background:#faf9ff; }
+.premium-ui .expense-more-details > summary { display:flex; align-items:center; justify-content:space-between; gap:12px; padding:12px 13px; cursor:pointer; list-style:none; user-select:none; }
+.premium-ui .expense-more-details > summary::-webkit-details-marker { display:none; }
+.premium-ui .expense-more-details > summary span,.premium-ui .expense-more-details > summary b,.premium-ui .expense-more-details > summary small { display:block; }
+.premium-ui .expense-more-details > summary b { color:#4e4393; font-size:.76rem; }
+.premium-ui .expense-more-details > summary small { margin-top:2px; color:#77758c; font-size:.61rem; line-height:1.35; }
+.premium-ui .expense-more-details > summary i { color:#6454b7; font-size:1rem; font-style:normal; transition:transform .18s ease; }
+.premium-ui .expense-more-details[open] > summary i { transform:rotate(180deg); }
+.premium-ui .expense-more-details .less-label { display:none; }
+.premium-ui .expense-more-details[open] .more-label { display:none; }
+.premium-ui .expense-more-details[open] .less-label { display:block; }
+.premium-ui .expense-advanced-content { display:grid; gap:14px; padding:13px; border-top:1px solid rgba(96,89,146,.13); }
+.premium-ui .quick-expense-mode { gap:12px; }
+.premium-ui .quick-expense-mode .modal-actions { margin-top:2px; }
+
 /* Lightweight progressive reveal. Added only when JS enhancement is active. */
 .premium-ui.js-motion .ui-reveal { opacity:0; transform:translateY(14px); transition:opacity .46s cubic-bezier(.2,.8,.2,1),transform .46s cubic-bezier(.2,.8,.2,1); transition-delay:var(--reveal-delay,0ms); }
 .premium-ui.js-motion .ui-reveal.is-visible { opacity:1; transform:none; }
@@ -1497,6 +1529,12 @@ html { scroll-padding-top:96px; }
   .premium-ui .mobile-bottom-nav .mobile-nav-button.active { color:var(--premium-teal); background:#e9f7f4; }
   .premium-ui .mobile-add-button { background:linear-gradient(145deg,var(--premium-teal),#0a706b); box-shadow:0 12px 25px rgba(17,143,136,.30); }
   .premium-ui .nav-button.active::after { display:none; }
+  .premium-ui .quick-expense-hint { grid-template-columns:auto minmax(0,1fr); padding:9px 10px; }
+  .premium-ui .quick-expense-hint strong { align-self:end; }
+  .premium-ui .quick-expense-hint small { grid-column:2; margin-top:-6px; }
+  .premium-ui .quick-expense-mode .quick-expense-first-row { grid-template-columns:minmax(0,1fr) minmax(0,1fr); }
+  .premium-ui .expense-more-details > summary small { max-width:240px; }
+  .premium-ui .expense-advanced-content { padding:12px 10px; }
 }
 
 @media (max-width:410px) {

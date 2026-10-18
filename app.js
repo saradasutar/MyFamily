@@ -2,7 +2,7 @@
 
 const CONFIG = window.FAMILY_DASHBOARD_CONFIG || {};
 const PLACEHOLDER_URL = "PASTE_YOUR_APPS_SCRIPT_WEB_APP_URL_HERE";
-const FRONTEND_VERSION = "1.0.56";
+const FRONTEND_VERSION = "1.0.58";
 const SAVED_USERNAME_KEY = "familyDashboardUsername";
 const SESSION_TOKEN_KEY = "familyDashboardToken";
 const DEFAULT_IDLE_TIMEOUT_MINUTES = 60;
@@ -10,6 +10,7 @@ const LEGACY_IDLE_TIMEOUT_MINUTES = 5;
 const ALLOWED_IDLE_TIMEOUT_MINUTES = [5, 15, 30, 60, 120];
 const KEEP_ALIVE_INTERVAL_MS = 2 * 60 * 1000;
 const EXPENSE_COLUMN_WIDTHS_KEY = "familyDashboardExpenseColumnWidthsV5";
+const LAST_EXPENSE_ACCOUNT_KEY = "familyDashboardLastExpenseAccount";
 const state = {
   token: sessionStorage.getItem(SESSION_TOKEN_KEY) || "",
   data: null,
@@ -717,7 +718,12 @@ function goTo(view) {
 
 function bindDialogs() {
   all("[data-open]").forEach(function (button) {
-    button.addEventListener("click", function () { prepareNewDialog(button.dataset.open); openDialog(button.dataset.open); });
+    button.addEventListener("click", function () {
+      prepareNewDialog(button.dataset.open);
+      if(button.dataset.open==="expenseDialog"&&button.dataset.quickExpense==="true")setExpenseFormMode("quick");
+      openDialog(button.dataset.open);
+      if(button.dataset.open==="expenseDialog"&&button.dataset.quickExpense==="true")setTimeout(function(){$("expenseAmount").focus();},80);
+    });
   });
   all("[data-close]").forEach(function (button) { button.addEventListener("click", function () { button.closest("dialog").close(); }); });
   all("[data-smart-paste]").forEach(function (button) {
@@ -784,7 +790,7 @@ function prepareNewDialog(id) {
     $(defaults[id][1]).value = "";
     if (defaults[id][2]) $(defaults[id][2]).value = todayIso();
   }
-  if (id === "expenseDialog") { $("expenseRecurringId").value = ""; $("expenseMarkPaidId").value = ""; $("expenseRecurringNote").textContent = ""; $("expenseRecurringNote").classList.add("hidden"); $("expenseEntryType").disabled = false; $("expenseEntryType").value = "REGULAR"; fillMemberSelect($("expenseMember"), state.data.user.id, true); fillExpenseCategorySelect($("expenseCategory"), activeExpenseCategories().some(function(category){return category.name==="Home";}) ? "Home" : ""); populateSubcategoryOptions("expenseCategory", "expenseSubcategory", "expenseSubcategoryOptions", true); fillMajorPlanLinkSelects($("expenseMajorPlan"),$("expenseMajorPlanPhase"),"","",false); resetExpenseSharingForm(); $("expenseDialogTitle").textContent = "Add paid expenditure"; syncExpenseEntryType(); }
+  if (id === "expenseDialog") { $("expenseRecurringId").value = ""; $("expenseMarkPaidId").value = ""; $("expenseRecurringNote").textContent = ""; $("expenseRecurringNote").classList.add("hidden"); $("expenseEntryType").disabled = false; $("expenseEntryType").value = "REGULAR"; fillMemberSelect($("expenseMember"), state.data.user.id, true); fillExpenseCategorySelect($("expenseCategory"), activeExpenseCategories().some(function(category){return category.name==="Home";}) ? "Home" : ""); populateSubcategoryOptions("expenseCategory", "expenseSubcategory", "expenseSubcategoryOptions", true); fillMajorPlanLinkSelects($("expenseMajorPlan"),$("expenseMajorPlanPhase"),"","",false); resetExpenseSharingForm(); $("expenseFromAccount").value=localStorage.getItem(LAST_EXPENSE_ACCOUNT_KEY)||""; setExpenseFormMode("full"); $("expenseDialogTitle").textContent = "Add paid expenditure"; syncExpenseEntryType(); }
   if (id === "recurringExpenseDialog") { $("recurringExpenseDialogTitle").textContent = "Add regular payment"; fillMemberSelect($("recurringExpenseMember"), state.data.user.id, true); fillExpenseCategorySelect($("recurringExpenseCategory"), activeExpenseCategories().some(function(category){return category.name==="Utilities";}) ? "Utilities" : ""); populateSubcategoryOptions("recurringExpenseCategory", "recurringExpenseSubcategory", "recurringExpenseSubcategoryOptions", true); fillMajorPlanLinkSelects($("recurringExpenseMajorPlan"),$("recurringExpenseMajorPlanPhase"),"","",false); $("recurringExpenseFrequency").value="MONTHLY"; $("recurringExpenseIntervalMonths").value="1"; syncRecurringFrequency(); $("recurringNotifyEveryone").checked = true; $("recurringRecipientChecks").classList.add("hidden"); renderRecurringRecipientChecks([]); }
   if (id === "majorPlanDialog") { $("majorPlanDialogTitle").textContent="Create major plan"; $("majorPlanStartDate").value=todayIso(); const target=new Date(); target.setFullYear(target.getFullYear()+1); $("majorPlanTargetDate").value=[target.getFullYear(),String(target.getMonth()+1).padStart(2,"0"),String(target.getDate()).padStart(2,"0")].join("-"); fillMemberSelect($("majorPlanOwner"),"ALL",true); $("majorPlanPhaseList").innerHTML=""; ["Planning / approvals","Main work","Finishing"].forEach(function(name){addMajorPlanPhaseRow({name:name,proposedAmount:""});}); updateMajorPlanPhaseBudgetSummary(); }
   if (id === "bulkExpenseDialog") $("bulkExpenseForm").reset();
@@ -797,6 +803,15 @@ function prepareNewDialog(id) {
   if (id === "experienceDialog") $("experienceDialogTitle").textContent = "Add experience";
   if (id === "diaryDialog") $("diaryDialogTitle").textContent = "Write diary entry";
   if (id === "expenseCategoryDialog") { state.categoryDraft = JSON.parse(JSON.stringify(expenseCategoryConfig())); state.categoryEditIds.clear(); state.subcategoryEditIds.clear(); $("newExpenseCategoryName").value = ""; renderExpenseCategoryManager(); }
+}
+
+function setExpenseFormMode(mode) {
+  const quick=mode==="quick",form=$("expenseForm"),details=$("expenseMoreDetails");
+  if(!form||!details)return;
+  form.classList.toggle("quick-expense-mode",quick);
+  $("expenseQuickHint").classList.toggle("hidden",!quick);
+  details.open=!quick;
+  if(quick&&!$("expenseId").value&&!$("expenseRecurringId").value&&!$("expenseMarkPaidId").value)$("expenseDialogTitle").textContent="Quick expense";
 }
 
 function openSmartPaste(preferredType) {
@@ -1484,14 +1499,16 @@ async function saveExpense(event) {
   const recurringId = $("expenseRecurringId").value;
   const plannedId = $("expenseMarkPaidId").value;
   const action = recurringId ? "markRecurringExpensePaid" : plannedId ? "markPlannedExpensePaid" : $("expenseId").value ? "updateExpense" : "createExpense";
-  await mutate(action, Object.assign({
+  const account=$("expenseFromAccount").value.trim();
+  const result=await mutate(action, Object.assign({
     id: recurringId || plannedId || $("expenseId").value, date: $("expenseDate").value, amount: $("expenseAmount").value,
     memberId: $("expenseMember").value,
     category: $("expenseCategory").value, subcategory: $("expenseSubcategory").value.trim(),
-    sentTo: $("expenseSendTo").value.trim(), fromAccount: $("expenseFromAccount").value.trim(),
+    sentTo: $("expenseSendTo").value.trim(), fromAccount: account,
     reason: $("expenseReason").value.trim(), entryType: recurringId ? "RECURRING" : $("expenseEntryType").value,
     majorPlanId: $("expenseMajorPlan").value, majorPlanPhaseId: $("expenseMajorPlanPhase").value
   },expenseSharingPayload()), recurringId ? "Payment recorded and the next due date was calculated." : plannedId ? "Preplanned expenditure marked as paid." : "Expenditure saved.", "expenseDialog");
+  if(result&&account)localStorage.setItem(LAST_EXPENSE_ACCOUNT_KEY,account);
 }
 
 async function saveExpenseSettlement(event) {

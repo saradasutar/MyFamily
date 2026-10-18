@@ -6,18 +6,18 @@
   <meta name="color-scheme" content="light">
   <meta name="description" content="Private family dashboard for expenses, goals, important dates and photos.">
   <title>Our Family Hub</title>
-  <link rel="icon" href="family-unity-v1048-32.png" type="image/png" sizes="32x32">
-  <link rel="shortcut icon" href="family-unity-v1048-32.png" type="image/png">
-  <link rel="apple-touch-icon" href="family-unity-v1048-180.png" sizes="180x180">
-  <link rel="manifest" href="family-unity-v1048.webmanifest">
+  <link rel="icon" href="family-unity-v1058-32.png?v=1.0.58" type="image/png" sizes="32x32">
+  <link rel="shortcut icon" href="family-unity-v1058-32.png?v=1.0.58" type="image/png">
+  <link rel="apple-touch-icon" href="family-unity-v1058-180.png?v=1.0.58" sizes="180x180">
+  <link rel="manifest" href="family-unity-v1058.webmanifest?v=1.0.58">
   <meta name="theme-color" content="#5b43b5">
   <link rel="preconnect" href="https://script.google.com">
   <link rel="dns-prefetch" href="//script.google.com">
-  <link rel="preload" href="styles.css?v=1.0.56-clean" as="style">
-  <link rel="preload" href="config.js?v=1.0.56" as="script">
-  <link rel="preload" href="app.js?v=1.0.56" as="script">
-  <link rel="preload" href="family-unity-v1048-192.png" as="image" type="image/png" fetchpriority="high">
-  <link rel="stylesheet" href="styles.css?v=1.0.56-clean">
+  <link rel="preload" href="styles.css?v=1.0.58" as="style">
+  <link rel="preload" href="config.js?v=1.0.58" as="script">
+  <link rel="preload" href="app.js?v=1.0.58" as="script">
+  <link rel="preload" href="family-unity-v1058-192.png?v=1.0.58" as="image" type="image/png" fetchpriority="high">
+  <link rel="stylesheet" href="styles.css?v=1.0.58">
 </head>
 <body class="premium-ui">
   <a class="skip-link" href="#mainContent">Skip to dashboard content</a>
@@ -36,7 +36,7 @@
       <div class="login-trust-row"><span>Private</span><span>Fast</span><span>Family-first</span></div>
     </div>
     <div class="login-card">
-      <div class="brand-mark family-bond-brand"><img src="family-unity-v1048-192.png" alt="Four family members united around a shared heart" width="62" height="62" decoding="async" fetchpriority="high"></div>
+      <div class="brand-mark family-bond-brand"><img src="family-unity-v1058-192.png?v=1.0.58" alt="Four family members united around a shared heart" width="62" height="62" decoding="async" fetchpriority="high"></div>
       <p class="eyebrow">WELCOME HOME</p>
       <h1 id="loginFamilyName">Our Family Hub</h1>
       <p class="muted">Sign in with the username and password managed by your family administrator.</p>
@@ -52,8 +52,8 @@
         </label>
         <div class="login-options">
           <label class="remember-row"><input id="rememberUsername" type="checkbox" checked> Save username on this device</label>
-          <span class="version-pair"><b id="loginFrontendVersion">FE v1.0.56</b><b id="loginBackendVersion">BE checking…</b></span>
-          <span id="loginVersion" class="legacy-version hidden" aria-hidden="true">Version 1.0.56</span>
+          <span class="version-pair"><b id="loginFrontendVersion">FE v1.0.58</b><b id="loginBackendVersion">BE checking…</b></span>
+          <span id="loginVersion" class="legacy-version hidden" aria-hidden="true">Version 1.0.58</span>
         </div>
         <button class="primary-button wide" type="submit">Sign in securely</button>
         <button id="repairSessionButton" class="repair-session-button" type="button">↻ Repair browser cache / session</button>
@@ -67,12 +67,12 @@
   <div id="appShell" class="app-shell hidden">
     <aside id="sidebar" class="sidebar">
       <div class="sidebar-brand">
-        <div class="brand-mark small family-bond-brand"><img src="family-unity-v1048-192.png" alt="MyFamily bond emblem" width="46" height="46" decoding="async" loading="lazy"></div>
+        <div class="brand-mark small family-bond-brand"><img src="family-unity-v1058-192.png?v=1.0.58" alt="MyFamily bond emblem" width="46" height="46" decoding="async" loading="lazy"></div>
         <div>
           <strong id="sidebarFamilyName">Our Family Hub</strong>
           <span class="brand-kicker">PRIVATE FAMILY SPACE</span>
-          <span class="sidebar-version-pair"><b id="sidebarFrontendVersion">FE v1.0.56</b><b id="sidebarBackendVersion">BE checking…</b></span>
-          <b id="sidebarVersion" class="legacy-version hidden" aria-hidden="true">v1.0.56</b>
+          <span class="sidebar-version-pair"><b id="sidebarFrontendVersion">FE v1.0.58</b><b id="sidebarBackendVersion">BE checking…</b></span>
+          <b id="sidebarVersion" class="legacy-version hidden" aria-hidden="true">v1.0.58</b>
         </div>
       </div>
       <nav class="main-nav" aria-label="Main navigation">
@@ -477,19 +477,25 @@
       <input id="expenseRecurringId" type="hidden">
       <input id="expenseMarkPaidId" type="hidden">
       <p id="expenseRecurringNote" class="recurring-pay-note hidden"></p>
-      <label>Expenditure for<select id="expenseMember" required></select><small>Select a family member or Whole family. This controls the automatic member-wise summary.</small></label>
-      <div class="two-fields"><label>Entry type<select id="expenseEntryType" required><option value="REGULAR">Paid expenditure</option><option value="PREPLANNED">Preplanned expenditure</option></select></label><label id="expenseDateLabel">Date Paid<input id="expenseDate" type="date" required></label></div>
-      <div class="two-fields"><label>Amt (Rs.)<input id="expenseAmount" type="number" min="0.01" step="0.01" required placeholder="12000"></label><label>Category<select id="expenseCategory" required></select></label></div>
-      <div class="two-fields"><label>Subcategory<select id="expenseSubcategory" required></select></label><span class="category-help">Subcategories change with the selected category. Administrators manage these choices.</span></div>
-      <div class="two-fields"><label>Major plan (optional)<select id="expenseMajorPlan"><option value="">Not linked to a major plan</option></select></label><label>Project phase (optional)<select id="expenseMajorPlanPhase"><option value="">No phase</option></select></label></div>
+      <p id="expenseQuickHint" class="quick-expense-hint hidden"><span>⚡</span><strong>Quick entry</strong><small>Complete the main fields and save. Planning, project and sharing options are under More details.</small></p>
+      <div class="two-fields quick-expense-first-row"><label>Amt (Rs.)<input id="expenseAmount" type="number" min="0.01" step="0.01" inputmode="decimal" required placeholder="12000"></label><label id="expenseDateLabel">Date Paid<input id="expenseDate" type="date" required></label></div>
+      <div class="two-fields"><label>Expenditure for<select id="expenseMember" required></select><small>Member or Whole family</small></label><label>Category<select id="expenseCategory" required></select></label></div>
       <div class="two-fields"><label>Send to<input id="expenseSendTo" required maxlength="100" placeholder="e.g. Mani SBI"></label><label>From Acct<input id="expenseFromAccount" required maxlength="100" placeholder="e.g. Family SBI"></label></div>
-      <label>Reason<textarea id="expenseReason" rows="3" required maxlength="500" placeholder="e.g. Monthly 12k sent to Mani SBI on 05th &amp; 20th of each month"></textarea></label>
-      <fieldset id="expenseSharingFieldset" class="expense-sharing-fieldset hidden"><legend>Share this expenditure</legend>
-        <div class="two-fields"><label>Paid by<select id="expensePaidByMember"></select></label><label>Split<select id="expenseSplitMethod"><option value="PERSONAL">No split / personal</option><option value="EQUAL">Split equally</option><option value="CUSTOM">Custom amounts</option></select></label></div>
-        <div id="expenseShareMembers" class="expense-share-members hidden"></div>
-        <div id="expenseCustomShares" class="expense-custom-shares hidden"></div>
-        <small>Only explicitly shared paid expenses affect “Who owes whom.” Old records remain personal and unchanged.</small>
-      </fieldset>
+      <label>Reason<textarea id="expenseReason" rows="2" required maxlength="500" placeholder="What was this payment for?"></textarea></label>
+      <details id="expenseMoreDetails" class="expense-more-details">
+        <summary><span><b class="more-label">＋ More details</b><b class="less-label">− Hide details</b><small>Preplanned, subcategory, Major Plan and expense sharing</small></span><i aria-hidden="true">⌄</i></summary>
+        <div class="expense-advanced-content">
+          <div class="two-fields"><label>Entry type<select id="expenseEntryType" required><option value="REGULAR">Paid expenditure</option><option value="PREPLANNED">Preplanned expenditure</option></select></label><label>Subcategory<select id="expenseSubcategory" required></select></label></div>
+          <span class="category-help">Subcategory is selected automatically. Administrators can manage these choices.</span>
+          <div class="two-fields"><label>Major plan (optional)<select id="expenseMajorPlan"><option value="">Not linked to a major plan</option></select></label><label>Project phase (optional)<select id="expenseMajorPlanPhase"><option value="">No phase</option></select></label></div>
+          <fieldset id="expenseSharingFieldset" class="expense-sharing-fieldset hidden"><legend>Share this expenditure</legend>
+            <div class="two-fields"><label>Paid by<select id="expensePaidByMember"></select></label><label>Split<select id="expenseSplitMethod"><option value="PERSONAL">No split / personal</option><option value="EQUAL">Split equally</option><option value="CUSTOM">Custom amounts</option></select></label></div>
+            <div id="expenseShareMembers" class="expense-share-members hidden"></div>
+            <div id="expenseCustomShares" class="expense-custom-shares hidden"></div>
+            <small>Only explicitly shared paid expenses affect “Who owes whom.” Old records remain personal and unchanged.</small>
+          </fieldset>
+        </div>
+      </details>
       <div class="modal-actions"><button type="button" class="secondary-button" data-close>Cancel</button><button type="submit" class="primary-button">Save expenditure</button></div>
     </form>
   </dialog>
@@ -783,7 +789,7 @@
   <nav id="mobileBottomNav" class="mobile-bottom-nav" aria-label="Mobile dashboard navigation">
     <button class="nav-button mobile-nav-button active" type="button" data-view="home" aria-current="page"><span aria-hidden="true">⌂</span><small>Home</small></button>
     <button class="nav-button mobile-nav-button" type="button" data-view="dates" data-module="DATES"><span aria-hidden="true">◫</span><small>Reminders</small></button>
-    <button class="mobile-add-button" type="button" data-open="expenseDialog" data-module="EXPENSES" aria-label="Add expenditure"><span aria-hidden="true">＋</span><small>Add</small></button>
+    <button class="mobile-add-button" type="button" data-open="expenseDialog" data-quick-expense="true" data-module="EXPENSES" aria-label="Add quick expenditure"><span aria-hidden="true">＋</span><small>Add</small></button>
     <button class="nav-button mobile-nav-button" type="button" data-view="expenses" data-module="EXPENSES"><span aria-hidden="true">₹</span><small>Expenses</small></button>
     <button id="mobileMoreButton" class="mobile-nav-button mobile-more-button" type="button" aria-label="Open all sections"><span aria-hidden="true">•••</span><small>More</small></button>
   </nav>
@@ -791,12 +797,12 @@
   <div id="loadingOverlay" class="loading-overlay hidden" role="status" aria-live="polite" aria-atomic="true"><div class="spinner" aria-hidden="true"></div><p id="loadingText">Working…</p></div>
   <div id="toastRegion" class="toast-region" role="status" aria-live="polite" aria-atomic="true"></div>
 
-  <script src="config.js?v=1.0.56" defer></script>
-  <script src="app.js?v=1.0.56" defer></script>
+  <script src="config.js?v=1.0.58" defer></script>
+  <script src="app.js?v=1.0.58" defer></script>
   <script>
     if ("serviceWorker" in navigator) {
       window.addEventListener("load", function () {
-        var registerWorker = function () { navigator.serviceWorker.register("./sw.js?v=1.0.56-clean", { scope: "./" }).catch(function () {}); };
+        var registerWorker = function () { navigator.serviceWorker.register("./sw.js?v=1.0.58", { scope: "./" }).catch(function () {}); };
         if ("requestIdleCallback" in window) requestIdleCallback(registerWorker, { timeout: 2200 });
         else setTimeout(registerWorker, 600);
       }, { once: true });

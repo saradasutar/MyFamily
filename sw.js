@@ -1,16 +1,16 @@
 "use strict";
 
-const CACHE_NAME = "myfamily-shell-v1056-clean";
+const CACHE_NAME = "myfamily-shell-v1058-favicon-fix";
 const SHELL_ASSETS = [
   "./",
-  "./styles.css?v=1.0.56-clean",
-  "./config.js?v=1.0.56",
-  "./app.js?v=1.0.56",
-  "./family-unity-v1048-32.png",
-  "./family-unity-v1048-180.png",
-  "./family-unity-v1048-192.png",
-  "./family-unity-v1048-512.png",
-  "./family-unity-v1048.webmanifest"
+  "./styles.css?v=1.0.58",
+  "./config.js?v=1.0.58",
+  "./app.js?v=1.0.58",
+  "./family-unity-v1058-32.png",
+  "./family-unity-v1058-180.png",
+  "./family-unity-v1058-192.png",
+  "./family-unity-v1058-512.png",
+  "./family-unity-v1058.webmanifest"
 ];
 
 self.addEventListener("install", function (event) {

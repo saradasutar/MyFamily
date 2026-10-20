@@ -1259,7 +1259,7 @@ th { box-shadow:inset 0 -1px #e6e4ef; }
 }
 
 /* ========================================================================== 
-   MyFamily v1.0.58 — cleaned premium responsive visual system
+   MyFamily v1.0.59 — premium responsive visual system + family tree
    Pure CSS enhancement: no external font, framework or render-blocking asset.
    ========================================================================== */
 :root {
@@ -1464,6 +1464,60 @@ html { scroll-padding-top:96px; }
 .premium-ui .expense-advanced-content { display:grid; gap:14px; padding:13px; border-top:1px solid rgba(96,89,146,.13); }
 .premium-ui .quick-expense-mode { gap:12px; }
 .premium-ui .quick-expense-mode .modal-actions { margin-top:2px; }
+
+/* Family tree & register */
+.family-tree-view { --tree-violet:#6652bd; --tree-teal:#188d85; --tree-rose:#a75f70; }
+.family-tree-hero { position:relative; overflow:hidden; display:flex; align-items:center; justify-content:space-between; gap:24px; margin-bottom:16px; padding:22px 24px; border:1px solid rgba(104,82,190,.14); border-radius:24px; background:radial-gradient(circle at 88% 5%,rgba(68,190,177,.18),transparent 15rem),linear-gradient(135deg,#fff,#f1edff); box-shadow:0 16px 42px rgba(44,35,99,.08); }
+.family-tree-hero::before { content:""; position:absolute; inset:auto -55px -75px auto; width:190px; height:190px; border:34px solid rgba(102,82,189,.055); border-radius:50%; }
+.family-tree-hero > * { position:relative; z-index:1; }
+.family-tree-hero h3 { margin:4px 0 6px; color:#25243d; font-size:clamp(1.65rem,2.6vw,2.45rem); letter-spacing:-.045em; }
+.family-tree-hero p:not(.eyebrow) { max-width:660px; margin:0; color:#6d6980; font-size:.82rem; line-height:1.55; }
+.family-tree-actions { display:flex; align-items:center; justify-content:flex-end; flex-wrap:wrap; gap:8px; }
+.family-tree-stats { display:grid; grid-template-columns:repeat(5,minmax(0,1fr)); gap:10px; margin-bottom:14px; }
+.family-tree-stats > div { display:grid; grid-template-columns:auto 1fr; grid-template-rows:auto auto; column-gap:10px; align-items:center; min-height:78px; padding:12px 14px; border:1px solid rgba(96,89,146,.14); border-radius:17px; background:#fff; box-shadow:0 8px 23px rgba(43,37,96,.045); }
+.family-tree-stats span { grid-row:1 / 3; display:grid; width:38px; height:38px; place-items:center; border-radius:12px; color:#5946a6; background:linear-gradient(145deg,#eee9ff,#e8f8f5); font-weight:900; }
+.family-tree-stats strong { align-self:end; color:#29283f; font-size:1.17rem; }
+.family-tree-stats small { align-self:start; color:#777489; font-size:.62rem; font-weight:750; }
+.family-tree-filters { grid-template-columns:minmax(230px,1fr) 150px 170px 160px; }
+.family-tree-canvas { overflow:auto; min-height:260px; padding:24px; border:1px solid rgba(96,89,146,.14); border-radius:24px; background:linear-gradient(rgba(255,255,255,.93),rgba(252,251,255,.96)),radial-gradient(circle at 12px 12px,#dcd7ef 1px,transparent 1px); background-size:auto,24px 24px; box-shadow:0 14px 40px rgba(43,37,96,.065); }
+.family-generation { position:relative; min-width:max-content; padding:0 0 30px; }
+.family-generation:last-child { padding-bottom:0; }
+.family-generation:not(:last-child)::after { content:""; position:absolute; left:50%; bottom:4px; width:2px; height:22px; border-radius:2px; background:linear-gradient(#c8c0e8,#76bdb6); }
+.generation-label { display:flex; align-items:center; justify-content:center; gap:8px; margin-bottom:12px; }
+.generation-label span { padding:6px 11px; border-radius:999px; color:#57449e; background:#eeeaff; font-size:.64rem; font-weight:900; letter-spacing:.07em; text-transform:uppercase; }
+.generation-label small { color:#858094; font-size:.6rem; }
+.family-generation-row { display:flex; align-items:stretch; justify-content:center; flex-wrap:wrap; gap:12px; }
+.family-person-card { display:grid; grid-template-columns:64px minmax(0,1fr); gap:11px; width:265px; min-height:138px; padding:13px; border:1px solid #ddd8ed; border-top:4px solid var(--tree-violet); border-radius:17px; background:linear-gradient(145deg,#fff,#f8f6ff); box-shadow:0 9px 23px rgba(43,37,96,.07); transition:transform .18s ease,box-shadow .18s ease; }
+.family-person-card.remembered { border-top-color:var(--tree-rose); background:linear-gradient(145deg,#fff,#fff4f6); }
+.family-person-avatar { display:grid; width:64px; height:64px; place-items:center; overflow:hidden; border:3px solid white; border-radius:50%; color:#5946a6; background:linear-gradient(145deg,#e8e2fd,#ddf3ef); box-shadow:0 7px 18px rgba(46,37,99,.15); font-size:1.35rem; font-weight:900; }
+.family-person-avatar img,.family-person-photo-preview img { width:100%; height:100%; object-fit:cover; }
+.family-person-copy { min-width:0; }
+.family-person-heading { display:flex; align-items:flex-start; justify-content:space-between; gap:5px; }
+.family-person-heading h4 { overflow-wrap:anywhere; margin:1px 0 4px; color:#29283e; font-size:.91rem; line-height:1.2; }
+.living-chip,.memorial-chip { flex:0 0 auto; padding:3px 5px; border-radius:999px; font-size:.48rem; font-weight:900; text-transform:uppercase; }
+.living-chip { color:#176f58; background:#e2f6ed; }
+.memorial-chip { color:#914c5b; background:#fae5e9; }
+.family-life-dates,.family-relation,.family-note { margin:3px 0; color:#747084; font-size:.64rem; line-height:1.4; }
+.family-relation { color:#4e4581; font-weight:800; }
+.family-branch-chip { display:inline-block; margin:3px 0 5px; padding:3px 6px; border-radius:999px; color:#157269; background:#e5f5f2; font-size:.52rem; font-weight:850; }
+.family-person-copy > small { display:block; overflow-wrap:anywhere; margin-top:3px; color:#858193; font-size:.56rem; }
+.family-note { display:-webkit-box; overflow:hidden; -webkit-box-orient:vertical; -webkit-line-clamp:2; }
+.family-card-actions { display:flex; flex-wrap:wrap; gap:5px; margin-top:8px; }
+.danger-text { color:#a03d4b !important; }
+.family-tree-canvas.layout-photo .family-person-card { grid-template-columns:82px minmax(0,1fr); width:300px; min-height:164px; }
+.family-tree-canvas.layout-photo .family-person-avatar { width:82px; height:82px; }
+.family-tree-canvas.layout-compact .family-person-card { grid-template-columns:38px minmax(0,1fr); width:215px; min-height:82px; padding:9px; }
+.family-tree-canvas.layout-compact .family-person-avatar { width:38px; height:38px; font-size:.85rem; }
+.family-tree-canvas.layout-compact .family-note,.family-tree-canvas.layout-compact .family-person-copy > small,.family-tree-canvas.layout-compact .family-card-actions { display:none; }
+.family-person-dialog { width:min(980px,calc(100vw - 28px)); }
+.family-person-editor-grid { display:grid; grid-template-columns:minmax(0,1fr) 220px; gap:20px; }
+.family-person-fields { display:grid; gap:12px; }
+.family-person-photo-editor { display:flex; flex-direction:column; gap:10px; }
+.family-person-photo-preview { display:grid; width:150px; height:150px; margin:0 auto; place-items:center; overflow:hidden; border:5px solid white; border-radius:50%; color:#5e49af; background:linear-gradient(145deg,#e8e2fd,#daf3ef); box-shadow:0 12px 28px rgba(43,37,96,.16); font-size:2.2rem; }
+
+@media (hover:hover) and (pointer:fine) { .family-person-card:hover { transform:translateY(-3px); box-shadow:0 14px 32px rgba(43,37,96,.12); } }
+@media (max-width:950px) { .family-tree-hero { align-items:flex-start; flex-direction:column; }.family-tree-actions { justify-content:flex-start; }.family-tree-stats { grid-template-columns:repeat(3,minmax(0,1fr)); }.family-tree-filters { grid-template-columns:1fr 1fr; }.family-tree-filters .search-label { grid-column:1 / -1; }.family-person-editor-grid { grid-template-columns:1fr; }.family-person-photo-editor { max-width:360px; margin:auto; } }
+@media (max-width:640px) { .family-tree-hero { padding:17px; border-radius:20px; }.family-tree-actions { display:grid; width:100%; grid-template-columns:1fr; }.family-tree-actions button { width:100%; }.family-tree-stats { grid-template-columns:1fr 1fr; gap:8px; }.family-tree-stats > div { min-height:68px; padding:10px; }.family-tree-filters { grid-template-columns:1fr; }.family-tree-filters .search-label { grid-column:auto; }.family-tree-canvas { padding:15px 10px; border-radius:18px; }.family-generation { min-width:0; }.family-generation-row { flex-direction:column; align-items:stretch; }.family-person-card,.family-tree-canvas.layout-photo .family-person-card,.family-tree-canvas.layout-compact .family-person-card { width:100%; }.family-person-dialog .three-fields { grid-template-columns:1fr; }.family-person-photo-preview { width:125px; height:125px; } }
 
 /* Lightweight progressive reveal. Added only when JS enhancement is active. */
 .premium-ui.js-motion .ui-reveal { opacity:0; transform:translateY(14px); transition:opacity .46s cubic-bezier(.2,.8,.2,1),transform .46s cubic-bezier(.2,.8,.2,1); transition-delay:var(--reveal-delay,0ms); }

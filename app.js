@@ -2,7 +2,7 @@
 
 const CONFIG = window.FAMILY_DASHBOARD_CONFIG || {};
 const PLACEHOLDER_URL = "PASTE_YOUR_APPS_SCRIPT_WEB_APP_URL_HERE";
-const FRONTEND_VERSION = "1.0.58";
+const FRONTEND_VERSION = "1.0.59";
 const SAVED_USERNAME_KEY = "familyDashboardUsername";
 const SESSION_TOKEN_KEY = "familyDashboardToken";
 const DEFAULT_IDLE_TIMEOUT_MINUTES = 60;
@@ -18,6 +18,8 @@ const state = {
   calendarCursor: new Date(new Date().getFullYear(), new Date().getMonth(), 1),
   pendingPhoto: null,
   pendingMemberPhoto: null,
+  pendingFamilyPersonPhoto: null,
+  removeFamilyPersonPhoto: false,
   pendingParentsPortrait: null,
   pendingImportantDatePhoto: null,
   removeImportantDatePhoto: false,
@@ -48,7 +50,7 @@ const pendingRequests = new Map();
 const viewTitles = {
   home: "Family overview", expenses: "Expenditure", income: "Income", targets: "Family targets",
   dates: "Reminders", calendar: "Family calendar", diary: "Family diary", photos: "Family memories",
-  experiences: "Family experiences", admin: "Administration"
+  experiences: "Family experiences", family: "Family tree", admin: "Administration"
 };
 const viewModules = { expenses: "EXPENSES", income: "INCOME", targets: "TARGETS", dates: "DATES", calendar: "CALENDAR", diary: "DIARY", photos: "PHOTOS", experiences: "EXPERIENCES" };
 const currencySymbols = { INR: "₹", USD: "$", EUR: "€", GBP: "£" };
@@ -633,7 +635,7 @@ async function repairBrowserSession() {
   const url = new URL(window.location.href); url.searchParams.set("fresh", String(Date.now())); window.location.replace(url.toString());
 }
 function loadSavedUsername() { const saved = localStorage.getItem(SAVED_USERNAME_KEY) || ""; $("loginUsername").value = saved; $("rememberUsername").checked = !!saved || $("rememberUsername").checked; }
-function normalizeBootstrapData(data) { const result = data || {}; ["members","expenses","recurringExpenses","settlements","majorPlans","majorPlanPhases","income","targets","importantDates","odiaFestivals","photos","experiences","diary","stickyNotes"].forEach(function (key) { if (!Array.isArray(result[key])) result[key] = []; }); if (!result.settings) result.settings = {}; if (!Array.isArray(result.expenseCategories) || !result.expenseCategories.length) result.expenseCategories = fallbackExpenseCategories(); return result; }
+function normalizeBootstrapData(data) { const result = data || {}; ["members","familyPeople","expenses","recurringExpenses","settlements","majorPlans","majorPlanPhases","income","targets","importantDates","odiaFestivals","photos","experiences","diary","stickyNotes"].forEach(function (key) { if (!Array.isArray(result[key])) result[key] = []; }); if (!result.settings) result.settings = {}; if (!Array.isArray(result.expenseCategories) || !result.expenseCategories.length) result.expenseCategories = fallbackExpenseCategories(); return result; }
 
 function majorPlanById(id) { return (state.data && state.data.majorPlans || []).find(function (item) { return item.id === id; }); }
 function majorPlanPhaseById(id) { return (state.data && state.data.majorPlanPhases || []).find(function (item) { return item.id === id; }); }
@@ -800,6 +802,7 @@ function prepareNewDialog(id) {
   if (id === "dateDialog") { $("dateDialogTitle").textContent = "Add important date"; $("importantDateCalendarSystem").value="GREGORIAN"; $("importantDateReminderBasis").value="GREGORIAN_ODIA"; $("importantDateOdiaMonth").value="BAISAKHA"; $("importantDateOdiaPaksha").value="SHUKLA"; $("importantDateOdiaTithi").value="1"; $("importantDateOdiaEquivalent").value=todayIso(); state.pendingImportantDatePhoto=null; state.removeImportantDatePhoto=false; $("importantDatePhotoFile").value=""; setImportantDatePhotoPreview(null); $("removeImportantDatePhoto").classList.add("hidden"); $("importantDateAdminControls").classList.toggle("hidden",!isAdmin()); const saka=gregorianToSaka($("importantDateValue").value||todayIso()); if(saka){$("importantDateSakaYear").value=saka.year;$("importantDateSakaMonth").value=String(saka.month);$("importantDateSakaDay").value=saka.day;} syncImportantDateCalendar(); $("notifyEveryone").checked = true; $("recipientChecks").classList.add("hidden"); renderRecipientChecks([]); }
   if (id === "photoDialog") { $("photoForm").reset(); $("photoTakenDate").value = todayIso(); $("photoPreview").classList.add("hidden"); state.pendingPhoto = null; }
   if (id === "memberDialog") { $("memberDialogTitle").textContent = "Add family member"; $("memberActive").checked = true; $("memberPassword").required = true; setMemberPermissions(["EXPENSES","INCOME","TARGETS","DATES","CALENDAR","PHOTOS","EXPERIENCES","DIARY"]); syncMemberAccessRole(); }
+  if (id === "familyPersonDialog") prepareFamilyPersonDialog();
   if (id === "experienceDialog") $("experienceDialogTitle").textContent = "Add experience";
   if (id === "diaryDialog") $("diaryDialogTitle").textContent = "Write diary entry";
   if (id === "expenseCategoryDialog") { state.categoryDraft = JSON.parse(JSON.stringify(expenseCategoryConfig())); state.categoryEditIds.clear(); state.subcategoryEditIds.clear(); $("newExpenseCategoryName").value = ""; renderExpenseCategoryManager(); }
@@ -1184,6 +1187,8 @@ function bindForms() {
   $("memberForm").addEventListener("submit", saveMember);
   $("memberPasswordForm").addEventListener("submit", saveAdminMemberPassword);
   $("memberPhotoForm").addEventListener("submit", saveMemberPhoto);
+  $("familyPersonForm").addEventListener("submit", saveFamilyPerson);
+  $("familyTreePrintForm").addEventListener("submit", printFamilyTree);
   $("settingsForm").addEventListener("submit", saveSettings);
   $("expenseSettlementForm").addEventListener("submit", saveExpenseSettlement);
   $("stickyNoteForm").addEventListener("submit", saveStickyNote);
@@ -1193,6 +1198,11 @@ function bindForms() {
   $("addExpenseSettlement").addEventListener("click", function(){openExpenseSettlementDialog();});
   $("memberRole").addEventListener("change", syncMemberAccessRole);
   $("memberPhotoFile").addEventListener("change", previewMemberPhoto);
+  $("familyPersonPhotoFile").addEventListener("change", previewFamilyPersonPhoto);
+  $("familyPersonLifeStatus").addEventListener("change", syncFamilyPersonLifeStatus);
+  $("removeFamilyPersonPhoto").addEventListener("click", removeFamilyPersonPhoto);
+  $("importFamilyAccounts").addEventListener("click", importFamilyAccounts);
+  $("openFamilyTreePrint").addEventListener("click", openFamilyTreePrintDialog);
   $("deleteMemberPhoto").addEventListener("click", deleteMemberPhoto);
   $("parentsPortraitFile").addEventListener("change", previewParentsPortrait);
   $("saveParentsPortrait").addEventListener("click", saveParentsPortrait);
@@ -1203,7 +1213,7 @@ function bindForms() {
 }
 
 function bindFilters() {
-  const expenseSearchRender = debounce(renderExpenses, 120), recurringSearchRender=debounce(renderRecurringExpenses,120), incomeSearchRender = debounce(renderIncome, 120), dateSearchRender = debounce(renderDates, 120), photoSearchRender = debounce(renderPhotos, 120), experienceSearchRender = debounce(renderExperiences, 120), diarySearchRender = debounce(renderDiary, 120), globalSearchRender = debounce(renderGlobalSearch, 120);
+  const expenseSearchRender = debounce(renderExpenses, 120), recurringSearchRender=debounce(renderRecurringExpenses,120), incomeSearchRender = debounce(renderIncome, 120), dateSearchRender = debounce(renderDates, 120), photoSearchRender = debounce(renderPhotos, 120), experienceSearchRender = debounce(renderExperiences, 120), diarySearchRender = debounce(renderDiary, 120), familySearchRender = debounce(renderFamilyTree, 120), globalSearchRender = debounce(renderGlobalSearch, 120);
   ["expenseMonth", "expenseStatusFilter", "expenseMemberFilter", "expenseCategoryFilter", "expenseSubcategoryFilter", "expenseMajorPlanFilter", "expenseSendToFilter", "expenseAccountFilter"].forEach(function (id) { $(id).addEventListener("input", renderExpenses); });
   $("expenseSearch").addEventListener("input", expenseSearchRender);
   $("majorPlanStatusFilter").addEventListener("input", renderMajorPlans);
@@ -1224,6 +1234,8 @@ function bindFilters() {
   $("experienceSearch").addEventListener("input", experienceSearchRender);
   ["diaryMonth", "diaryWriterFilter"].forEach(function (id) { $(id).addEventListener("input", renderDiary); });
   $("diarySearch").addEventListener("input", diarySearchRender);
+  $("familyTreeSearch").addEventListener("input", familySearchRender);
+  ["familyTreeStatus","familyTreeBranch","familyTreeLayout"].forEach(function(id){$(id).addEventListener("input",renderFamilyTree);});
   $("globalSearch").addEventListener("input", globalSearchRender);
   $("exportExpenses").addEventListener("click", function () { exportCsv("family-expenditure.csv", filteredExpenses().map(function(item){return Object.assign({},item,{memberName:memberName(expenseMemberId(item)),majorPlanName:majorPlanName(item.majorPlanId),majorPlanPhaseName:majorPlanPhaseName(item.majorPlanPhaseId)});}), ["amount", "date", "status", "memberName", "category", "subcategory", "majorPlanName", "majorPlanPhaseName", "sentTo", "fromAccount", "reason"], ["Amt (Rs.)", "Date", "Status", "Member", "Category", "Subcategory", "Major plan", "Phase", "Send to", "From Acct", "Reason"]); });
   $("exportIncome").addEventListener("click", function () { exportCsv("family-income.csv", filteredIncome(), ["date", "source", "category", "receivedByName", "receivingMode", "amount"]); });
@@ -1316,6 +1328,8 @@ function bindActions() {
     if (action === "edit-member") editMember(id);
     if (action === "set-password") openMemberPasswordDialog(id);
     if (action === "manage-member-photo") openMemberPhotoDialog(id);
+    if (action === "edit-family-person") editFamilyPerson(id);
+    if (action === "delete-family-person") confirmDelete("deleteFamilyPerson", id, "Delete this person from the family tree? Photos saved only for this record will be moved to Trash.");
     if (action === "filter-expense-member") { $("expenseMemberFilter").value=id; renderExpenses(); $("expenseTable").scrollIntoView({behavior:"smooth",block:"start"}); }
     if (action === "quick-filter-expense-member") { $("expenseMemberFilter").value=id||""; renderExpenses(); }
     if (action === "filter-expense-category") { $("expenseCategoryFilter").value=button.dataset.category||""; renderExpenses(); $("expenseTable").scrollIntoView({behavior:"smooth",block:"start"}); }
@@ -2084,6 +2098,7 @@ function renderAll() {
   $("userRole").textContent = state.data.user.role === "ADMIN" ? "Administrator" : "Family member";
   $("userAvatar").innerHTML = state.data.user.photoThumbData?'<img src="'+h(state.data.user.photoThumbData)+'" alt="'+h(state.data.user.name)+'">':h(state.data.user.name.charAt(0).toUpperCase());
   $("adminNav").classList.toggle("hidden", !isAdmin());
+  all(".family-admin-only").forEach(function(el){el.classList.toggle("hidden",!isAdmin());});
   $("manageExpenseCategoriesQuick").classList.toggle("hidden", !isAdmin());
   $("createMajorPlan").classList.toggle("hidden", !isAdmin());
   if (!isAdmin() && state.view === "admin") goTo("home");
@@ -2103,6 +2118,7 @@ function renderView(view) {
   if (view === "photos") renderPhotos();
   if (view === "experiences") renderExperiences();
   if (view === "diary") renderDiary();
+  if (view === "family") renderFamilyTree();
   if (view === "admin" && isAdmin()) renderAdmin();
   scheduleInterfaceReveal(view);
 }
@@ -2544,6 +2560,98 @@ function renderCalendar() {
   } $("calendarGrid").innerHTML=cells.join("");
 }
 
+/* ---------- Family tree & family register ---------- */
+
+function familyPersonById(id) { return (state.data.familyPeople || []).find(function(person){return person.id===id;}); }
+function familyPersonName(id) { const person=familyPersonById(id); return person?person.name:""; }
+function familyLifeDates(person) {
+  if(person.lifeStatus==="DECEASED")return (person.birthDate?formatDate(person.birthDate):"Birth date not recorded")+" — "+(person.deathDate?formatDate(person.deathDate):"Remembered");
+  return person.birthDate?("Born "+formatDate(person.birthDate)):"Birth date not recorded";
+}
+function familyGeneration(person,idMap,cache,visiting) {
+  if(cache[person.id]!==undefined)return cache[person.id];
+  if(visiting[person.id])return 0;
+  visiting[person.id]=true;
+  const parents=[person.fatherId,person.motherId].map(function(id){return idMap[id];}).filter(Boolean);
+  const generation=parents.length?Math.max.apply(null,parents.map(function(parent){return familyGeneration(parent,idMap,cache,visiting);}))+1:0;
+  delete visiting[person.id]; cache[person.id]=generation; return generation;
+}
+function familyPeopleWithGenerations(items) {
+  const all=state.data.familyPeople||[],idMap={},cache={}; all.forEach(function(person){idMap[person.id]=person;});
+  all.forEach(function(person){familyGeneration(person,idMap,cache,{});});
+  all.forEach(function(person){if(person.spouseId&&cache[person.spouseId]!==undefined){const shared=Math.max(cache[person.id]||0,cache[person.spouseId]||0);cache[person.id]=shared;cache[person.spouseId]=shared;}});
+  return items.map(function(person){return Object.assign({},person,{generation:cache[person.id]||0});});
+}
+function familyBranchOptions() {
+  return Array.from(new Set((state.data.familyPeople||[]).map(function(person){return String(person.branch||"").trim();}).filter(Boolean))).sort(function(a,b){return a.localeCompare(b);});
+}
+function refreshFamilyBranchSelects() {
+  const branches=familyBranchOptions();
+  [["familyTreeBranch","All branches"],["familyTreePrintBranch","All branches"]].forEach(function(pair){const select=$(pair[0]),current=select.value;select.innerHTML='<option value="">'+pair[1]+'</option>'+branches.map(function(branch){return '<option value="'+h(branch)+'">'+h(branch)+'</option>';}).join("");if(branches.indexOf(current)>=0)select.value=current;});
+}
+function filteredFamilyPeople() {
+  const q=normalize($("familyTreeSearch").value),status=$("familyTreeStatus").value,branch=$("familyTreeBranch").value;
+  return (state.data.familyPeople||[]).filter(function(person){
+    return (!status||person.lifeStatus===status)&&(!branch||person.branch===branch)&&(!q||normalize([person.name,person.branch,person.relationLabel,person.notes,familyPersonName(person.fatherId),familyPersonName(person.motherId),familyPersonName(person.spouseId)].join(" ")).includes(q));
+  });
+}
+function familyPersonAvatar(person,photos) {
+  if(photos!==false&&person.photoThumbData)return '<img src="'+h(person.photoThumbData)+'" alt="'+h(person.name)+'">';
+  return '<span>'+h(String(person.name||"?").charAt(0).toUpperCase())+'</span>';
+}
+function familyPersonCard(person,layout) {
+  const parents=[familyPersonName(person.fatherId),familyPersonName(person.motherId)].filter(Boolean).join(" & ");
+  const spouse=familyPersonName(person.spouseId),remembered=person.lifeStatus==="DECEASED";
+  const adminActions=isAdmin()?'<div class="family-card-actions"><button class="tiny-button" data-action="edit-family-person" data-id="'+h(person.id)+'">Edit</button><button class="tiny-button danger-text" data-action="delete-family-person" data-id="'+h(person.id)+'">Delete</button></div>':"";
+  return '<article class="family-person-card '+(remembered?'remembered ':'')+'layout-'+h(layout.toLowerCase())+'"><div class="family-person-avatar">'+familyPersonAvatar(person,layout!=="COMPACT")+'</div><div class="family-person-copy"><div class="family-person-heading"><h4>'+h(person.name)+'</h4>'+(remembered?'<span class="memorial-chip">✦ Remembered</span>':'<span class="living-chip">● Living</span>')+'</div><p class="family-life-dates">'+h(familyLifeDates(person))+'</p>'+(person.relationLabel?'<p class="family-relation">'+h(person.relationLabel)+'</p>':'')+(person.branch?'<span class="family-branch-chip">'+h(person.branch)+'</span>':'')+(parents?'<small>Parents: '+h(parents)+'</small>':'')+(spouse?'<small>Spouse: '+h(spouse)+'</small>':'')+(layout!=="COMPACT"&&person.notes?'<p class="family-note">'+h(person.notes)+'</p>':'')+adminActions+'</div></article>';
+}
+function renderFamilyTree() {
+  if(!state.data)return;
+  const folderLink=$("familyTreePhotoFolderLink"),folderUrl=state.data.familyTreePhotoFolderUrl||"";folderLink.classList.toggle("hidden",!isAdmin()||!folderUrl);if(folderUrl)folderLink.href=folderUrl;
+  refreshFamilyBranchSelects();
+  const all=state.data.familyPeople||[],items=familyPeopleWithGenerations(filteredFamilyPeople()),layout=$("familyTreeLayout").value||"CLASSIC",living=all.filter(function(person){return person.lifeStatus!=="DECEASED";}).length,remembered=all.length-living,generationCount=all.length?Math.max.apply(null,familyPeopleWithGenerations(all).map(function(person){return person.generation;}))+1:0;
+  $("familyTreeStats").innerHTML=[['♧',all.length,'Family members'],['●',living,'Living'],['✦',remembered,'Remembered'],['↟',generationCount,'Generations'],['⌁',familyBranchOptions().length,'Branches']].map(function(stat){return '<div><span>'+stat[0]+'</span><strong>'+stat[1]+'</strong><small>'+stat[2]+'</small></div>';}).join("");
+  const groups={};items.forEach(function(person){(groups[person.generation]||(groups[person.generation]=[])).push(person);});
+  $("familyTreeCanvas").className="family-tree-canvas layout-"+layout.toLowerCase();
+  $("familyTreeCanvas").innerHTML=Object.keys(groups).sort(function(a,b){return Number(a)-Number(b);}).map(function(key,index){const people=groups[key].sort(function(a,b){return Number(a.sortOrder||0)-Number(b.sortOrder||0)||a.name.localeCompare(b.name);});return '<section class="family-generation"><div class="generation-label"><span>Generation '+(Number(key)+1)+'</span><small>'+plural(people.length,"person","people")+'</small></div><div class="family-generation-row">'+people.map(function(person){return familyPersonCard(person,layout);}).join("")+'</div></section>';}).join("");
+  $("familyTreeEmpty").classList.toggle("hidden",!!items.length);
+}
+function familyPersonOptions(selected,selfId,placeholder) {
+  return '<option value="">'+h(placeholder)+'</option>'+(state.data.familyPeople||[]).filter(function(person){return person.id!==selfId;}).map(function(person){return '<option value="'+h(person.id)+'"'+(person.id===selected?' selected':'')+'>'+h(person.name)+(person.lifeStatus==="DECEASED"?' · remembered':'')+'</option>';}).join("");
+}
+function prepareFamilyPersonDialog(person) {
+  const item=person||{},id=item.id||"";
+  $("familyPersonForm").reset();$("familyPersonId").value=id;$("familyPersonDialogTitle").textContent=id?"Edit family member":"Add family member";
+  $("familyPersonName").value=item.name||"";$("familyPersonGender").value=item.gender||"OTHER";$("familyPersonLifeStatus").value=item.lifeStatus||"LIVING";$("familyPersonBirthDate").value=item.birthDate||"";$("familyPersonDeathDate").value=item.deathDate||"";$("familyPersonRelation").value=item.relationLabel||"";$("familyPersonBranch").value=item.branch||"";$("familyPersonSortOrder").value=Number(item.sortOrder||100);$("familyPersonNotes").value=item.notes||"";
+  $("familyPersonFather").innerHTML=familyPersonOptions(item.fatherId,id,"Not recorded");$("familyPersonMother").innerHTML=familyPersonOptions(item.motherId,id,"Not recorded");$("familyPersonSpouse").innerHTML=familyPersonOptions(item.spouseId,id,"Not recorded");
+  const accounts=state.data.adminMembers||[];$("familyPersonLinkedMember").innerHTML='<option value="">No linked dashboard account</option>'+accounts.map(function(member){return '<option value="'+h(member.id)+'"'+(member.id===item.linkedMemberId?' selected':'')+'>'+h(member.name)+' (@'+h(member.username)+')</option>';}).join("");
+  state.pendingFamilyPersonPhoto=null;state.removeFamilyPersonPhoto=false;$("familyPersonPhotoFile").value="";setFamilyPersonPhotoPreview(item.photoThumbData||"");$("removeFamilyPersonPhoto").classList.toggle("hidden",!item.hasOwnPhoto);syncFamilyPersonLifeStatus();
+}
+function syncFamilyPersonLifeStatus() { const deceased=$("familyPersonLifeStatus").value==="DECEASED";$("familyPersonDeathField").classList.toggle("hidden",!deceased);if(!deceased)$("familyPersonDeathDate").value=""; }
+function setFamilyPersonPhotoPreview(dataUrl) { $("familyPersonPhotoPreview").innerHTML=dataUrl?'<img src="'+h(dataUrl)+'" alt="Family member photo preview">':'<span>♧</span>'; }
+async function previewFamilyPersonPhoto() {
+  const file=$("familyPersonPhotoFile").files[0];if(!file)return;if(!/^image\/(jpeg|png|webp)$/.test(file.type))return toast("Choose a JPG, PNG or WebP image.","error");showLoading("Preparing family-tree photo…");
+  try{const full=await resizeImage(file,900,.84),thumb=await resizeImage(file,180,.72);state.pendingFamilyPersonPhoto={name:file.name.replace(/[^A-Za-z0-9._-]/g,"_"),fullData:full,thumbData:thumb};state.removeFamilyPersonPhoto=false;setFamilyPersonPhotoPreview(thumb);$("removeFamilyPersonPhoto").classList.remove("hidden");}catch(error){toast("This family-tree photo could not be prepared.","error");}finally{hideLoading();}
+}
+function removeFamilyPersonPhoto() { state.pendingFamilyPersonPhoto=null;state.removeFamilyPersonPhoto=true;$("familyPersonPhotoFile").value="";setFamilyPersonPhotoPreview("");$("removeFamilyPersonPhoto").classList.add("hidden"); }
+function editFamilyPerson(id) { const person=familyPersonById(id);if(!person||!isAdmin())return;prepareFamilyPersonDialog(person);openDialog("familyPersonDialog"); }
+async function saveFamilyPerson(event) {
+  event.preventDefault();if(!isAdmin())return;
+  const id=$("familyPersonId").value,payload={id:id,name:$("familyPersonName").value,gender:$("familyPersonGender").value,lifeStatus:$("familyPersonLifeStatus").value,birthDate:$("familyPersonBirthDate").value,deathDate:$("familyPersonDeathDate").value,fatherId:$("familyPersonFather").value,motherId:$("familyPersonMother").value,spouseId:$("familyPersonSpouse").value,branch:$("familyPersonBranch").value,relationLabel:$("familyPersonRelation").value,linkedMemberId:$("familyPersonLinkedMember").value,sortOrder:$("familyPersonSortOrder").value,notes:$("familyPersonNotes").value};
+  showLoading("Saving family member…");try{const result=await api("saveFamilyPerson",payload),savedId=result.id;if(state.removeFamilyPersonPhoto&&id)await api("deleteFamilyPersonPhoto",{id:savedId});if(state.pendingFamilyPersonPhoto)await api("uploadFamilyPersonPhoto",{id:savedId,fileName:state.pendingFamilyPersonPhoto.name,fullData:state.pendingFamilyPersonPhoto.fullData,thumbData:state.pendingFamilyPersonPhoto.thumbData});$("familyPersonDialog").close();await refreshData();toast(id?"Family member updated.":"Family member added.","success");}catch(error){if(!handleSessionError(error))toast(friendlyApiError(error),"error");}finally{hideLoading();}
+}
+async function importFamilyAccounts() { if(!window.confirm("Add every active dashboard account that is not already linked to the family tree?"))return;const result=await mutate("importFamilyAccounts",{},"Dashboard accounts imported into the family tree.",null,"Building family register…");if(result&&result.created===0)toast("All active dashboard accounts are already linked.","success"); }
+function openFamilyTreePrintDialog() { refreshFamilyBranchSelects();$("familyTreePrintForm").reset();$("familyTreePrintPhotos").checked=true;openDialog("familyTreePrintDialog"); }
+function familyPrintItems() { const branch=$("familyTreePrintBranch").value,layout=$("familyTreePrintLayout").value;return familyPeopleWithGenerations((state.data.familyPeople||[]).filter(function(person){return (!branch||person.branch===branch)&&(layout!=="MEMORIAL"||person.lifeStatus==="DECEASED");})); }
+function printFamilyTree(event) {
+  event.preventDefault();const layout=$("familyTreePrintLayout").value,items=familyPrintItems(),photos=$("familyTreePrintPhotos").checked,notes=$("familyTreePrintNotes").checked,familyName=(state.data.settings&&state.data.settings.familyName)||"Our Family Hub";if(!items.length)return toast("No family members match this print selection.","error");
+  const portrait=layout==="REGISTER"||layout==="MEMORIAL",report=window.open("","_blank");if(!report)return toast("Allow pop-ups to open the family print preview.","error");report.opener=null;
+  let content="";
+  if(layout==="REGISTER")content='<table><thead><tr><th>#</th><th>Name</th><th>Relation / branch</th><th>Life dates</th><th>Parents</th><th>Spouse</th>'+(notes?'<th>Notes</th>':'')+'</tr></thead><tbody>'+items.sort(function(a,b){return a.name.localeCompare(b.name);}).map(function(person,index){return '<tr class="'+(person.lifeStatus==="DECEASED"?'remembered':'')+'"><td>'+(index+1)+'</td><td><strong>'+h(person.name)+'</strong></td><td>'+h([person.relationLabel,person.branch].filter(Boolean).join(" · "))+'</td><td>'+h(familyLifeDates(person))+'</td><td>'+h([familyPersonName(person.fatherId),familyPersonName(person.motherId)].filter(Boolean).join(" & "))+'</td><td>'+h(familyPersonName(person.spouseId))+'</td>'+(notes?'<td>'+h(person.notes||"")+'</td>':'')+'</tr>';}).join("")+'</tbody></table>';
+  else {const groups={};items.forEach(function(person){(groups[person.generation]||(groups[person.generation]=[])).push(person);});content='<div class="tree '+layout.toLowerCase()+'">'+Object.keys(groups).sort(function(a,b){return Number(a)-Number(b);}).map(function(key){return '<section class="generation"><h2>Generation '+(Number(key)+1)+'</h2><div class="cards">'+groups[key].sort(function(a,b){return Number(a.sortOrder||0)-Number(b.sortOrder||0);}).map(function(person){return '<article class="card '+(person.lifeStatus==="DECEASED"?'remembered':'')+'">'+(photos?'<div class="portrait">'+familyPersonAvatar(person,true)+'</div>':'')+'<div><h3>'+h(person.name)+'</h3><p>'+h(person.relationLabel||person.branch||"")+'</p><small>'+h(familyLifeDates(person))+'</small>'+(person.spouseId?'<small>Spouse: '+h(familyPersonName(person.spouseId))+'</small>':'')+(notes&&person.notes?'<em>'+h(person.notes)+'</em>':'')+'</div></article>';}).join("")+'</div></section>';}).join("")+'</div>';}
+  report.document.write('<!doctype html><html><head><meta charset="utf-8"><title>'+h(familyName)+' · Family '+(layout==="REGISTER"?'Register':'Tree')+'</title><style>@page{size:A4 '+(portrait?'portrait':'landscape')+';margin:10mm}*{box-sizing:border-box}body{margin:0;background:#f5f3fa;color:#25233a;font:11px Arial,sans-serif;-webkit-print-color-adjust:exact;print-color-adjust:exact}.page{max-width:1200px;margin:auto;background:white;min-height:100vh;padding:24px}.actions{position:sticky;top:0;text-align:right;padding:8px;background:white;border-bottom:1px solid #ddd}.actions button{margin-left:7px;padding:9px 14px;border:0;border-radius:9px;font-weight:bold;cursor:pointer}.print{background:#5f49bd;color:white}.kicker{color:#6b52c7;font-weight:800;letter-spacing:1.4px}h1{margin:5px 0 2px;font:700 28px Georgia,serif}.sub{margin:0 0 18px;color:#757086}.generation{position:relative;margin:0 0 18px;padding-top:1px}.generation h2{text-align:center;color:#6a52bd;font-size:12px;text-transform:uppercase;letter-spacing:1.4px}.cards{display:flex;justify-content:center;align-items:stretch;gap:9px;flex-wrap:wrap}.card{display:flex;gap:8px;width:190px;min-height:82px;padding:9px;border:1px solid #dcd6ee;border-top:4px solid #6752c7;border-radius:12px;background:linear-gradient(145deg,#fff,#f7f4ff);box-shadow:0 5px 14px #30255f12}.card.remembered{border-top-color:#b1747e;background:linear-gradient(145deg,#fff,#fff5f6)}.portrait{width:43px;height:43px;flex:0 0 43px;border-radius:50%;overflow:hidden;background:#e9e4fa;display:grid;place-items:center;font-size:18px;color:#5a43b0}.portrait img{width:100%;height:100%;object-fit:cover}.card h3{font-size:13px;margin:0 0 4px}.card p,.card small,.card em{display:block;margin:2px 0;color:#706b7e;font-size:9px}.compact .portrait{display:none}.compact .card{width:155px;min-height:55px}.photo .card{width:210px}.photo .portrait{width:58px;height:58px;flex-basis:58px}table{width:100%;border-collapse:collapse}th,td{padding:7px;border:1px solid #dedbe9;text-align:left;vertical-align:top}th{background:#e9e3fb;color:#48388d;font-size:9px;text-transform:uppercase}tbody tr:nth-child(even){background:#f4f8ff}tr.remembered{background:#fff3f5}.foot{margin-top:15px;text-align:right;color:#858093}@media print{body{background:#fff}.page{padding:0;max-width:none}.actions{display:none}}</style></head><body><main class="page"><div class="actions"><button onclick="window.close()">Close</button><button class="print" onclick="window.print()">Print</button></div><div class="kicker">'+h(familyName.toUpperCase())+'</div><h1>'+(layout==="MEMORIAL"?'In Loving Memory':layout==="REGISTER"?'Family Register':'Our Family Tree')+'</h1><p class="sub">'+plural(items.length,"family member","family members")+' · Prepared '+h(new Date().toLocaleDateString("en-IN",{dateStyle:"long"}))+'</p>'+content+'<p class="foot">Family history · FE v'+h(FRONTEND_VERSION)+' · BE v'+h(state.data.backendVersion||"—")+'</p></main></body></html>');report.document.close();$("familyTreePrintDialog").close();
+}
+
 function renderAdmin() {
   $("settingFamilyName").value=state.data.settings.familyName||""; $("settingCurrency").value=state.data.settings.currency||"INR"; $("settingTimezone").value=state.data.settings.timezone||"Asia/Kolkata";
   $("settingCalendarDisplayMode").value=["ENGLISH","ODIA","ENGLISH_ODIA"].includes(String(state.data.settings.calendarDisplayMode||"ENGLISH_ODIA"))?String(state.data.settings.calendarDisplayMode||"ENGLISH_ODIA"):"ENGLISH_ODIA";
@@ -2683,6 +2791,7 @@ function renderGlobalSearch() {
   state.data.photos.forEach(function(x){if(normalize([x.title,x.caption,memberName(x.uploadedBy)].join(" ")).includes(q))results.push({view:"photos",icon:"▧",title:x.title,meta:"Photo by "+memberName(x.uploadedBy)});});
   state.data.experiences.forEach(function(x){if(normalize([x.title,x.place,x.story,x.tags].join(" ")).includes(q))results.push({view:"experiences",icon:"✦",title:x.title,meta:formatDate(x.experienceDate)+" · "+memberName(x.createdBy)});});
   state.data.diary.forEach(function(x){if(normalize([x.title,x.body,x.mood,x.tags].join(" ")).includes(q))results.push({view:"diary",icon:"☷",title:x.title,meta:formatDate(x.diaryDate)+" · "+memberName(x.createdBy)});});
+  state.data.familyPeople.forEach(function(x){if(normalize([x.name,x.relationLabel,x.branch,x.notes,familyPersonName(x.fatherId),familyPersonName(x.motherId),familyPersonName(x.spouseId)].join(" ")).includes(q))results.push({view:"family",icon:x.lifeStatus==="DECEASED"?"✦":"♧",title:x.name,meta:(x.relationLabel||"Family member")+(x.branch?" · "+x.branch:"")+(x.lifeStatus==="DECEASED"?" · Remembered":"")});});
   state.data.stickyNotes.forEach(function(x){if(normalize([x.title,x.body,x.noteType,x.color].join(" ")).includes(q))results.push({view:"home",icon:"🗒",title:x.title,meta:(x.noteType==="REMINDER"?"Reminder":"Target")+" sticky note · "+(x.status==="COMPLETED"?"Completed":"Active"),stickyId:x.id,stickyStatus:x.status});});
   results=results.slice(0,30); $("globalSearchResults").innerHTML=results.length?results.map(function(x){return '<button class="search-result" data-search-view="'+h(x.view)+'"'+(x.stickyId?' data-search-sticky="'+h(x.stickyId)+'" data-search-status="'+h(x.stickyStatus)+'"':'')+'><span>'+h(x.icon)+'</span><div><strong>'+h(x.title)+'</strong><small>'+h(x.meta)+'</small></div></button>';}).join(""):'<p class="muted">No matching family records.</p>'; all("[data-search-view]",$("globalSearchResults")).forEach(function(btn){btn.addEventListener("click",function(){ $("searchDialog").close(); goTo(btn.dataset.searchView); if(btn.dataset.searchSticky){openStickyBoard(btn.dataset.searchStatus==="COMPLETED"?"completed":"active");setTimeout(function(){const note=all("[data-sticky-id]").find(function(item){return item.dataset.stickyId===btn.dataset.searchSticky;});if(note){note.classList.add("sticky-highlight");note.scrollIntoView({block:"center",inline:"center"});setTimeout(function(){note.classList.remove("sticky-highlight");},1800);}},80);} });});
 }
@@ -2783,6 +2892,6 @@ function toast(message,type){
 }
 function friendlyApiError(error){
   const message=(error&&error.message)||"The change could not be saved.";
-  if(/UrlFetchApp\.fetch|script\.external_request/i.test(message))return "Deploy BE v1.0.40 and run repairOdiaCalendarRecords(). Personal Odia tithi conversion will then use the built-in Bhubaneswar-sunrise fallback even if the external service is unavailable.";
+  if(/UrlFetchApp\.fetch|script\.external_request/i.test(message))return "Deploy the latest backend and run repairOdiaCalendarRecords(). Personal Odia tithi conversion will then use the built-in Bhubaneswar-sunrise fallback even if the external service is unavailable.";
   return /Unknown dashboard action/i.test(message)?"Backend update required. Deploy the latest Code.gs as a New version, then refresh this page.":message;
 }

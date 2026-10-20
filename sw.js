@@ -1,11 +1,11 @@
 "use strict";
 
-const CACHE_NAME = "myfamily-shell-v1058-favicon-fix";
+const CACHE_NAME = "myfamily-shell-v1059-family-tree";
 const SHELL_ASSETS = [
   "./",
-  "./styles.css?v=1.0.58",
-  "./config.js?v=1.0.58",
-  "./app.js?v=1.0.58",
+  "./styles.css?v=1.0.59",
+  "./config.js?v=1.0.59",
+  "./app.js?v=1.0.59",
   "./family-unity-v1058-32.png",
   "./family-unity-v1058-180.png",
   "./family-unity-v1058-192.png",

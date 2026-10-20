@@ -3,7 +3,7 @@
   "short_name": "MyFamily",
   "description": "A closely connected family dashboard for shared memories, reminders and finances.",
   "id": "./?app=myfamily",
-  "start_url": "./?installed=1058",
+  "start_url": "./?installed=1059",
   "scope": "./",
   "display": "standalone",
   "background_color": "#090b48",

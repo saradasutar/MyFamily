@@ -6,18 +6,18 @@
   <meta name="color-scheme" content="light">
   <meta name="description" content="Private family dashboard for expenses, goals, important dates and photos.">
   <title>Our Family Hub</title>
-  <link rel="icon" href="family-unity-v1058-32.png?v=1.0.58" type="image/png" sizes="32x32">
-  <link rel="shortcut icon" href="family-unity-v1058-32.png?v=1.0.58" type="image/png">
-  <link rel="apple-touch-icon" href="family-unity-v1058-180.png?v=1.0.58" sizes="180x180">
-  <link rel="manifest" href="family-unity-v1058.webmanifest?v=1.0.58">
+  <link rel="icon" href="family-unity-v1058-32.png?v=1.0.59" type="image/png" sizes="32x32">
+  <link rel="shortcut icon" href="family-unity-v1058-32.png?v=1.0.59" type="image/png">
+  <link rel="apple-touch-icon" href="family-unity-v1058-180.png?v=1.0.59" sizes="180x180">
+  <link rel="manifest" href="family-unity-v1058.webmanifest?v=1.0.59">
   <meta name="theme-color" content="#5b43b5">
   <link rel="preconnect" href="https://script.google.com">
   <link rel="dns-prefetch" href="//script.google.com">
-  <link rel="preload" href="styles.css?v=1.0.58" as="style">
-  <link rel="preload" href="config.js?v=1.0.58" as="script">
-  <link rel="preload" href="app.js?v=1.0.58" as="script">
-  <link rel="preload" href="family-unity-v1058-192.png?v=1.0.58" as="image" type="image/png" fetchpriority="high">
-  <link rel="stylesheet" href="styles.css?v=1.0.58">
+  <link rel="preload" href="styles.css?v=1.0.59" as="style">
+  <link rel="preload" href="config.js?v=1.0.59" as="script">
+  <link rel="preload" href="app.js?v=1.0.59" as="script">
+  <link rel="preload" href="family-unity-v1058-192.png?v=1.0.59" as="image" type="image/png" fetchpriority="high">
+  <link rel="stylesheet" href="styles.css?v=1.0.59">
 </head>
 <body class="premium-ui">
   <a class="skip-link" href="#mainContent">Skip to dashboard content</a>
@@ -36,7 +36,7 @@
       <div class="login-trust-row"><span>Private</span><span>Fast</span><span>Family-first</span></div>
     </div>
     <div class="login-card">
-      <div class="brand-mark family-bond-brand"><img src="family-unity-v1058-192.png?v=1.0.58" alt="Four family members united around a shared heart" width="62" height="62" decoding="async" fetchpriority="high"></div>
+      <div class="brand-mark family-bond-brand"><img src="family-unity-v1058-192.png?v=1.0.59" alt="Four family members united around a shared heart" width="62" height="62" decoding="async" fetchpriority="high"></div>
       <p class="eyebrow">WELCOME HOME</p>
       <h1 id="loginFamilyName">Our Family Hub</h1>
       <p class="muted">Sign in with the username and password managed by your family administrator.</p>
@@ -52,8 +52,8 @@
         </label>
         <div class="login-options">
           <label class="remember-row"><input id="rememberUsername" type="checkbox" checked> Save username on this device</label>
-          <span class="version-pair"><b id="loginFrontendVersion">FE v1.0.58</b><b id="loginBackendVersion">BE checking…</b></span>
-          <span id="loginVersion" class="legacy-version hidden" aria-hidden="true">Version 1.0.58</span>
+          <span class="version-pair"><b id="loginFrontendVersion">FE v1.0.59</b><b id="loginBackendVersion">BE checking…</b></span>
+          <span id="loginVersion" class="legacy-version hidden" aria-hidden="true">Version 1.0.59</span>
         </div>
         <button class="primary-button wide" type="submit">Sign in securely</button>
         <button id="repairSessionButton" class="repair-session-button" type="button">↻ Repair browser cache / session</button>
@@ -67,16 +67,17 @@
   <div id="appShell" class="app-shell hidden">
     <aside id="sidebar" class="sidebar">
       <div class="sidebar-brand">
-        <div class="brand-mark small family-bond-brand"><img src="family-unity-v1058-192.png?v=1.0.58" alt="MyFamily bond emblem" width="46" height="46" decoding="async" loading="lazy"></div>
+        <div class="brand-mark small family-bond-brand"><img src="family-unity-v1058-192.png?v=1.0.59" alt="MyFamily bond emblem" width="46" height="46" decoding="async" loading="lazy"></div>
         <div>
           <strong id="sidebarFamilyName">Our Family Hub</strong>
           <span class="brand-kicker">PRIVATE FAMILY SPACE</span>
-          <span class="sidebar-version-pair"><b id="sidebarFrontendVersion">FE v1.0.58</b><b id="sidebarBackendVersion">BE checking…</b></span>
-          <b id="sidebarVersion" class="legacy-version hidden" aria-hidden="true">v1.0.58</b>
+          <span class="sidebar-version-pair"><b id="sidebarFrontendVersion">FE v1.0.59</b><b id="sidebarBackendVersion">BE checking…</b></span>
+          <b id="sidebarVersion" class="legacy-version hidden" aria-hidden="true">v1.0.59</b>
         </div>
       </div>
       <nav class="main-nav" aria-label="Main navigation">
         <button class="nav-button active" type="button" data-view="home" aria-current="page"><span>⌂</span> Overview</button>
+        <button class="nav-button" data-view="family"><span>♧</span> Family tree</button>
         <button class="nav-button" data-view="expenses" data-module="EXPENSES"><span>₹</span> Expenditure</button>
         <button class="nav-button" data-view="income" data-module="INCOME"><span>↗</span> Income</button>
         <button class="nav-button" data-view="targets" data-module="TARGETS"><span>◎</span> Targets</button>
@@ -314,6 +315,27 @@
           <div class="filter-bar experience-filter"><label>Year<select id="experienceYear"><option value="">All years</option></select></label><label class="search-label">Search<input id="experienceSearch" type="search" placeholder="Title, place, story or writer"></label></div>
           <div id="experienceGrid" class="experience-grid"></div>
           <div id="experienceEmpty" class="empty-state hidden"><span>✦</span><h3>No experiences written yet</h3><p>Preserve the first family story or special moment.</p></div>
+        </section>
+
+        <section id="view-family" class="view family-tree-view">
+          <div class="family-tree-hero">
+            <div><p class="eyebrow">OUR ROOTS &amp; OUR LEGACY</p><h3>Family Tree &amp; Register</h3><p>Keep every generation together—including loved ones remembered—and print a beautiful family record whenever you need it.</p></div>
+            <div class="family-tree-actions">
+              <a id="familyTreePhotoFolderLink" class="secondary-button family-admin-only hidden" target="_blank" rel="noopener">Open photo folder</a>
+              <button id="importFamilyAccounts" class="secondary-button family-admin-only hidden" type="button">↻ Import dashboard accounts</button>
+              <button class="primary-button family-admin-only hidden" type="button" data-open="familyPersonDialog">＋ Add family member</button>
+              <button id="openFamilyTreePrint" class="secondary-button" type="button">▧ View &amp; print</button>
+            </div>
+          </div>
+          <div id="familyTreeStats" class="family-tree-stats"></div>
+          <div class="filter-bar family-tree-filters">
+            <label class="search-label">Find a person<input id="familyTreeSearch" type="search" placeholder="Name, branch, relation or notes"></label>
+            <label>Status<select id="familyTreeStatus"><option value="">Everyone</option><option value="LIVING">Living</option><option value="DECEASED">Remembered</option></select></label>
+            <label>Branch<select id="familyTreeBranch"><option value="">All branches</option></select></label>
+            <label>View<select id="familyTreeLayout"><option value="CLASSIC">Classic tree</option><option value="PHOTO">Photo tree</option><option value="COMPACT">Compact tree</option></select></label>
+          </div>
+          <div id="familyTreeCanvas" class="family-tree-canvas layout-classic" aria-live="polite"></div>
+          <div id="familyTreeEmpty" class="empty-state hidden"><span>♧</span><h3>No family members recorded yet</h3><p>An administrator can add relatives individually or import the current dashboard accounts.</p></div>
         </section>
 
         <section id="view-admin" class="view">
@@ -703,6 +725,42 @@
     </form>
   </dialog>
 
+  <dialog id="familyPersonDialog" class="modal family-person-dialog" aria-label="Family tree person editor">
+    <form id="familyPersonForm" method="dialog">
+      <div class="modal-head"><div><p class="eyebrow">FAMILY TREE</p><h3 id="familyPersonDialogTitle">Add family member</h3><small>This family record does not create a login account.</small></div><button class="modal-close" type="button" data-close>×</button></div>
+      <input id="familyPersonId" type="hidden">
+      <div class="family-person-editor-grid">
+        <div class="family-person-fields">
+          <label>Full name<input id="familyPersonName" required maxlength="80"></label>
+          <div class="two-fields"><label>Gender<select id="familyPersonGender"><option value="MALE">Male</option><option value="FEMALE">Female</option><option value="OTHER">Other / not specified</option></select></label><label>Status<select id="familyPersonLifeStatus"><option value="LIVING">Living</option><option value="DECEASED">Deceased / remembered</option></select></label></div>
+          <div class="two-fields"><label>Date of birth<input id="familyPersonBirthDate" type="date"></label><label id="familyPersonDeathField">Date of death<input id="familyPersonDeathDate" type="date"></label></div>
+          <div class="two-fields"><label>Relation label<input id="familyPersonRelation" maxlength="60" placeholder="e.g. Grandfather, eldest daughter"></label><label>Family branch<input id="familyPersonBranch" maxlength="60" placeholder="e.g. Sutar family"></label></div>
+          <div class="three-fields"><label>Father<select id="familyPersonFather"></select></label><label>Mother<select id="familyPersonMother"></select></label><label>Spouse<select id="familyPersonSpouse"></select></label></div>
+          <div class="two-fields"><label>Linked dashboard account<select id="familyPersonLinkedMember"></select><small>Optional—uses that account’s profile photo if no separate tree photo is saved.</small></label><label>Display order<input id="familyPersonSortOrder" type="number" min="0" max="9999" step="1" value="100"></label></div>
+          <label>Notes<textarea id="familyPersonNotes" rows="4" maxlength="500" placeholder="A short family note, place, profession or memory"></textarea></label>
+        </div>
+        <div class="family-person-photo-editor">
+          <div id="familyPersonPhotoPreview" class="family-person-photo-preview"><span>♧</span></div>
+          <label class="upload-drop compact-upload"><input id="familyPersonPhotoFile" type="file" accept="image/jpeg,image/png,image/webp"><span>◉</span><strong>Choose photo</strong><small>Optional · stored privately in the Family Tree Photos Drive folder</small></label>
+          <button id="removeFamilyPersonPhoto" class="danger-button hidden" type="button">Remove saved photo</button>
+        </div>
+      </div>
+      <div class="modal-actions"><button type="button" class="secondary-button" data-close>Cancel</button><button type="submit" class="primary-button">Save family member</button></div>
+    </form>
+  </dialog>
+
+  <dialog id="familyTreePrintDialog" class="modal small-modal" aria-label="Family tree print options">
+    <form id="familyTreePrintForm" method="dialog">
+      <div class="modal-head"><div><p class="eyebrow">PRINT FAMILY HISTORY</p><h3>Choose a beautiful layout</h3></div><button class="modal-close" type="button" data-close>×</button></div>
+      <label>Print style<select id="familyTreePrintLayout"><option value="CLASSIC">Classic generation tree</option><option value="PHOTO">Photo family tree</option><option value="COMPACT">Compact family tree</option><option value="REGISTER">Family register</option><option value="MEMORIAL">Memorial view</option></select></label>
+      <label>Family branch<select id="familyTreePrintBranch"><option value="">All branches</option></select></label>
+      <label class="check-row"><input id="familyTreePrintPhotos" type="checkbox" checked> Include photos</label>
+      <label class="check-row"><input id="familyTreePrintNotes" type="checkbox"> Include family notes</label>
+      <p class="session-safety-note">Tree layouts print in A4 landscape. Family Register and Memorial View use a clear A4 portrait layout.</p>
+      <div class="modal-actions"><button type="button" class="secondary-button" data-close>Cancel</button><button type="submit" class="primary-button">Open print preview</button></div>
+    </form>
+  </dialog>
+
   <dialog id="memberPasswordDialog" class="modal" aria-label="Set or change member password">
     <form id="memberPasswordForm" method="dialog">
       <div class="modal-head"><div><p class="eyebrow">ADMINISTRATOR CONTROL</p><h3>Set or change password</h3></div><button class="modal-close" type="button" data-close>×</button></div>
@@ -797,12 +855,12 @@
   <div id="loadingOverlay" class="loading-overlay hidden" role="status" aria-live="polite" aria-atomic="true"><div class="spinner" aria-hidden="true"></div><p id="loadingText">Working…</p></div>
   <div id="toastRegion" class="toast-region" role="status" aria-live="polite" aria-atomic="true"></div>
 
-  <script src="config.js?v=1.0.58" defer></script>
-  <script src="app.js?v=1.0.58" defer></script>
+  <script src="config.js?v=1.0.59" defer></script>
+  <script src="app.js?v=1.0.59" defer></script>
   <script>
     if ("serviceWorker" in navigator) {
       window.addEventListener("load", function () {
-        var registerWorker = function () { navigator.serviceWorker.register("./sw.js?v=1.0.58", { scope: "./" }).catch(function () {}); };
+        var registerWorker = function () { navigator.serviceWorker.register("./sw.js?v=1.0.59", { scope: "./" }).catch(function () {}); };
         if ("requestIdleCallback" in window) requestIdleCallback(registerWorker, { timeout: 2200 });
         else setTimeout(registerWorker, 600);
       }, { once: true });

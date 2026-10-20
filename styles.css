@@ -883,7 +883,7 @@ th { box-shadow:inset 0 -1px #e6e4ef; }
 .odia-day-chip { display:inline-flex; align-items:center; gap:3px; min-width:32px; justify-content:center; padding:3px 6px; border:1px solid #eaaac3; border-radius:999px; color:#922b57; background:linear-gradient(135deg,#fff0f6,#ffe1ed); font-size:.54rem; font-weight:800; white-space:nowrap; }.odia-day-chip em { color:#b23c6d; font-size:.45rem; font-style:normal; font-weight:900; }
 .calendar-event.odia-reminder { color:#842c52; border-color:#e6a9c0; background:#ffe8f1; }
 
-/* v1.0.62 · Odia Festival Yearbook */
+/* v1.0.63 · Odia Festival Yearbook with Panjika tithi */
 .odia-festival-yearbook { margin-top:18px; padding:19px; border:1px solid #e2dced; border-radius:22px; background:linear-gradient(145deg,#fff,#fdf8ff 52%,#fff9ef); box-shadow:0 10px 30px rgba(55,43,101,.07); }
 .odia-yearbook-head { display:flex; align-items:center; justify-content:space-between; gap:20px; }
 .odia-yearbook-head h3 { margin:3px 0 5px; font-size:1.18rem; }
@@ -908,6 +908,7 @@ th { box-shadow:inset 0 -1px #e6e4ef; }
 .odia-festival-date-pair { display:flex; gap:9px 13px; flex-wrap:wrap; color:#737083; font-size:.65rem; }
 .odia-festival-date-pair span { display:grid; gap:2px; }
 .odia-festival-date-pair small { color:#a04772; font-size:.49rem; font-weight:900; letter-spacing:.08em; }
+.odia-festival-date-pair .kohinoor-date { padding:5px 8px; border-left:3px solid #c64f82; border-radius:7px; color:#75304f; background:#fff0f6; }
 .odia-festival-guide { display:grid; justify-items:end; gap:5px; }
 .guide-saved-chip { color:#197d70; font-size:.55rem; font-weight:850; white-space:nowrap; }
 .odia-festival-guide .tiny-button { white-space:nowrap; }
@@ -1306,7 +1307,7 @@ th { box-shadow:inset 0 -1px #e6e4ef; }
 }
 
 /* ========================================================================== 
-   MyFamily v1.0.62 — premium responsive visual system + private photo archive
+   MyFamily v1.0.63 — premium responsive visual system + private photo archive
    Pure CSS enhancement: no external font, framework or render-blocking asset.
    ========================================================================== */
 :root {
@@ -1608,6 +1609,7 @@ html { scroll-padding-top:96px; }
 .family-odia-date-list { display:grid; gap:4px; margin:6px 0; }
 .family-odia-date-list span { display:block; padding:5px 7px; border-radius:8px; color:#783d58; background:#fff0f6; font-size:.55rem; font-weight:760; line-height:1.35; }
 .family-odia-date-list small { margin-right:5px; color:#c45484; font-size:.48rem; font-weight:900; letter-spacing:.06em; }
+.print-odia-help { display:block; margin:-5px 0 4px 29px; color:#8a5770; font-size:.62rem; line-height:1.45; }
 .managed-family-date { padding:5px 7px; border-radius:8px; color:#4d4083; background:#eeeaff; font-size:.57rem; font-weight:850; }
 .tradition-vault { margin-top:22px; padding:20px; border:1px solid #ead8bd; border-radius:22px; background:linear-gradient(145deg,#fffdf8,#fff7ec 55%,#fff9fc); box-shadow:0 12px 34px rgba(104,73,27,.07); }
 .tradition-vault-head { display:flex; align-items:flex-start; justify-content:space-between; gap:18px; }

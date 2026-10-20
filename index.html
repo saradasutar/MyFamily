@@ -6,18 +6,18 @@
   <meta name="color-scheme" content="light">
   <meta name="description" content="Private family dashboard for expenses, goals, important dates and photos.">
   <title>Our Family Hub</title>
-  <link rel="icon" href="family-unity-v1058-32.png?v=1.0.62" type="image/png" sizes="32x32">
-  <link rel="shortcut icon" href="family-unity-v1058-32.png?v=1.0.62" type="image/png">
-  <link rel="apple-touch-icon" href="family-unity-v1058-180.png?v=1.0.62" sizes="180x180">
-  <link rel="manifest" href="family-unity-v1058.webmanifest?v=1.0.62">
+  <link rel="icon" href="family-unity-v1058-32.png?v=1.0.63" type="image/png" sizes="32x32">
+  <link rel="shortcut icon" href="family-unity-v1058-32.png?v=1.0.63" type="image/png">
+  <link rel="apple-touch-icon" href="family-unity-v1058-180.png?v=1.0.63" sizes="180x180">
+  <link rel="manifest" href="family-unity-v1058.webmanifest?v=1.0.63">
   <meta name="theme-color" content="#5b43b5">
   <link rel="preconnect" href="https://script.google.com">
   <link rel="dns-prefetch" href="//script.google.com">
-  <link rel="preload" href="styles.css?v=1.0.62" as="style">
-  <link rel="preload" href="config.js?v=1.0.62" as="script">
-  <link rel="preload" href="app.js?v=1.0.62" as="script">
-  <link rel="preload" href="family-unity-v1058-192.png?v=1.0.62" as="image" type="image/png" fetchpriority="high">
-  <link rel="stylesheet" href="styles.css?v=1.0.62">
+  <link rel="preload" href="styles.css?v=1.0.63" as="style">
+  <link rel="preload" href="config.js?v=1.0.63" as="script">
+  <link rel="preload" href="app.js?v=1.0.63" as="script">
+  <link rel="preload" href="family-unity-v1058-192.png?v=1.0.63" as="image" type="image/png" fetchpriority="high">
+  <link rel="stylesheet" href="styles.css?v=1.0.63">
 </head>
 <body class="premium-ui">
   <a class="skip-link" href="#mainContent">Skip to dashboard content</a>
@@ -36,7 +36,7 @@
       <div class="login-trust-row"><span>Private</span><span>Fast</span><span>Family-first</span></div>
     </div>
     <div class="login-card">
-      <div class="brand-mark family-bond-brand"><img src="family-unity-v1058-192.png?v=1.0.62" alt="Four family members united around a shared heart" width="62" height="62" decoding="async" fetchpriority="high"></div>
+      <div class="brand-mark family-bond-brand"><img src="family-unity-v1058-192.png?v=1.0.63" alt="Four family members united around a shared heart" width="62" height="62" decoding="async" fetchpriority="high"></div>
       <p class="eyebrow">WELCOME HOME</p>
       <h1 id="loginFamilyName">Our Family Hub</h1>
       <p class="muted">Sign in with the username and password managed by your family administrator.</p>
@@ -52,8 +52,8 @@
         </label>
         <div class="login-options">
           <label class="remember-row"><input id="rememberUsername" type="checkbox" checked> Save username on this device</label>
-          <span class="version-pair"><b id="loginFrontendVersion">FE v1.0.62</b><b id="loginBackendVersion">BE checking…</b></span>
-          <span id="loginVersion" class="legacy-version hidden" aria-hidden="true">Version 1.0.62</span>
+          <span class="version-pair"><b id="loginFrontendVersion">FE v1.0.63</b><b id="loginBackendVersion">BE checking…</b></span>
+          <span id="loginVersion" class="legacy-version hidden" aria-hidden="true">Version 1.0.63</span>
         </div>
         <button class="primary-button wide" type="submit">Sign in securely</button>
         <button id="repairSessionButton" class="repair-session-button" type="button">↻ Repair browser cache / session</button>
@@ -67,12 +67,12 @@
   <div id="appShell" class="app-shell hidden">
     <aside id="sidebar" class="sidebar">
       <div class="sidebar-brand">
-        <div class="brand-mark small family-bond-brand"><img src="family-unity-v1058-192.png?v=1.0.62" alt="MyFamily bond emblem" width="46" height="46" decoding="async" loading="lazy"></div>
+        <div class="brand-mark small family-bond-brand"><img src="family-unity-v1058-192.png?v=1.0.63" alt="MyFamily bond emblem" width="46" height="46" decoding="async" loading="lazy"></div>
         <div>
           <strong id="sidebarFamilyName">Our Family Hub</strong>
           <span class="brand-kicker">PRIVATE FAMILY SPACE</span>
-          <span class="sidebar-version-pair"><b id="sidebarFrontendVersion">FE v1.0.62</b><b id="sidebarBackendVersion">BE checking…</b></span>
-          <b id="sidebarVersion" class="legacy-version hidden" aria-hidden="true">v1.0.62</b>
+          <span class="sidebar-version-pair"><b id="sidebarFrontendVersion">FE v1.0.63</b><b id="sidebarBackendVersion">BE checking…</b></span>
+          <b id="sidebarVersion" class="legacy-version hidden" aria-hidden="true">v1.0.63</b>
         </div>
       </div>
       <nav class="main-nav" aria-label="Main navigation">
@@ -807,6 +807,8 @@
       <label>Family branch<select id="familyTreePrintBranch"><option value="">All branches</option></select></label>
       <label class="check-row"><input id="familyTreePrintPhotos" type="checkbox" checked> Include photos</label>
       <label class="check-row"><input id="familyTreePrintNotes" type="checkbox"> Include family notes</label>
+      <label class="check-row family-admin-only"><input id="familyTreePrintOdiaDates" type="checkbox"> Include Odia Panjika DOB and DOD</label>
+      <small class="family-admin-only print-odia-help">Administrator option: prints the saved Odia month, paksha and tithi below each applicable English birth/death date.</small>
       <p class="session-safety-note">Tree layouts print in A4 landscape. Family Register and Memorial View use a clear A4 portrait layout.</p>
       <div class="modal-actions"><button type="button" class="secondary-button" data-close>Cancel</button><button type="submit" class="primary-button">Open print preview</button></div>
     </form>
@@ -906,12 +908,12 @@
   <div id="loadingOverlay" class="loading-overlay hidden" role="status" aria-live="polite" aria-atomic="true"><div class="spinner" aria-hidden="true"></div><p id="loadingText">Working…</p></div>
   <div id="toastRegion" class="toast-region" role="status" aria-live="polite" aria-atomic="true"></div>
 
-  <script src="config.js?v=1.0.62" defer></script>
-  <script src="app.js?v=1.0.62" defer></script>
+  <script src="config.js?v=1.0.63" defer></script>
+  <script src="app.js?v=1.0.63" defer></script>
   <script>
     if ("serviceWorker" in navigator) {
       window.addEventListener("load", function () {
-        var registerWorker = function () { navigator.serviceWorker.register("./sw.js?v=1.0.62", { scope: "./" }).catch(function () {}); };
+        var registerWorker = function () { navigator.serviceWorker.register("./sw.js?v=1.0.63", { scope: "./" }).catch(function () {}); };
         if ("requestIdleCallback" in window) requestIdleCallback(registerWorker, { timeout: 2200 });
         else setTimeout(registerWorker, 600);
       }, { once: true });

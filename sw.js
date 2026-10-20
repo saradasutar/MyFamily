@@ -1,11 +1,11 @@
 "use strict";
 
-const CACHE_NAME = "myfamily-shell-v1059-family-tree";
+const CACHE_NAME = "myfamily-shell-v1061-original-photos-family-tree";
 const SHELL_ASSETS = [
   "./",
-  "./styles.css?v=1.0.59",
-  "./config.js?v=1.0.59",
-  "./app.js?v=1.0.59",
+  "./styles.css?v=1.0.61",
+  "./config.js?v=1.0.61",
+  "./app.js?v=1.0.61",
   "./family-unity-v1058-32.png",
   "./family-unity-v1058-180.png",
   "./family-unity-v1058-192.png",

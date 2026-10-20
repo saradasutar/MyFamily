@@ -1259,7 +1259,7 @@ th { box-shadow:inset 0 -1px #e6e4ef; }
 }
 
 /* ========================================================================== 
-   MyFamily v1.0.59 — premium responsive visual system + family tree
+   MyFamily v1.0.61 — premium responsive visual system + private photo archive
    Pure CSS enhancement: no external font, framework or render-blocking asset.
    ========================================================================== */
 :root {
@@ -1518,6 +1518,69 @@ html { scroll-padding-top:96px; }
 @media (hover:hover) and (pointer:fine) { .family-person-card:hover { transform:translateY(-3px); box-shadow:0 14px 32px rgba(43,37,96,.12); } }
 @media (max-width:950px) { .family-tree-hero { align-items:flex-start; flex-direction:column; }.family-tree-actions { justify-content:flex-start; }.family-tree-stats { grid-template-columns:repeat(3,minmax(0,1fr)); }.family-tree-filters { grid-template-columns:1fr 1fr; }.family-tree-filters .search-label { grid-column:1 / -1; }.family-person-editor-grid { grid-template-columns:1fr; }.family-person-photo-editor { max-width:360px; margin:auto; } }
 @media (max-width:640px) { .family-tree-hero { padding:17px; border-radius:20px; }.family-tree-actions { display:grid; width:100%; grid-template-columns:1fr; }.family-tree-actions button { width:100%; }.family-tree-stats { grid-template-columns:1fr 1fr; gap:8px; }.family-tree-stats > div { min-height:68px; padding:10px; }.family-tree-filters { grid-template-columns:1fr; }.family-tree-filters .search-label { grid-column:auto; }.family-tree-canvas { padding:15px 10px; border-radius:18px; }.family-generation { min-width:0; }.family-generation-row { flex-direction:column; align-items:stretch; }.family-person-card,.family-tree-canvas.layout-photo .family-person-card,.family-tree-canvas.layout-compact .family-person-card { width:100%; }.family-person-dialog .three-fields { grid-template-columns:1fr; }.family-person-photo-preview { width:125px; height:125px; } }
+
+/* v1.0.61 · connected family units and private original-photo archives */
+.family-unit { position:relative; display:flex; align-items:center; justify-content:center; gap:0; padding:8px; border:1px solid rgba(102,82,189,.12); border-radius:21px; background:rgba(255,255,255,.72); box-shadow:0 8px 24px rgba(43,37,96,.04); }
+.family-unit.family-single { padding:0; border:0; background:transparent; box-shadow:none; }
+.family-couple-link { position:relative; z-index:2; display:grid; width:34px; height:34px; place-items:center; flex:0 0 34px; margin:0 -7px; border:4px solid #fff; border-radius:50%; color:#a64c68; background:linear-gradient(145deg,#fff2f6,#f8e1e9); box-shadow:0 4px 11px rgba(122,57,82,.18); font-size:.82rem; }
+.family-unit::after { content:""; position:absolute; left:50%; bottom:-13px; width:9px; height:9px; border-right:2px solid #8a78cf; border-bottom:2px solid #8a78cf; transform:translateX(-50%) rotate(45deg); background:#fff; }
+.family-generation:last-child .family-unit::after { display:none; }
+.tradition-guide-card.has-cover { grid-template-columns:116px minmax(0,1fr) auto; }
+.tradition-guide-cover { position:relative; width:116px; height:106px; overflow:hidden; border-radius:16px; background:#ebe7f8; }
+.tradition-guide-cover img { width:100%; height:100%; object-fit:cover; }
+.tradition-guide-cover span { position:absolute; right:7px; bottom:7px; padding:4px 7px; border-radius:999px; color:#fff; background:rgba(36,29,65,.76); font-size:.58rem; font-weight:850; }
+.tradition-photo-section { margin-top:18px; padding:16px; border:1px solid rgba(104,82,190,.16); border-radius:20px; background:linear-gradient(145deg,#faf9ff,#f1fbf9); }
+.tradition-photo-heading { display:flex; align-items:flex-start; justify-content:space-between; gap:12px; margin-bottom:12px; }
+.tradition-photo-heading h4 { margin:2px 0 3px; }
+.tradition-photo-gallery { display:grid; grid-template-columns:repeat(auto-fit,minmax(210px,1fr)); gap:10px; }
+.tradition-photo-card { overflow:hidden; border:1px solid #ded9ee; border-radius:16px; background:#fff; box-shadow:0 7px 18px rgba(43,37,96,.055); }
+.tradition-photo-card.featured { border-color:#bc9e45; box-shadow:0 0 0 2px rgba(213,173,55,.14),0 7px 18px rgba(43,37,96,.055); }
+.tradition-photo-image { position:relative; width:100%; height:145px; padding:0; overflow:hidden; border:0; background:#ece9f6; cursor:pointer; }
+.tradition-photo-image img { width:100%; height:100%; object-fit:cover; transition:transform .2s ease; }
+.tradition-photo-image span { position:absolute; right:8px; bottom:8px; padding:5px 9px; border-radius:999px; color:#fff; background:rgba(35,30,61,.76); font-size:.65rem; font-weight:800; }
+.tradition-photo-card > div { padding:10px; }
+.tradition-photo-card strong,.tradition-photo-card small { display:block; }
+.tradition-photo-card small { margin-top:4px; color:#777389; font-size:.65rem; }
+.tradition-photo-actions { display:flex; align-items:center; justify-content:space-between; gap:7px; margin-top:9px; }
+.featured-photo-chip { color:#8c6910; font-size:.66rem; font-weight:850; }
+.tradition-photo-empty { display:grid; place-items:center; min-height:100px; color:#868197; text-align:center; }
+.tradition-photo-empty span { font-size:1.5rem; }
+.tradition-photo-uploader { margin-top:14px; padding-top:14px; border-top:1px dashed #cec7e6; }
+.tradition-photo-uploader .compact-upload { min-height:94px; }
+@media (hover:hover) and (pointer:fine) { .tradition-photo-image:hover img { transform:scale(1.035); } }
+@media (max-width:760px) { .family-unit { width:100%; flex-direction:column; padding:8px; }.family-couple-link { margin:-7px 0; }.family-unit .family-person-card { width:100%; }.tradition-guide-card.has-cover { grid-template-columns:84px minmax(0,1fr); }.tradition-guide-cover { width:84px; height:84px; }.tradition-guide-card.has-cover > .secondary-button { grid-column:1 / -1; }.tradition-photo-heading { flex-direction:column; }.tradition-photo-gallery { grid-template-columns:1fr; } }
+
+/* v1.0.61 · dual-calendar family events and inherited celebration knowledge */
+.family-odia-date-grid { display:grid; grid-template-columns:1fr 1fr; gap:10px; }
+.family-odia-date-preview { min-height:66px; padding:11px 13px; border:1px dashed #e0b5c7; border-radius:14px; color:#8f536c; background:linear-gradient(135deg,#fff8fb,#fff); }
+.family-odia-date-preview small { display:block; margin-bottom:5px; color:#b45b80; font-size:.57rem; font-weight:900; letter-spacing:.1em; }
+.family-odia-date-preview strong { display:block; font-size:.68rem; line-height:1.45; }
+.family-odia-date-preview.ready { border-style:solid; border-color:#e09ab8; color:#71334f; background:linear-gradient(135deg,#fff0f6,#fff8fb); box-shadow:0 6px 16px rgba(171,69,110,.08); }
+.family-reminder-settings { padding:13px; border:1px solid #ded8ef; border-radius:15px; background:#fbfaff; }
+.family-reminder-settings legend { padding:0 7px; color:#55439c; font-size:.67rem; font-weight:900; }
+.family-odia-date-list { display:grid; gap:4px; margin:6px 0; }
+.family-odia-date-list span { display:block; padding:5px 7px; border-radius:8px; color:#783d58; background:#fff0f6; font-size:.55rem; font-weight:760; line-height:1.35; }
+.family-odia-date-list small { margin-right:5px; color:#c45484; font-size:.48rem; font-weight:900; letter-spacing:.06em; }
+.managed-family-date { padding:5px 7px; border-radius:8px; color:#4d4083; background:#eeeaff; font-size:.57rem; font-weight:850; }
+.tradition-vault { margin-top:22px; padding:20px; border:1px solid #ead8bd; border-radius:22px; background:linear-gradient(145deg,#fffdf8,#fff7ec 55%,#fff9fc); box-shadow:0 12px 34px rgba(104,73,27,.07); }
+.tradition-vault-head { display:flex; align-items:flex-start; justify-content:space-between; gap:18px; }
+.tradition-vault-head h3 { margin:3px 0 5px; color:#352946; font-size:1.12rem; }
+.tradition-vault-head p:last-child { max-width:720px; margin:0; color:var(--muted); font-size:.7rem; line-height:1.55; }
+.tradition-guide-grid { display:grid; grid-template-columns:repeat(auto-fit,minmax(260px,1fr)); gap:12px; margin-top:16px; }
+.tradition-guide-card { display:grid; grid-template-columns:42px minmax(0,1fr); gap:10px; padding:15px; border:1px solid #eadfc9; border-top:4px solid #d69736; border-radius:17px; background:rgba(255,255,255,.88); box-shadow:0 8px 22px rgba(91,61,23,.06); }
+.tradition-guide-icon { display:grid; width:42px; height:42px; place-items:center; border-radius:50%; color:#9b5722; background:linear-gradient(145deg,#ffe9b6,#ffd8e8); font-size:1.05rem; }
+.tradition-guide-card h4 { margin:5px 0 3px; color:#342b3c; font-size:.83rem; }
+.tradition-guide-card p { margin:4px 0; color:#6e6774; font-size:.63rem; line-height:1.5; }
+.tradition-guide-card small { color:#948696; font-size:.55rem; }
+.tradition-guide-card .secondary-button { grid-column:2; justify-self:start; margin-top:4px; }
+.tradition-source-chip { display:inline-flex; padding:3px 7px; border-radius:999px; color:#8b4c1e; background:#fff0cf; font-size:.51rem; font-weight:900; text-transform:uppercase; letter-spacing:.06em; }
+.tradition-odia-name { color:#b14373 !important; font-weight:850; }
+.tradition-guide-dialog { width:min(850px,calc(100vw - 28px)); }
+.tradition-guide-dialog textarea { resize:vertical; }
+.tradition-guide-dialog .locked-source { opacity:.8; }
+.tradition-readonly-note { padding:10px 12px; border-radius:12px; color:#504477; background:#f0edfb; font-size:.67rem; font-weight:760; }
+.tradition-button { color:#89511f; border-color:#ebcd9c; background:#fff8e9; }
+@media (max-width:720px) { .family-odia-date-grid,.tradition-vault-head { grid-template-columns:1fr; }.family-odia-date-grid { display:grid; }.tradition-vault-head { display:grid; }.tradition-vault-head .primary-button { width:100%; }.tradition-vault { padding:15px; }.tradition-guide-grid { grid-template-columns:1fr; } }
 
 /* Lightweight progressive reveal. Added only when JS enhancement is active. */
 .premium-ui.js-motion .ui-reveal { opacity:0; transform:translateY(14px); transition:opacity .46s cubic-bezier(.2,.8,.2,1),transform .46s cubic-bezier(.2,.8,.2,1); transition-delay:var(--reveal-delay,0ms); }

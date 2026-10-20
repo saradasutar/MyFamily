@@ -2,7 +2,7 @@
 
 const CONFIG = window.FAMILY_DASHBOARD_CONFIG || {};
 const PLACEHOLDER_URL = "PASTE_YOUR_APPS_SCRIPT_WEB_APP_URL_HERE";
-const FRONTEND_VERSION = "1.0.59";
+const FRONTEND_VERSION = "1.0.61";
 const SAVED_USERNAME_KEY = "familyDashboardUsername";
 const SESSION_TOKEN_KEY = "familyDashboardToken";
 const DEFAULT_IDLE_TIMEOUT_MINUTES = 60;
@@ -42,6 +42,9 @@ const state = {
   subcategoryEditIds: new Set(),
   clockTimer: null,
   odiaMappingDateId: "",
+  traditionGuideId: "",
+  traditionGuidePhotos: [],
+  pendingTraditionPhoto: null,
   smartPasteResult: null,
   lastToastText: "",
   lastToastAt: 0
@@ -369,7 +372,7 @@ function prefersReducedMotion() { return !!(window.matchMedia && window.matchMed
 let interfaceRevealObserver = null;
 function prepareInterfaceReveal(root) {
   if (!root) return;
-  const nodes = all(".hero-card,.family-strip,.summary-card,.panel,.expense-overview-dashboard,.expense-statement-intro,.target-card,.date-card,.experience-card,.diary-entry,.photo-card,.major-plan-card", root);
+  const nodes = all(".hero-card,.family-strip,.summary-card,.panel,.expense-overview-dashboard,.expense-statement-intro,.target-card,.date-card,.tradition-guide-card,.experience-card,.diary-entry,.photo-card,.major-plan-card", root);
   all("img", root).forEach(function (image) {
     if (image.closest(".parents-portrait-image,.avatar,.brand-mark")) return;
     if (!image.hasAttribute("loading")) image.loading = "lazy";
@@ -635,7 +638,7 @@ async function repairBrowserSession() {
   const url = new URL(window.location.href); url.searchParams.set("fresh", String(Date.now())); window.location.replace(url.toString());
 }
 function loadSavedUsername() { const saved = localStorage.getItem(SAVED_USERNAME_KEY) || ""; $("loginUsername").value = saved; $("rememberUsername").checked = !!saved || $("rememberUsername").checked; }
-function normalizeBootstrapData(data) { const result = data || {}; ["members","familyPeople","expenses","recurringExpenses","settlements","majorPlans","majorPlanPhases","income","targets","importantDates","odiaFestivals","photos","experiences","diary","stickyNotes"].forEach(function (key) { if (!Array.isArray(result[key])) result[key] = []; }); if (!result.settings) result.settings = {}; if (!Array.isArray(result.expenseCategories) || !result.expenseCategories.length) result.expenseCategories = fallbackExpenseCategories(); return result; }
+function normalizeBootstrapData(data) { const result = data || {}; ["members","familyPeople","expenses","recurringExpenses","settlements","majorPlans","majorPlanPhases","income","targets","importantDates","odiaFestivals","traditionGuides","photos","experiences","diary","stickyNotes"].forEach(function (key) { if (!Array.isArray(result[key])) result[key] = []; }); if (!result.settings) result.settings = {}; if (!Array.isArray(result.expenseCategories) || !result.expenseCategories.length) result.expenseCategories = fallbackExpenseCategories(); return result; }
 
 function majorPlanById(id) { return (state.data && state.data.majorPlans || []).find(function (item) { return item.id === id; }); }
 function majorPlanPhaseById(id) { return (state.data && state.data.majorPlanPhases || []).find(function (item) { return item.id === id; }); }
@@ -1188,6 +1191,7 @@ function bindForms() {
   $("memberPasswordForm").addEventListener("submit", saveAdminMemberPassword);
   $("memberPhotoForm").addEventListener("submit", saveMemberPhoto);
   $("familyPersonForm").addEventListener("submit", saveFamilyPerson);
+  $("traditionGuideForm").addEventListener("submit", saveTraditionGuide);
   $("familyTreePrintForm").addEventListener("submit", printFamilyTree);
   $("settingsForm").addEventListener("submit", saveSettings);
   $("expenseSettlementForm").addEventListener("submit", saveExpenseSettlement);
@@ -1200,6 +1204,14 @@ function bindForms() {
   $("memberPhotoFile").addEventListener("change", previewMemberPhoto);
   $("familyPersonPhotoFile").addEventListener("change", previewFamilyPersonPhoto);
   $("familyPersonLifeStatus").addEventListener("change", syncFamilyPersonLifeStatus);
+  $("familyPersonBirthDate").addEventListener("input", syncFamilyPersonCalendarPreviews);
+  $("familyPersonDeathDate").addEventListener("input", syncFamilyPersonCalendarPreviews);
+  $("traditionGuideSourceType").addEventListener("change", function(){fillTraditionGuideSourceOptions();});
+  $("traditionGuideSourceId").addEventListener("change", syncTraditionGuideTitle);
+  $("traditionPhotoFile").addEventListener("change", previewTraditionPhoto);
+  $("uploadTraditionPhoto").addEventListener("click", uploadTraditionPhoto);
+  $("addTraditionGuide").addEventListener("click", function(){openTraditionGuideDialog();});
+  $("deleteTraditionGuide").addEventListener("click", deleteTraditionGuide);
   $("removeFamilyPersonPhoto").addEventListener("click", removeFamilyPersonPhoto);
   $("importFamilyAccounts").addEventListener("click", importFamilyAccounts);
   $("openFamilyTreePrint").addEventListener("click", openFamilyTreePrintDialog);
@@ -1318,6 +1330,10 @@ function bindActions() {
     if (action === "edit-date") editImportantDate(id);
     if (action === "delete-date") confirmDelete("deleteImportantDate", id, "Delete this reminder?");
     if (action === "manage-odia-mappings") openOdiaMappingDialog(id);
+    if (action === "open-tradition-guide") openTraditionGuideDialog({guideId:button.dataset.guideId||"",sourceType:button.dataset.sourceType||"",sourceId:button.dataset.sourceId||"",sourceKey:button.dataset.sourceKey||""});
+    if (action === "view-tradition-photo") viewTraditionPhoto(id);
+    if (action === "delete-tradition-photo") deleteTraditionPhoto(id);
+    if (action === "feature-tradition-photo") featureTraditionPhoto(id);
     if (action === "delete-odia-mapping") deleteOdiaReminderMapping(id);
     if (action === "view-photo") viewPhoto(id);
     if (action === "delete-photo") { event.stopPropagation(); confirmDelete("deletePhoto", id, "Delete this shared photo from Google Drive?"); }
@@ -1748,7 +1764,7 @@ async function saveImportantDate(event) {
     }
     try {
       if(isAdmin()&&state.removeImportantDatePhoto&&id)await api("deleteImportantDatePhoto",{id:savedId});
-      if(isAdmin()&&state.pendingImportantDatePhoto)await api("uploadImportantDatePhoto",{id:savedId,fileName:state.pendingImportantDatePhoto.name,fullData:state.pendingImportantDatePhoto.fullData,thumbData:state.pendingImportantDatePhoto.thumbData});
+      if(isAdmin()&&state.pendingImportantDatePhoto)await uploadOriginalPhoto("IMPORTANT_DATE",savedId,state.pendingImportantDatePhoto,{});
     } catch(photoError) { photoWarning="The reminder was saved, but the photo could not be stored. Edit this reminder and try the photo again."; console.warn(photoError); }
     if($("dateDialog").open)$("dateDialog").close();
     await refreshData(); toast("Reminder saved for " + reminderBasisLabel(payload.reminderBasis) + ".","success");
@@ -1830,7 +1846,13 @@ function setStickyColour(colour) {
 async function savePhoto(event) {
   event.preventDefault();
   if (!state.pendingPhoto) return toast("Choose a photo first.", "error");
-  await mutate("uploadPhoto", { title: $("photoTitle").value.trim(), caption: $("photoCaption").value.trim(), takenDate: $("photoTakenDate").value, fileName: state.pendingPhoto.name, fullData: state.pendingPhoto.fullData, thumbData: state.pendingPhoto.thumbData }, "Photo shared with the family.", "photoDialog", "Uploading and saving your photo…");
+  showLoading("Saving original photo privately to Google Drive…");
+  try {
+    await uploadOriginalPhoto("MEMORY", "", state.pendingPhoto, {title: $("photoTitle").value.trim(), caption: $("photoCaption").value.trim(), takenDate: $("photoTakenDate").value});
+    if ($("photoDialog").open) $("photoDialog").close();
+    await refreshData(); toast("Original photo saved; the dashboard will use its lightweight copy.", "success");
+  } catch(error) { if(!handleSessionError(error)) toast(friendlyApiError(error), "error"); }
+  finally { hideLoading(); }
 }
 async function saveExperience(event) {
   event.preventDefault();
@@ -1865,7 +1887,10 @@ function openMemberPhotoDialog(id) {
 async function saveMemberPhoto(event) {
   event.preventDefault();
   if(!state.pendingMemberPhoto)return toast("Choose a profile photo first.","error");
-  await mutate("uploadMemberPhoto",{id:$("photoMemberId").value,fileName:state.pendingMemberPhoto.name,fullData:state.pendingMemberPhoto.fullData,thumbData:state.pendingMemberPhoto.thumbData},"Member photo updated.","memberPhotoDialog","Saving member photo to Google Drive…");
+  showLoading("Saving original member photo privately to Google Drive…");
+  try { await uploadOriginalPhoto("MEMBER",$("photoMemberId").value,state.pendingMemberPhoto,{}); if($("memberPhotoDialog").open)$("memberPhotoDialog").close(); await refreshData(); toast("Member photo updated.","success"); }
+  catch(error){if(!handleSessionError(error))toast(friendlyApiError(error),"error");}
+  finally{hideLoading();}
 }
 async function deleteMemberPhoto() {
   const id=$("photoMemberId").value;
@@ -1884,6 +1909,7 @@ async function saveSettings(event) {
     dashboardClockHighlight: safeClockHighlight($("settingDashboardClockHighlight").value),
     parentsPortraitCaption: $("settingParentsPortraitCaption").value.trim(),
     memoryPhotoLimit: Number($("settingMemoryPhotoLimit").value),
+    traditionPhotoLimit: Number($("settingTraditionPhotoLimit").value),
     memoryUploadPolicy: $("settingMemoryUploadPolicy").value,
     memoryPrintPages: Number($("settingMemoryPrintPages").value),
     sessionIdleMinutes: Number($("settingSessionIdleMinutes").value),
@@ -2099,6 +2125,7 @@ function renderAll() {
   $("userAvatar").innerHTML = state.data.user.photoThumbData?'<img src="'+h(state.data.user.photoThumbData)+'" alt="'+h(state.data.user.name)+'">':h(state.data.user.name.charAt(0).toUpperCase());
   $("adminNav").classList.toggle("hidden", !isAdmin());
   all(".family-admin-only").forEach(function(el){el.classList.toggle("hidden",!isAdmin());});
+  all(".tradition-admin-only").forEach(function(el){el.classList.toggle("hidden",!isAdmin());});
   $("manageExpenseCategoriesQuick").classList.toggle("hidden", !isAdmin());
   $("createMajorPlan").classList.toggle("hidden", !isAdmin());
   if (!isAdmin() && state.view === "admin") goTo("home");
@@ -2487,12 +2514,88 @@ function renderDates() {
     const nextRows=(x.nextOccurrences||[{date:occurrence,basis:basis}]).map(function(next){return '<span class="next-occurrence '+h(String(next.basis||"").toLowerCase())+'"><b>'+h(reminderBasisLabel(next.basis))+" reminder</b> "+h(formatDate(next.date))+(reminderBasisIncludes(next.basis,"ODIA")&&x.odiaMonth?' · '+h(formatOdiaPanjika(x,next.odiaYear||"")):'')+'</span>';}).join("");
     const panjikaOriginal=x.odiaMonth?'<span class="odia-original"><small>'+(x.odiaMonth==="AUTO"?'AUTO-DERIVED ODIA TITHI':'ODIA KOHINOOR / PANJIKA')+'</small><strong>'+h(formatOdiaPanjika(x))+'</strong></span>':'';
     const mappingButton=isAdmin()?'<button class="tiny-button odia-map-button" data-action="manage-odia-mappings" data-id="'+h(x.id)+'">Odia years</button>':'';
-    const editActions=mayDelete(x)?'<button class="tiny-button" data-action="edit-date" data-id="'+h(x.id)+'">Edit</button><button class="danger-button" data-action="delete-date" data-id="'+h(x.id)+'">×</button>':'<span class="muted">View only</span>';
-    return '<article class="date-card basis-'+h(basis.toLowerCase())+'"><div class="date-visual">'+photo+tile+'</div><div class="date-card-copy"><h3>'+h(x.title)+'</h3>'+(x.occasionLabel?'<p class="occasion-label">'+h(x.occasionLabel)+'</p>':'')+'<p>'+h(x.eventType)+'</p><div class="original-calendar-pair two-calendars'+(x.odiaMonth?'':' english-only')+'"><span><small>ENGLISH ORIGINAL</small><strong>'+h(formatEnglishDate(x.eventDate))+'</strong></span>'+panjikaOriginal+'</div>'+(x.repeatYearly?'<div class="next-occurrence-list">'+nextRows+(reminderBasisIncludes(basis,"ODIA")&&!(x.odiaMappings||[]).some(function(mapping){return String(mapping.gregorianDate)>=todayIso();})?'<span class="odia-mapping-warning"><b>Odia date pending</b> Use Refresh Odia calendar now; an administrator can add a Kohinoor correction under Odia years.</span>':'')+'</div>':'')+'<p>Email: '+h(reminderText(x.remindDays))+'</p>'+(x.repeatYearly?'<span class="repeat-chip">↻ Remind by '+h(reminderBasisLabel(basis))+'</span>':'<span class="repeat-chip one-time">One-time reminder · saved date</span>')+'</div><div class="row-actions">'+mappingButton+editActions+'</div></article>';
+    const guide=traditionGuideForSource("IMPORTANT_DATE",x.id),guideButton=(guide||isAdmin())?'<button class="tiny-button tradition-button" data-action="open-tradition-guide" data-source-type="IMPORTANT_DATE" data-source-id="'+h(x.id)+'">'+(guide?'✿ Guide':'＋ Guide')+'</button>':'';
+    const editActions=x.familyPersonId?'<span class="managed-family-date">Managed in Family Tree</span>':mayDelete(x)?'<button class="tiny-button" data-action="edit-date" data-id="'+h(x.id)+'">Edit</button><button class="danger-button" data-action="delete-date" data-id="'+h(x.id)+'">×</button>':'<span class="muted">View only</span>';
+    return '<article class="date-card basis-'+h(basis.toLowerCase())+'"><div class="date-visual">'+photo+tile+'</div><div class="date-card-copy"><h3>'+h(x.title)+'</h3>'+(x.occasionLabel?'<p class="occasion-label">'+h(x.occasionLabel)+'</p>':'')+'<p>'+h(x.eventType)+'</p><div class="original-calendar-pair two-calendars'+(x.odiaMonth?'':' english-only')+'"><span><small>ENGLISH ORIGINAL</small><strong>'+h(formatEnglishDate(x.eventDate))+'</strong></span>'+panjikaOriginal+'</div>'+(x.repeatYearly?'<div class="next-occurrence-list">'+nextRows+(reminderBasisIncludes(basis,"ODIA")&&!(x.odiaMappings||[]).some(function(mapping){return String(mapping.gregorianDate)>=todayIso();})?'<span class="odia-mapping-warning"><b>Odia date pending</b> Use Refresh Odia calendar now; an administrator can add a Kohinoor correction under Odia years.</span>':'')+'</div>':'')+'<p>Email: '+h(reminderText(x.remindDays))+'</p>'+(x.repeatYearly?'<span class="repeat-chip">↻ Remind by '+h(reminderBasisLabel(basis))+'</span>':'<span class="repeat-chip one-time">One-time reminder · saved date</span>')+'</div><div class="row-actions">'+guideButton+mappingButton+editActions+'</div></article>';
   }).join("");
   $("dateEmpty").classList.toggle("hidden",items.length>0);
+  renderTraditionGuides();
 }
 function reminderText(days) { return String(days||"").split(",").map(function(d){return Number(d)===0?"same day":d+"d before";}).join(", "); }
+
+function traditionKey(value) { return String(value||"").trim().toLowerCase().replace(/\s+/g," "); }
+function traditionGuideForSource(sourceType,sourceId,sourceKey) {
+  const guides=state.data&&state.data.traditionGuides||[];
+  if(sourceType==="IMPORTANT_DATE")return guides.find(function(guide){return guide.sourceType===sourceType&&guide.sourceId===sourceId;})||null;
+  let key=traditionKey(sourceKey);if(!key){const festival=(state.data.odiaFestivals||[]).find(function(item){return item.id===sourceId;});key=traditionKey(festival&&festival.name);}
+  return guides.find(function(guide){return guide.sourceType===sourceType&&traditionKey(guide.sourceKey)===key;})||null;
+}
+function traditionGuideSourceLabel(guide) {
+  if(guide.sourceType==="IMPORTANT_DATE"){const item=(state.data.importantDates||[]).find(function(date){return date.id===guide.sourceId;});return item?(item.occasionLabel||item.title):guide.title;}
+  const festival=(state.data.odiaFestivals||[]).find(function(item){return traditionKey(item.name)===traditionKey(guide.sourceKey);});return festival?festival.name:guide.title;
+}
+function renderTraditionGuides() {
+  const guides=state.data.traditionGuides||[];
+  $("traditionGuideGrid").innerHTML=guides.map(function(guide){
+    const preview=guide.instructions||guide.meaning||guide.rituals||guide.memories||guide.food||"Open the saved family guide.";
+    const visual=guide.featuredPhotoThumbData?'<div class="tradition-guide-cover"><img src="'+h(guide.featuredPhotoThumbData)+'" alt="'+h(guide.title)+'" loading="lazy" decoding="async"><span>'+h(plural(Number(guide.photoCount||0),"photo"))+'</span></div>':'<div class="tradition-guide-icon">✿</div>';
+    return '<article class="tradition-guide-card '+(guide.featuredPhotoThumbData?'has-cover':'')+'">'+visual+'<div><span class="tradition-source-chip">'+h(guide.sourceType==="ODIA_FESTIVAL"?"Odia festival":"Important date")+'</span><h4>'+h(guide.title)+'</h4>'+(guide.odiaName?'<p class="tradition-odia-name">'+h(guide.odiaName)+'</p>':'')+'<p>'+h(preview.slice(0,190))+(preview.length>190?'…':'')+'</p><small>Attached to '+h(traditionGuideSourceLabel(guide))+(Number(guide.photoCount||0)?' · '+h(plural(Number(guide.photoCount),"archived photo")):'')+'</small></div><button class="secondary-button" data-action="open-tradition-guide" data-guide-id="'+h(guide.id)+'">Open guide</button></article>';
+  }).join("");
+  $("traditionGuideEmpty").classList.toggle("hidden",guides.length>0);
+}
+function fillTraditionGuideSourceOptions(selectedId,selectedKey) {
+  const type=$("traditionGuideSourceType").value,select=$("traditionGuideSourceId");let items=[];
+  if(type==="IMPORTANT_DATE")items=(state.data.importantDates||[]).map(function(item){return{id:item.id,key:item.id,label:item.occasionLabel||item.title,date:item.eventDate};});
+  else {
+    const seen={};items=(state.data.odiaFestivals||[]).filter(function(item){const key=traditionKey(item.name);if(seen[key])return false;seen[key]=true;return true;}).map(function(item){return{id:item.id,key:traditionKey(item.name),label:item.name,date:item.eventDate};});
+  }
+  items.sort(function(a,b){return String(a.label).localeCompare(String(b.label));});
+  select.innerHTML=items.length?items.map(function(item){return '<option value="'+h(item.id)+'" data-source-key="'+h(item.key)+'">'+h(item.label)+(item.date?' · '+h(formatEnglishDate(item.date)):'')+'</option>';}).join(""):'<option value="">No available dates</option>';
+  if(selectedId&&items.some(function(item){return item.id===selectedId;}))select.value=selectedId;
+  else if(selectedKey){const match=items.find(function(item){return item.key===traditionKey(selectedKey);});if(match)select.value=match.id;}
+  syncTraditionGuideTitle();
+}
+function syncTraditionGuideTitle() { const option=$("traditionGuideSourceId").selectedOptions[0];if(option&&!$("traditionGuideId").value&&!$("traditionGuideTitle").value.trim())$("traditionGuideTitle").value=option.textContent.split(" · ")[0]; }
+function setTraditionGuideReadonly(readonly) {
+  ["traditionGuideSourceType","traditionGuideSourceId","traditionGuideTitle","traditionGuideOdiaName","traditionGuideMeaning","traditionGuideInstructions","traditionGuideRituals","traditionGuideFood","traditionGuideResponsibilities","traditionGuideMemories"].forEach(function(id){$(id).disabled=readonly;});
+  $("saveTraditionGuide").classList.toggle("hidden",readonly);$("traditionGuideReadonlyNote").classList.toggle("hidden",!readonly);
+}
+function openTraditionGuideDialog(options) {
+  options=options||{};const guide=options.guideId?(state.data.traditionGuides||[]).find(function(item){return item.id===options.guideId;}):traditionGuideForSource(options.sourceType,options.sourceId,options.sourceKey);
+  if(!guide&&!isAdmin()&&options.sourceType)return toast("No family tradition guide has been saved for this date yet.","error");
+  $("traditionGuideForm").reset();$("traditionGuideId").value=guide&&guide.id||"";state.traditionGuideId=guide&&guide.id||"";
+  const sourceType=guide&&guide.sourceType||options.sourceType||"IMPORTANT_DATE";$("traditionGuideSourceType").value=sourceType;
+  fillTraditionGuideSourceOptions(guide&&guide.sourceId||options.sourceId||"",guide&&guide.sourceKey||options.sourceKey||"");
+  if(guide&&guide.sourceId&&![...$("traditionGuideSourceId").options].some(function(option){return option.value===guide.sourceId;})){const option=document.createElement("option");option.value=guide.sourceId;option.dataset.sourceKey=guide.sourceKey||guide.sourceId;option.textContent=guide.title+" · linked date currently hidden";$("traditionGuideSourceId").appendChild(option);$("traditionGuideSourceId").value=guide.sourceId;}
+  if(guide){$("traditionGuideTitle").value=guide.title||"";$("traditionGuideOdiaName").value=guide.odiaName||"";$("traditionGuideMeaning").value=guide.meaning||"";$("traditionGuideInstructions").value=guide.instructions||"";$("traditionGuideRituals").value=guide.rituals||"";$("traditionGuideFood").value=guide.food||"";$("traditionGuideResponsibilities").value=guide.responsibilities||"";$("traditionGuideMemories").value=guide.memories||"";}
+  $("traditionGuideDialogTitle").textContent=guide?(isAdmin()?"Edit family tradition guide":"Family tradition guide"):"Add family tradition guide";
+  state.traditionGuidePhotos=[];state.pendingTraditionPhoto=null;$("traditionPhotoFile").value="";$("traditionPhotoCaption").value="";$("traditionPhotoDate").value="";$("traditionPhotoSource").value="";$("traditionPhotoPreview").src="";$("traditionPhotoPreview").classList.add("hidden");
+  const photoSection=$("traditionPhotoSection"),folder=$("traditionPhotoFolderLink"),folderUrl=state.data.traditionGuidePhotoFolderUrl||"";photoSection.classList.toggle("hidden",!guide);$("traditionPhotoUploader").classList.toggle("hidden",!guide||!isAdmin());folder.classList.toggle("hidden",!guide||!isAdmin()||!folderUrl);if(folderUrl)folder.href=folderUrl;renderTraditionGuidePhotos();
+  const readonly=!isAdmin();setTraditionGuideReadonly(readonly);$("traditionGuideSourceControls").classList.toggle("locked-source",!!guide);$("traditionGuideSourceType").disabled=readonly||!!guide;$("traditionGuideSourceId").disabled=readonly||!!guide;$("deleteTraditionGuide").classList.toggle("hidden",!isAdmin()||!guide);openDialog("traditionGuideDialog");if(guide)loadTraditionGuidePhotos(guide.id);
+}
+async function saveTraditionGuide(event) {
+  event.preventDefault();if(!isAdmin())return;const option=$("traditionGuideSourceId").selectedOptions[0];if(!option||!option.value)return toast("Choose an important date or Odia festival.","error");
+  const payload={id:$("traditionGuideId").value,sourceType:$("traditionGuideSourceType").value,sourceId:option.value,sourceKey:option.dataset.sourceKey||"",title:$("traditionGuideTitle").value.trim(),odiaName:$("traditionGuideOdiaName").value.trim(),meaning:$("traditionGuideMeaning").value.trim(),instructions:$("traditionGuideInstructions").value.trim(),rituals:$("traditionGuideRituals").value.trim(),food:$("traditionGuideFood").value.trim(),responsibilities:$("traditionGuideResponsibilities").value.trim(),memories:$("traditionGuideMemories").value.trim()};
+  await mutate("saveTraditionGuide",payload,payload.id?"Family tradition guide updated.":"Family tradition guide preserved for future generations.","traditionGuideDialog","Saving family tradition…");
+}
+async function deleteTraditionGuide() { const id=$("traditionGuideId").value;if(!id||!isAdmin()||!window.confirm("Delete this family tradition guide?"))return;await mutate("deleteTraditionGuide",{id:id},"Family tradition guide deleted.","traditionGuideDialog","Deleting guide…"); }
+
+function formatPhotoBytes(bytes){const value=Number(bytes||0);return value>=1048576?(value/1048576).toFixed(value>=10485760?0:1)+" MB":Math.max(1,Math.round(value/1024))+" KB";}
+async function loadTraditionGuidePhotos(guideId){
+  try{state.traditionGuidePhotos=await api("getTraditionGuidePhotos",{guideId:guideId});renderTraditionGuidePhotos();}
+  catch(error){if(!handleSessionError(error))toast(friendlyApiError(error),"error");}
+}
+function renderTraditionGuidePhotos(){
+  const items=state.traditionGuidePhotos||[],gallery=$("traditionPhotoGallery");
+  gallery.innerHTML=items.map(function(photo){const actions=isAdmin()?'<div class="tradition-photo-actions">'+(!photo.featured?'<button type="button" class="tiny-button" data-action="feature-tradition-photo" data-id="'+h(photo.id)+'">Make cover</button>':'<span class="featured-photo-chip">★ Cover</span>')+'<button type="button" class="danger-button" data-action="delete-tradition-photo" data-id="'+h(photo.id)+'">Delete</button></div>':'';return '<article class="tradition-photo-card '+(photo.featured?'featured':'')+'"><button type="button" class="tradition-photo-image" data-action="view-tradition-photo" data-id="'+h(photo.id)+'"><img src="'+h(photo.thumbData)+'" alt="'+h(photo.caption||"Tradition photo")+'" loading="lazy" decoding="async"><span>View</span></button><div><strong>'+h(photo.caption||photo.originalName||"Family photograph")+'</strong><small>'+h([photo.photoDate?formatDate(photo.photoDate):"",formatPhotoBytes(photo.sizeBytes),photo.sourceNote||""].filter(Boolean).join(" · "))+'</small>'+actions+'</div></article>';}).join("");
+  $("traditionPhotoEmpty").classList.toggle("hidden",items.length>0);
+  const limit=Math.max(1,Math.min(20,Number(state.data.settings.traditionPhotoLimit||8))),button=$("uploadTraditionPhoto");button.disabled=items.length>=limit;button.textContent=items.length>=limit?"Photo limit reached":"Upload original & add photo";
+}
+async function previewTraditionPhoto(){const file=$("traditionPhotoFile").files[0];if(!file||!validOriginalPhotoFile(file))return;showLoading("Preparing celebration photo…");try{state.pendingTraditionPhoto=await prepareOriginalPhoto(file,1800,260);$("traditionPhotoPreview").src=state.pendingTraditionPhoto.displayData;$("traditionPhotoPreview").classList.remove("hidden");}catch(error){if(error.message!=="Invalid photo")toast(error.message||"This photo could not be prepared.","error");}finally{hideLoading();}}
+async function uploadTraditionPhoto(){const guideId=$("traditionGuideId").value;if(!guideId)return toast("Save the tradition guide before adding photographs.","error");if(!state.pendingTraditionPhoto)return toast("Choose an original photograph first.","error");showLoading("Saving original celebration photo privately to Google Drive…");try{await uploadOriginalPhoto("TRADITION_GUIDE",guideId,state.pendingTraditionPhoto,{caption:$("traditionPhotoCaption").value.trim(),photoDate:$("traditionPhotoDate").value,sourceNote:$("traditionPhotoSource").value.trim()});state.pendingTraditionPhoto=null;$("traditionPhotoFile").value="";$("traditionPhotoCaption").value="";$("traditionPhotoDate").value="";$("traditionPhotoSource").value="";$("traditionPhotoPreview").classList.add("hidden");await refreshData();await loadTraditionGuidePhotos(guideId);toast("Original photo archived and thumbnail added.","success");}catch(error){if(!handleSessionError(error))toast(friendlyApiError(error),"error");}finally{hideLoading();}}
+async function viewTraditionPhoto(id){const item=(state.traditionGuidePhotos||[]).find(function(photo){return photo.id===id;});if(!item)return;$("viewerTitle").textContent=item.caption||"Family tradition photograph";$("viewerMeta").textContent=[item.photoDate?formatDate(item.photoDate):"",formatPhotoBytes(item.sizeBytes),item.sourceNote||""].filter(Boolean).join(" · ");$("viewerText").textContent="Optimized viewing copy · original preserved privately in Google Drive";$("viewerImage").classList.add("hidden");$("viewerLoading").textContent="Loading photograph…";$("viewerLoading").classList.remove("hidden");openDialog("photoViewer");try{const result=await api("getOptimizedPhoto",{kind:"TRADITION_GUIDE",id:id});$("viewerImage").src=result.dataUrl;$("viewerImage").classList.remove("hidden");$("viewerLoading").classList.add("hidden");}catch(error){if(!handleSessionError(error))$("viewerLoading").textContent=friendlyApiError(error);}}
+async function deleteTraditionPhoto(id){const guideId=$("traditionGuideId").value;if(!isAdmin()||!window.confirm("Delete this archived photograph? Both its original and display copy will move to Drive Trash."))return;showLoading("Removing archived photo…");try{await api("deleteTraditionGuidePhoto",{id:id});await refreshData();await loadTraditionGuidePhotos(guideId);toast("Tradition photograph removed.","success");}catch(error){if(!handleSessionError(error))toast(friendlyApiError(error),"error");}finally{hideLoading();}}
+async function featureTraditionPhoto(id){const guideId=$("traditionGuideId").value;if(!isAdmin())return;showLoading("Updating guide cover…");try{await api("setTraditionGuidePhotoCover",{id:id});await refreshData();await loadTraditionGuidePhotos(guideId);toast("Guide cover photo updated.","success");}catch(error){if(!handleSessionError(error))toast(friendlyApiError(error),"error");}finally{hideLoading();}}
 
 function renderPhotos() {
   const q=normalize($("photoSearch").value);
@@ -2550,13 +2653,13 @@ function renderCalendar() {
   const year=state.calendarCursor.getFullYear(),month=state.calendarCursor.getMonth(),englishMonthLabel=state.calendarCursor.toLocaleDateString("en-IN",{month:"long",year:"numeric"}),odiaMonthLabel=state.calendarCursor.toLocaleDateString("or-IN-u-nu-orya",{month:"long",year:"numeric"}); const monthLabels=[];if(calendarDisplayIncludes("ENGLISH"))monthLabels.push('<span class="gregorian-month-label">'+h(englishMonthLabel)+'</span>');if(calendarDisplayIncludes("ODIA"))monthLabels.push('<span class="odia-month-label"><small>ଓଡ଼ିଆ</small>'+h(odiaMonthLabel)+'</span>');$("calendarMonthLabel").innerHTML=monthLabels.join(""); $("calendarMonthLabel").setAttribute("aria-label",[calendarDisplayIncludes("ENGLISH")?englishMonthLabel:"",calendarDisplayIncludes("ODIA")?odiaMonthLabel:""].filter(Boolean).join("; "));
   const first=new Date(year,month,1),start=new Date(year,month,1-first.getDay()),today=todayIso(),cells=[];
   for(let i=0;i<42;i++){const d=new Date(start);d.setDate(start.getDate()+i);const iso=[d.getFullYear(),String(d.getMonth()+1).padStart(2,"0"),String(d.getDate()).padStart(2,"0")].join("-");const events=[],cellSaka=gregorianToSaka(iso);
-    state.data.odiaFestivals.forEach(function(x){if(x.eventDate===iso)events.push({type:"odia-festival",title:"Odia festival: "+x.name});});
-    state.data.importantDates.forEach(function(x){if(importantDateMatchesIso(x,iso,cellSaka)){const odiaMapping=(x.odiaMappings||[]).find(function(mapping){return mapping.gregorianDate===iso;}),isOdia=!!odiaMapping;events.push({type:isOdia?"odia-reminder":"reminder",title:(x.occasionLabel||x.title)+" · "+(isOdia?formatOdiaPanjika(x,odiaMapping.odiaYear||""):reminderBasisLabel(reminderBasis(x)))});}});
+    state.data.odiaFestivals.forEach(function(x){if(x.eventDate===iso)events.push({type:"odia-festival",title:"Odia festival: "+x.name,sourceType:"ODIA_FESTIVAL",sourceId:x.id,sourceKey:traditionKey(x.name)});});
+    state.data.importantDates.forEach(function(x){if(importantDateMatchesIso(x,iso,cellSaka)){const odiaMapping=(x.odiaMappings||[]).find(function(mapping){return mapping.gregorianDate===iso;}),isOdia=!!odiaMapping;events.push({type:isOdia?"odia-reminder":"reminder",title:(x.occasionLabel||x.title)+" · "+(isOdia?formatOdiaPanjika(x,odiaMapping.odiaYear||""):reminderBasisLabel(reminderBasis(x))),sourceType:"IMPORTANT_DATE",sourceId:x.id});}});
     state.data.recurringExpenses.forEach(function(x){if(recurringIsActive(x)&&x.nextDueDate===iso)events.push({type:"recurring",title:"Payment: "+x.title});});
     state.data.expenses.map(normalizeExpense).forEach(function(x){if(x.status==="PLANNED"&&x.date===iso)events.push({type:"recurring",title:"Preplanned: "+(x.reason||x.category)});});
     state.data.experiences.forEach(function(x){if(x.experienceDate===iso)events.push({type:"experience",title:x.title});}); state.data.diary.forEach(function(x){if(x.diaryDate===iso)events.push({type:"diary",title:x.title});});
     const mainDay=calendarDisplayIncludes("ENGLISH")?d.getDate():new Intl.NumberFormat("or-IN-u-nu-orya").format(d.getDate()),odiaChip=calendarDisplayIncludes("ENGLISH")&&calendarDisplayIncludes("ODIA")?'<small class="odia-day-chip" title="'+h(formatOdiaScriptDate(iso))+'"><b>'+h(new Intl.NumberFormat("or-IN-u-nu-orya").format(d.getDate()))+'</b><em>ଓ</em></small>':'';
-    cells.push('<div class="calendar-cell '+(d.getMonth()!==month?'other-month ':'')+(iso===today?'today':'')+'"><div class="calendar-day-pair"><span class="calendar-day">'+mainDay+'</span>'+odiaChip+'</div><div class="calendar-events">'+events.slice(0,4).map(function(e){return '<button class="calendar-event '+e.type+'" title="'+h(e.title)+'">'+h(e.title)+'</button>';}).join("")+(events.length>4?'<span class="calendar-event">+'+(events.length-4)+' more</span>':"")+'</div></div>');
+    cells.push('<div class="calendar-cell '+(d.getMonth()!==month?'other-month ':'')+(iso===today?'today':'')+'"><div class="calendar-day-pair"><span class="calendar-day">'+mainDay+'</span>'+odiaChip+'</div><div class="calendar-events">'+events.slice(0,4).map(function(e){const action=e.sourceType?' data-action="open-tradition-guide" data-source-type="'+h(e.sourceType)+'" data-source-id="'+h(e.sourceId||"")+'" data-source-key="'+h(e.sourceKey||"")+'"':'';return '<button class="calendar-event '+e.type+'" title="'+h(e.title)+'"'+action+'>'+h(e.title)+'</button>';}).join("")+(events.length>4?'<span class="calendar-event">+'+(events.length-4)+' more</span>':"")+'</div></div>');
   } $("calendarGrid").innerHTML=cells.join("");
 }
 
@@ -2568,6 +2671,11 @@ function familyLifeDates(person) {
   if(person.lifeStatus==="DECEASED")return (person.birthDate?formatDate(person.birthDate):"Birth date not recorded")+" — "+(person.deathDate?formatDate(person.deathDate):"Remembered");
   return person.birthDate?("Born "+formatDate(person.birthDate)):"Birth date not recorded";
 }
+function familyPersonOdiaDetails(person,kind) { const prefix=kind==="birth"?"birthOdia":"deathOdia";return{odiaYear:person[prefix+"Year"]||"",odiaMonth:person[prefix+"Month"]||"",odiaPaksha:person[prefix+"Paksha"]||"",odiaTithi:person[prefix+"Tithi"]||""}; }
+function familyOdiaDateMarkup(person) {
+  const rows=[];if(person.birthDate&&person.birthOdiaMonth)rows.push('<span><small>DOB · ODIA</small>'+h(formatOdiaPanjika(familyPersonOdiaDetails(person,"birth")))+'</span>');if(person.deathDate&&person.deathOdiaMonth)rows.push('<span><small>DEATH · ODIA</small>'+h(formatOdiaPanjika(familyPersonOdiaDetails(person,"death")))+'</span>');return rows.length?'<div class="family-odia-date-list">'+rows.join("")+'</div>':"";
+}
+function familyOdiaPrintText(person) { const values=[];if(person.birthDate&&person.birthOdiaMonth)values.push("DOB: "+formatOdiaPanjika(familyPersonOdiaDetails(person,"birth")));if(person.deathDate&&person.deathOdiaMonth)values.push("Death: "+formatOdiaPanjika(familyPersonOdiaDetails(person,"death")));return values.join(" | "); }
 function familyGeneration(person,idMap,cache,visiting) {
   if(cache[person.id]!==undefined)return cache[person.id];
   if(visiting[person.id])return 0;
@@ -2592,7 +2700,7 @@ function refreshFamilyBranchSelects() {
 function filteredFamilyPeople() {
   const q=normalize($("familyTreeSearch").value),status=$("familyTreeStatus").value,branch=$("familyTreeBranch").value;
   return (state.data.familyPeople||[]).filter(function(person){
-    return (!status||person.lifeStatus===status)&&(!branch||person.branch===branch)&&(!q||normalize([person.name,person.branch,person.relationLabel,person.notes,familyPersonName(person.fatherId),familyPersonName(person.motherId),familyPersonName(person.spouseId)].join(" ")).includes(q));
+    return (!status||person.lifeStatus===status)&&(!branch||person.branch===branch)&&(!q||normalize([person.name,person.branch,person.relationLabel,person.notes,person.birthOdiaMonth,person.birthOdiaPaksha,person.birthOdiaTithi,person.deathOdiaMonth,person.deathOdiaPaksha,person.deathOdiaTithi,familyPersonName(person.fatherId),familyPersonName(person.motherId),familyPersonName(person.spouseId)].join(" ")).includes(q));
   });
 }
 function familyPersonAvatar(person,photos) {
@@ -2603,8 +2711,13 @@ function familyPersonCard(person,layout) {
   const parents=[familyPersonName(person.fatherId),familyPersonName(person.motherId)].filter(Boolean).join(" & ");
   const spouse=familyPersonName(person.spouseId),remembered=person.lifeStatus==="DECEASED";
   const adminActions=isAdmin()?'<div class="family-card-actions"><button class="tiny-button" data-action="edit-family-person" data-id="'+h(person.id)+'">Edit</button><button class="tiny-button danger-text" data-action="delete-family-person" data-id="'+h(person.id)+'">Delete</button></div>':"";
-  return '<article class="family-person-card '+(remembered?'remembered ':'')+'layout-'+h(layout.toLowerCase())+'"><div class="family-person-avatar">'+familyPersonAvatar(person,layout!=="COMPACT")+'</div><div class="family-person-copy"><div class="family-person-heading"><h4>'+h(person.name)+'</h4>'+(remembered?'<span class="memorial-chip">✦ Remembered</span>':'<span class="living-chip">● Living</span>')+'</div><p class="family-life-dates">'+h(familyLifeDates(person))+'</p>'+(person.relationLabel?'<p class="family-relation">'+h(person.relationLabel)+'</p>':'')+(person.branch?'<span class="family-branch-chip">'+h(person.branch)+'</span>':'')+(parents?'<small>Parents: '+h(parents)+'</small>':'')+(spouse?'<small>Spouse: '+h(spouse)+'</small>':'')+(layout!=="COMPACT"&&person.notes?'<p class="family-note">'+h(person.notes)+'</p>':'')+adminActions+'</div></article>';
+  return '<article class="family-person-card '+(remembered?'remembered ':'')+'layout-'+h(layout.toLowerCase())+'"><div class="family-person-avatar">'+familyPersonAvatar(person,layout!=="COMPACT")+'</div><div class="family-person-copy"><div class="family-person-heading"><h4>'+h(person.name)+'</h4>'+(remembered?'<span class="memorial-chip">✦ Remembered</span>':'<span class="living-chip">● Living</span>')+'</div><p class="family-life-dates">'+h(familyLifeDates(person))+'</p>'+familyOdiaDateMarkup(person)+(person.relationLabel?'<p class="family-relation">'+h(person.relationLabel)+'</p>':'')+(person.branch?'<span class="family-branch-chip">'+h(person.branch)+'</span>':'')+(parents?'<small>Parents: '+h(parents)+'</small>':'')+(spouse?'<small>Spouse: '+h(spouse)+'</small>':'')+(layout!=="COMPACT"&&person.notes?'<p class="family-note">'+h(person.notes)+'</p>':'')+adminActions+'</div></article>';
 }
+function familyUnits(people){
+  const list=people.slice().sort(function(a,b){return Number(a.sortOrder||0)-Number(b.sortOrder||0)||a.name.localeCompare(b.name);}),byId={},seen={};list.forEach(function(person){byId[person.id]=person;});
+  return list.reduce(function(units,person){if(seen[person.id])return units;seen[person.id]=true;const spouse=person.spouseId&&byId[person.spouseId]&&!seen[person.spouseId]?byId[person.spouseId]:null;if(spouse)seen[spouse.id]=true;units.push({people:spouse?[person,spouse]:[person],couple:!!spouse});return units;},[]);
+}
+function familyUnitMarkup(unit,layout){return '<div class="family-unit '+(unit.couple?'family-couple':'family-single')+'">'+unit.people.map(function(person,index){return (index?'<span class="family-couple-link" title="Spouse / partner">♥</span>':'')+familyPersonCard(person,layout);}).join('')+'</div>';}
 function renderFamilyTree() {
   if(!state.data)return;
   const folderLink=$("familyTreePhotoFolderLink"),folderUrl=state.data.familyTreePhotoFolderUrl||"";folderLink.classList.toggle("hidden",!isAdmin()||!folderUrl);if(folderUrl)folderLink.href=folderUrl;
@@ -2613,7 +2726,7 @@ function renderFamilyTree() {
   $("familyTreeStats").innerHTML=[['♧',all.length,'Family members'],['●',living,'Living'],['✦',remembered,'Remembered'],['↟',generationCount,'Generations'],['⌁',familyBranchOptions().length,'Branches']].map(function(stat){return '<div><span>'+stat[0]+'</span><strong>'+stat[1]+'</strong><small>'+stat[2]+'</small></div>';}).join("");
   const groups={};items.forEach(function(person){(groups[person.generation]||(groups[person.generation]=[])).push(person);});
   $("familyTreeCanvas").className="family-tree-canvas layout-"+layout.toLowerCase();
-  $("familyTreeCanvas").innerHTML=Object.keys(groups).sort(function(a,b){return Number(a)-Number(b);}).map(function(key,index){const people=groups[key].sort(function(a,b){return Number(a.sortOrder||0)-Number(b.sortOrder||0)||a.name.localeCompare(b.name);});return '<section class="family-generation"><div class="generation-label"><span>Generation '+(Number(key)+1)+'</span><small>'+plural(people.length,"person","people")+'</small></div><div class="family-generation-row">'+people.map(function(person){return familyPersonCard(person,layout);}).join("")+'</div></section>';}).join("");
+  $("familyTreeCanvas").innerHTML=Object.keys(groups).sort(function(a,b){return Number(a)-Number(b);}).map(function(key){const people=groups[key],units=familyUnits(people);return '<section class="family-generation"><div class="generation-label"><span>Generation '+(Number(key)+1)+'</span><small>'+plural(people.length,"person","people")+' · '+plural(units.length,"family unit")+'</small></div><div class="family-generation-row">'+units.map(function(unit){return familyUnitMarkup(unit,layout);}).join("")+'</div></section>';}).join("");
   $("familyTreeEmpty").classList.toggle("hidden",!!items.length);
 }
 function familyPersonOptions(selected,selfId,placeholder) {
@@ -2623,22 +2736,28 @@ function prepareFamilyPersonDialog(person) {
   const item=person||{},id=item.id||"";
   $("familyPersonForm").reset();$("familyPersonId").value=id;$("familyPersonDialogTitle").textContent=id?"Edit family member":"Add family member";
   $("familyPersonName").value=item.name||"";$("familyPersonGender").value=item.gender||"OTHER";$("familyPersonLifeStatus").value=item.lifeStatus||"LIVING";$("familyPersonBirthDate").value=item.birthDate||"";$("familyPersonDeathDate").value=item.deathDate||"";$("familyPersonRelation").value=item.relationLabel||"";$("familyPersonBranch").value=item.branch||"";$("familyPersonSortOrder").value=Number(item.sortOrder||100);$("familyPersonNotes").value=item.notes||"";
+  $("familyPersonBirthReminder").value=item.birthReminderBasis||(id?((item.birthDate||"")?"GREGORIAN_ODIA":"NONE"):"GREGORIAN_ODIA");$("familyPersonDeathReminder").value=item.deathReminderBasis||(id?((item.deathDate||"")?"GREGORIAN_ODIA":"NONE"):"GREGORIAN_ODIA");$("familyPersonReminderDays").value=item.familyReminderDays||"7,1,0";
   $("familyPersonFather").innerHTML=familyPersonOptions(item.fatherId,id,"Not recorded");$("familyPersonMother").innerHTML=familyPersonOptions(item.motherId,id,"Not recorded");$("familyPersonSpouse").innerHTML=familyPersonOptions(item.spouseId,id,"Not recorded");
   const accounts=state.data.adminMembers||[];$("familyPersonLinkedMember").innerHTML='<option value="">No linked dashboard account</option>'+accounts.map(function(member){return '<option value="'+h(member.id)+'"'+(member.id===item.linkedMemberId?' selected':'')+'>'+h(member.name)+' (@'+h(member.username)+')</option>';}).join("");
-  state.pendingFamilyPersonPhoto=null;state.removeFamilyPersonPhoto=false;$("familyPersonPhotoFile").value="";setFamilyPersonPhotoPreview(item.photoThumbData||"");$("removeFamilyPersonPhoto").classList.toggle("hidden",!item.hasOwnPhoto);syncFamilyPersonLifeStatus();
+  state.pendingFamilyPersonPhoto=null;state.removeFamilyPersonPhoto=false;$("familyPersonPhotoFile").value="";setFamilyPersonPhotoPreview(item.photoThumbData||"");$("removeFamilyPersonPhoto").classList.toggle("hidden",!item.hasOwnPhoto);syncFamilyPersonLifeStatus();syncFamilyPersonCalendarPreviews();
 }
-function syncFamilyPersonLifeStatus() { const deceased=$("familyPersonLifeStatus").value==="DECEASED";$("familyPersonDeathField").classList.toggle("hidden",!deceased);if(!deceased)$("familyPersonDeathDate").value=""; }
+function syncFamilyPersonLifeStatus() { const deceased=$("familyPersonLifeStatus").value==="DECEASED";$("familyPersonDeathField").classList.toggle("hidden",!deceased);$("familyPersonDeathReminderField").classList.toggle("hidden",!deceased);$("familyDeathOdiaPreview").classList.toggle("hidden",!deceased);if(!deceased){$("familyPersonDeathDate").value="";$("familyPersonDeathReminder").value="NONE";}else if($("familyPersonDeathReminder").value==="NONE"&&!$("familyPersonId").value)$("familyPersonDeathReminder").value="GREGORIAN_ODIA";syncFamilyPersonCalendarPreviews(); }
+function familyCalendarPreview(inputId,previewId,label) {
+  const iso=$(inputId).value,preview=$(previewId),strong=preview.querySelector("strong");if(!iso){strong.textContent="Choose an English date";preview.classList.remove("ready");return;}
+  try{const details=automaticOdiaDetailsFromGregorian(iso);strong.textContent=formatOdiaPanjika(details);preview.classList.add("ready");preview.title=label+" · "+formatEnglishDate(iso);}catch(error){strong.textContent="Odia date could not be calculated";preview.classList.remove("ready");}
+}
+function syncFamilyPersonCalendarPreviews() { familyCalendarPreview("familyPersonBirthDate","familyBirthOdiaPreview","Date of birth");familyCalendarPreview("familyPersonDeathDate","familyDeathOdiaPreview","Date of death"); }
 function setFamilyPersonPhotoPreview(dataUrl) { $("familyPersonPhotoPreview").innerHTML=dataUrl?'<img src="'+h(dataUrl)+'" alt="Family member photo preview">':'<span>♧</span>'; }
 async function previewFamilyPersonPhoto() {
-  const file=$("familyPersonPhotoFile").files[0];if(!file)return;if(!/^image\/(jpeg|png|webp)$/.test(file.type))return toast("Choose a JPG, PNG or WebP image.","error");showLoading("Preparing family-tree photo…");
-  try{const full=await resizeImage(file,900,.84),thumb=await resizeImage(file,180,.72);state.pendingFamilyPersonPhoto={name:file.name.replace(/[^A-Za-z0-9._-]/g,"_"),fullData:full,thumbData:thumb};state.removeFamilyPersonPhoto=false;setFamilyPersonPhotoPreview(thumb);$("removeFamilyPersonPhoto").classList.remove("hidden");}catch(error){toast("This family-tree photo could not be prepared.","error");}finally{hideLoading();}
+  const file=$("familyPersonPhotoFile").files[0];if(!file||!validOriginalPhotoFile(file))return;showLoading("Preparing family-tree photo…");
+  try{state.pendingFamilyPersonPhoto=await prepareOriginalPhoto(file,1200,200);state.removeFamilyPersonPhoto=false;setFamilyPersonPhotoPreview(state.pendingFamilyPersonPhoto.thumbData);$("removeFamilyPersonPhoto").classList.remove("hidden");}catch(error){if(error.message!=="Invalid photo")toast(error.message||"This family-tree photo could not be prepared.","error");}finally{hideLoading();}
 }
 function removeFamilyPersonPhoto() { state.pendingFamilyPersonPhoto=null;state.removeFamilyPersonPhoto=true;$("familyPersonPhotoFile").value="";setFamilyPersonPhotoPreview("");$("removeFamilyPersonPhoto").classList.add("hidden"); }
 function editFamilyPerson(id) { const person=familyPersonById(id);if(!person||!isAdmin())return;prepareFamilyPersonDialog(person);openDialog("familyPersonDialog"); }
 async function saveFamilyPerson(event) {
   event.preventDefault();if(!isAdmin())return;
-  const id=$("familyPersonId").value,payload={id:id,name:$("familyPersonName").value,gender:$("familyPersonGender").value,lifeStatus:$("familyPersonLifeStatus").value,birthDate:$("familyPersonBirthDate").value,deathDate:$("familyPersonDeathDate").value,fatherId:$("familyPersonFather").value,motherId:$("familyPersonMother").value,spouseId:$("familyPersonSpouse").value,branch:$("familyPersonBranch").value,relationLabel:$("familyPersonRelation").value,linkedMemberId:$("familyPersonLinkedMember").value,sortOrder:$("familyPersonSortOrder").value,notes:$("familyPersonNotes").value};
-  showLoading("Saving family member…");try{const result=await api("saveFamilyPerson",payload),savedId=result.id;if(state.removeFamilyPersonPhoto&&id)await api("deleteFamilyPersonPhoto",{id:savedId});if(state.pendingFamilyPersonPhoto)await api("uploadFamilyPersonPhoto",{id:savedId,fileName:state.pendingFamilyPersonPhoto.name,fullData:state.pendingFamilyPersonPhoto.fullData,thumbData:state.pendingFamilyPersonPhoto.thumbData});$("familyPersonDialog").close();await refreshData();toast(id?"Family member updated.":"Family member added.","success");}catch(error){if(!handleSessionError(error))toast(friendlyApiError(error),"error");}finally{hideLoading();}
+  const id=$("familyPersonId").value,payload={id:id,name:$("familyPersonName").value,gender:$("familyPersonGender").value,lifeStatus:$("familyPersonLifeStatus").value,birthDate:$("familyPersonBirthDate").value,deathDate:$("familyPersonDeathDate").value,birthReminderBasis:$("familyPersonBirthReminder").value,deathReminderBasis:$("familyPersonDeathReminder").value,familyReminderDays:$("familyPersonReminderDays").value,fatherId:$("familyPersonFather").value,motherId:$("familyPersonMother").value,spouseId:$("familyPersonSpouse").value,branch:$("familyPersonBranch").value,relationLabel:$("familyPersonRelation").value,linkedMemberId:$("familyPersonLinkedMember").value,sortOrder:$("familyPersonSortOrder").value,notes:$("familyPersonNotes").value};
+  showLoading("Saving family member…");try{const result=await api("saveFamilyPerson",payload),savedId=result.id;if(state.removeFamilyPersonPhoto&&id)await api("deleteFamilyPersonPhoto",{id:savedId});if(state.pendingFamilyPersonPhoto)await uploadOriginalPhoto("FAMILY_PERSON",savedId,state.pendingFamilyPersonPhoto,{});$("familyPersonDialog").close();await refreshData();toast(id?"Family member updated.":"Family member added.","success");}catch(error){if(!handleSessionError(error))toast(friendlyApiError(error),"error");}finally{hideLoading();}
 }
 async function importFamilyAccounts() { if(!window.confirm("Add every active dashboard account that is not already linked to the family tree?"))return;const result=await mutate("importFamilyAccounts",{},"Dashboard accounts imported into the family tree.",null,"Building family register…");if(result&&result.created===0)toast("All active dashboard accounts are already linked.","success"); }
 function openFamilyTreePrintDialog() { refreshFamilyBranchSelects();$("familyTreePrintForm").reset();$("familyTreePrintPhotos").checked=true;openDialog("familyTreePrintDialog"); }
@@ -2647,8 +2766,12 @@ function printFamilyTree(event) {
   event.preventDefault();const layout=$("familyTreePrintLayout").value,items=familyPrintItems(),photos=$("familyTreePrintPhotos").checked,notes=$("familyTreePrintNotes").checked,familyName=(state.data.settings&&state.data.settings.familyName)||"Our Family Hub";if(!items.length)return toast("No family members match this print selection.","error");
   const portrait=layout==="REGISTER"||layout==="MEMORIAL",report=window.open("","_blank");if(!report)return toast("Allow pop-ups to open the family print preview.","error");report.opener=null;
   let content="";
-  if(layout==="REGISTER")content='<table><thead><tr><th>#</th><th>Name</th><th>Relation / branch</th><th>Life dates</th><th>Parents</th><th>Spouse</th>'+(notes?'<th>Notes</th>':'')+'</tr></thead><tbody>'+items.sort(function(a,b){return a.name.localeCompare(b.name);}).map(function(person,index){return '<tr class="'+(person.lifeStatus==="DECEASED"?'remembered':'')+'"><td>'+(index+1)+'</td><td><strong>'+h(person.name)+'</strong></td><td>'+h([person.relationLabel,person.branch].filter(Boolean).join(" · "))+'</td><td>'+h(familyLifeDates(person))+'</td><td>'+h([familyPersonName(person.fatherId),familyPersonName(person.motherId)].filter(Boolean).join(" & "))+'</td><td>'+h(familyPersonName(person.spouseId))+'</td>'+(notes?'<td>'+h(person.notes||"")+'</td>':'')+'</tr>';}).join("")+'</tbody></table>';
-  else {const groups={};items.forEach(function(person){(groups[person.generation]||(groups[person.generation]=[])).push(person);});content='<div class="tree '+layout.toLowerCase()+'">'+Object.keys(groups).sort(function(a,b){return Number(a)-Number(b);}).map(function(key){return '<section class="generation"><h2>Generation '+(Number(key)+1)+'</h2><div class="cards">'+groups[key].sort(function(a,b){return Number(a.sortOrder||0)-Number(b.sortOrder||0);}).map(function(person){return '<article class="card '+(person.lifeStatus==="DECEASED"?'remembered':'')+'">'+(photos?'<div class="portrait">'+familyPersonAvatar(person,true)+'</div>':'')+'<div><h3>'+h(person.name)+'</h3><p>'+h(person.relationLabel||person.branch||"")+'</p><small>'+h(familyLifeDates(person))+'</small>'+(person.spouseId?'<small>Spouse: '+h(familyPersonName(person.spouseId))+'</small>':'')+(notes&&person.notes?'<em>'+h(person.notes)+'</em>':'')+'</div></article>';}).join("")+'</div></section>';}).join("")+'</div>';}
+  if(layout==="REGISTER")content='<table><thead><tr><th>#</th><th>Name</th><th>Relation / branch</th><th>Life dates</th><th>Parents</th><th>Spouse</th>'+(notes?'<th>Notes</th>':'')+'</tr></thead><tbody>'+items.sort(function(a,b){return a.name.localeCompare(b.name);}).map(function(person,index){return '<tr class="'+(person.lifeStatus==="DECEASED"?'remembered':'')+'"><td>'+(index+1)+'</td><td><strong>'+h(person.name)+'</strong></td><td>'+h([person.relationLabel,person.branch].filter(Boolean).join(" · "))+'</td><td>'+h(familyLifeDates(person))+(familyOdiaPrintText(person)?'<br><small class="odia">'+h(familyOdiaPrintText(person))+'</small>':'')+'</td><td>'+h([familyPersonName(person.fatherId),familyPersonName(person.motherId)].filter(Boolean).join(" & "))+'</td><td>'+h(familyPersonName(person.spouseId))+'</td>'+(notes?'<td>'+h(person.notes||"")+'</td>':'')+'</tr>';}).join("")+'</tbody></table>';
+  else {
+    const groups={};items.forEach(function(person){(groups[person.generation]||(groups[person.generation]=[])).push(person);});
+    const printCard=function(person){return '<article class="card '+(person.lifeStatus==="DECEASED"?'remembered':'')+'">'+(photos?'<div class="portrait">'+familyPersonAvatar(person,true)+'</div>':'')+'<div><h3>'+h(person.name)+'</h3><p>'+h(person.relationLabel||person.branch||"")+'</p><small>'+h(familyLifeDates(person))+'</small>'+(familyOdiaPrintText(person)?'<small class="odia">'+h(familyOdiaPrintText(person))+'</small>':'')+(notes&&person.notes?'<em>'+h(person.notes)+'</em>':'')+'</div></article>';};
+    content='<div class="tree '+layout.toLowerCase()+'">'+Object.keys(groups).sort(function(a,b){return Number(a)-Number(b);}).map(function(key){const units=familyUnits(groups[key]);return '<section class="generation"><h2>Generation '+(Number(key)+1)+'</h2><div class="cards">'+units.map(function(unit){return '<div class="print-unit '+(unit.couple?'couple':'single')+'" style="display:flex;align-items:center;padding:5px;border:1px solid #e7e2f2;border-radius:15px;background:#fcfbff;break-inside:avoid">'+unit.people.map(function(person,index){return (index?'<span class="heart" style="display:grid;place-items:center;width:22px;height:22px;margin:0 -5px;z-index:1;border:2px solid white;border-radius:50%;background:#fff0f3;color:#a34763">♥</span>':'')+printCard(person);}).join('')+'</div>';}).join('')+'</div></section>';}).join('')+'</div>';
+  }
   report.document.write('<!doctype html><html><head><meta charset="utf-8"><title>'+h(familyName)+' · Family '+(layout==="REGISTER"?'Register':'Tree')+'</title><style>@page{size:A4 '+(portrait?'portrait':'landscape')+';margin:10mm}*{box-sizing:border-box}body{margin:0;background:#f5f3fa;color:#25233a;font:11px Arial,sans-serif;-webkit-print-color-adjust:exact;print-color-adjust:exact}.page{max-width:1200px;margin:auto;background:white;min-height:100vh;padding:24px}.actions{position:sticky;top:0;text-align:right;padding:8px;background:white;border-bottom:1px solid #ddd}.actions button{margin-left:7px;padding:9px 14px;border:0;border-radius:9px;font-weight:bold;cursor:pointer}.print{background:#5f49bd;color:white}.kicker{color:#6b52c7;font-weight:800;letter-spacing:1.4px}h1{margin:5px 0 2px;font:700 28px Georgia,serif}.sub{margin:0 0 18px;color:#757086}.generation{position:relative;margin:0 0 18px;padding-top:1px}.generation h2{text-align:center;color:#6a52bd;font-size:12px;text-transform:uppercase;letter-spacing:1.4px}.cards{display:flex;justify-content:center;align-items:stretch;gap:9px;flex-wrap:wrap}.card{display:flex;gap:8px;width:190px;min-height:82px;padding:9px;border:1px solid #dcd6ee;border-top:4px solid #6752c7;border-radius:12px;background:linear-gradient(145deg,#fff,#f7f4ff);box-shadow:0 5px 14px #30255f12}.card.remembered{border-top-color:#b1747e;background:linear-gradient(145deg,#fff,#fff5f6)}.portrait{width:43px;height:43px;flex:0 0 43px;border-radius:50%;overflow:hidden;background:#e9e4fa;display:grid;place-items:center;font-size:18px;color:#5a43b0}.portrait img{width:100%;height:100%;object-fit:cover}.card h3{font-size:13px;margin:0 0 4px}.card p,.card small,.card em{display:block;margin:2px 0;color:#706b7e;font-size:9px}.compact .portrait{display:none}.compact .card{width:155px;min-height:55px}.photo .card{width:210px}.photo .portrait{width:58px;height:58px;flex-basis:58px}table{width:100%;border-collapse:collapse}th,td{padding:7px;border:1px solid #dedbe9;text-align:left;vertical-align:top}th{background:#e9e3fb;color:#48388d;font-size:9px;text-transform:uppercase}tbody tr:nth-child(even){background:#f4f8ff}tr.remembered{background:#fff3f5}.foot{margin-top:15px;text-align:right;color:#858093}@media print{body{background:#fff}.page{padding:0;max-width:none}.actions{display:none}}</style></head><body><main class="page"><div class="actions"><button onclick="window.close()">Close</button><button class="print" onclick="window.print()">Print</button></div><div class="kicker">'+h(familyName.toUpperCase())+'</div><h1>'+(layout==="MEMORIAL"?'In Loving Memory':layout==="REGISTER"?'Family Register':'Our Family Tree')+'</h1><p class="sub">'+plural(items.length,"family member","family members")+' · Prepared '+h(new Date().toLocaleDateString("en-IN",{dateStyle:"long"}))+'</p>'+content+'<p class="foot">Family history · FE v'+h(FRONTEND_VERSION)+' · BE v'+h(state.data.backendVersion||"—")+'</p></main></body></html>');report.document.close();$("familyTreePrintDialog").close();
 }
 
@@ -2661,6 +2784,7 @@ function renderAdmin() {
   $("settingDashboardClockHighlight").value=dashboardClockHighlight(); previewDashboardClockHighlight(dashboardClockHighlight());
   const parentsThumb=String(state.data.settings.parentsPortraitThumbData||""); state.pendingParentsPortrait=null; $("parentsPortraitFile").value=""; setParentsPortraitPreview($("adminParentsPortraitPreview"),parentsThumb); $("settingParentsPortraitCaption").value=parentsPortraitCaption(); $("removeParentsPortrait").classList.toggle("hidden",!parentsThumb); const parentsFolder=$("parentsPortraitFolderLink"),parentsFolderUrl=state.data.parentsPortraitFolderUrl||""; parentsFolder.classList.toggle("hidden",!parentsFolderUrl); if(parentsFolderUrl)parentsFolder.href=parentsFolderUrl;
   $("settingMemoryPhotoLimit").value=memoryPhotoLimit();
+  $("settingTraditionPhotoLimit").value=Math.max(1,Math.min(20,Number(state.data.settings.traditionPhotoLimit||8)));
   $("settingMemoryUploadPolicy").value=state.data.settings.memoryUploadPolicy==="MEMBERS_WITH_ACCESS"?"MEMBERS_WITH_ACCESS":"ADMIN_ONLY";
   $("settingMemoryPrintPages").value=String(memoryPrintPages());
   const idleTimeoutSupported=adjustableIdleTimeoutSupported(),idleSelect=$("settingSessionIdleMinutes"),idleHelp=$("sessionIdleTimeoutHelp"); idleSelect.value=String(idleTimeoutMinutes()); idleSelect.disabled=!idleTimeoutSupported; idleHelp.textContent=idleTimeoutSupported?("Current inactivity sign-out: "+idleTimeoutLabel(idleTimeoutMinutes())+". Closing or leaving the page still signs out immediately."):"Deploy BE v1.0.37 to enable this control. Until then, the existing 5-minute timeout remains active."; idleHelp.classList.toggle("version-warning",!idleTimeoutSupported);
@@ -2788,46 +2912,68 @@ function renderGlobalSearch() {
   state.data.targets.forEach(function(x){if(normalize([x.title,x.category,x.notes].join(" ")).includes(q))results.push({view:"targets",icon:"◎",title:x.title,meta:"Target · "+money(x.targetAmount)});});
   state.data.importantDates.forEach(function(x){if(normalize([x.title,x.occasionLabel,x.eventType,x.notes,x.calendarDate].join(" ")).includes(q))results.push({view:"dates",icon:"◫",title:x.occasionLabel||x.title,meta:x.eventType+" · "+reminderBasisLabel(reminderBasis(x))+" · "+formatDate(x.nextOccurrence)});});
   state.data.odiaFestivals.forEach(function(x){if(normalize([x.name,x.source].join(" ")).includes(q))results.push({view:"calendar",icon:"✿",title:x.name,meta:"Automatic Odia festival · "+formatDate(x.eventDate)});});
+  state.data.traditionGuides.forEach(function(x){if(normalize([x.title,x.odiaName,x.meaning,x.instructions,x.rituals,x.food,x.responsibilities,x.memories].join(" ")).includes(q))results.push({view:"dates",icon:"✿",title:x.title,meta:"Family tradition & celebration guide"});});
   state.data.photos.forEach(function(x){if(normalize([x.title,x.caption,memberName(x.uploadedBy)].join(" ")).includes(q))results.push({view:"photos",icon:"▧",title:x.title,meta:"Photo by "+memberName(x.uploadedBy)});});
   state.data.experiences.forEach(function(x){if(normalize([x.title,x.place,x.story,x.tags].join(" ")).includes(q))results.push({view:"experiences",icon:"✦",title:x.title,meta:formatDate(x.experienceDate)+" · "+memberName(x.createdBy)});});
   state.data.diary.forEach(function(x){if(normalize([x.title,x.body,x.mood,x.tags].join(" ")).includes(q))results.push({view:"diary",icon:"☷",title:x.title,meta:formatDate(x.diaryDate)+" · "+memberName(x.createdBy)});});
-  state.data.familyPeople.forEach(function(x){if(normalize([x.name,x.relationLabel,x.branch,x.notes,familyPersonName(x.fatherId),familyPersonName(x.motherId),familyPersonName(x.spouseId)].join(" ")).includes(q))results.push({view:"family",icon:x.lifeStatus==="DECEASED"?"✦":"♧",title:x.name,meta:(x.relationLabel||"Family member")+(x.branch?" · "+x.branch:"")+(x.lifeStatus==="DECEASED"?" · Remembered":"")});});
+  state.data.familyPeople.forEach(function(x){if(normalize([x.name,x.relationLabel,x.branch,x.notes,x.birthOdiaMonth,x.birthOdiaPaksha,x.birthOdiaTithi,x.deathOdiaMonth,x.deathOdiaPaksha,x.deathOdiaTithi,familyPersonName(x.fatherId),familyPersonName(x.motherId),familyPersonName(x.spouseId)].join(" ")).includes(q))results.push({view:"family",icon:x.lifeStatus==="DECEASED"?"✦":"♧",title:x.name,meta:(x.relationLabel||"Family member")+(x.branch?" · "+x.branch:"")+(x.lifeStatus==="DECEASED"?" · Remembered":"")});});
   state.data.stickyNotes.forEach(function(x){if(normalize([x.title,x.body,x.noteType,x.color].join(" ")).includes(q))results.push({view:"home",icon:"🗒",title:x.title,meta:(x.noteType==="REMINDER"?"Reminder":"Target")+" sticky note · "+(x.status==="COMPLETED"?"Completed":"Active"),stickyId:x.id,stickyStatus:x.status});});
   results=results.slice(0,30); $("globalSearchResults").innerHTML=results.length?results.map(function(x){return '<button class="search-result" data-search-view="'+h(x.view)+'"'+(x.stickyId?' data-search-sticky="'+h(x.stickyId)+'" data-search-status="'+h(x.stickyStatus)+'"':'')+'><span>'+h(x.icon)+'</span><div><strong>'+h(x.title)+'</strong><small>'+h(x.meta)+'</small></div></button>';}).join(""):'<p class="muted">No matching family records.</p>'; all("[data-search-view]",$("globalSearchResults")).forEach(function(btn){btn.addEventListener("click",function(){ $("searchDialog").close(); goTo(btn.dataset.searchView); if(btn.dataset.searchSticky){openStickyBoard(btn.dataset.searchStatus==="COMPLETED"?"completed":"active");setTimeout(function(){const note=all("[data-sticky-id]").find(function(item){return item.dataset.stickyId===btn.dataset.searchSticky;});if(note){note.classList.add("sticky-highlight");note.scrollIntoView({block:"center",inline:"center"});setTimeout(function(){note.classList.remove("sticky-highlight");},1800);}},80);} });});
 }
 
+const MAX_ORIGINAL_PHOTO_BYTES=20*1024*1024;
+function validOriginalPhotoFile(file){if(!file)return false;if(!/^image\/(jpeg|png|webp)$/.test(file.type)){toast("Choose a JPG, PNG or WebP image.","error");return false;}if(file.size>MAX_ORIGINAL_PHOTO_BYTES){toast("The original photo must be 20 MB or smaller.","error");return false;}return true;}
+async function prepareOriginalPhoto(file,displayDimension,thumbDimension){
+  if(!validOriginalPhotoFile(file))throw new Error("Invalid photo");
+  const displayData=await resizeImage(file,displayDimension||1600,.84),thumbData=await resizeImage(file,thumbDimension||240,.68);
+  if(thumbData.length>90000)throw new Error("The dashboard thumbnail is too large. Choose a smaller image.");
+  return{file:file,name:file.name.replace(/[^A-Za-z0-9._ -]/g,"_").slice(0,120),displayData:displayData,thumbData:thumbData,sizeBytes:file.size,mimeType:file.type};
+}
+function arrayBufferToBase64(buffer){const bytes=new Uint8Array(buffer);let binary="";const block=0x8000;for(let i=0;i<bytes.length;i+=block)binary+=String.fromCharCode.apply(null,bytes.subarray(i,Math.min(i+block,bytes.length)));return btoa(binary);}
+async function uploadOriginalPhoto(targetType,targetId,prepared,metadata){
+  let uploadId="";
+  try{
+    const started=await api("startOriginalPhotoUpload",{targetType:targetType,targetId:targetId||"",fileName:prepared.name,mimeType:prepared.mimeType,sizeBytes:prepared.sizeBytes});
+    uploadId=started.uploadId;const chunkBytes=Number(started.chunkBytes)||786432,total=prepared.file.size;
+    for(let start=0;start<total;start+=chunkBytes){
+      const end=Math.min(start+chunkBytes,total),buffer=await prepared.file.slice(start,end).arrayBuffer();
+      $("loadingText").textContent="Saving original photo to Drive… "+Math.round(end*100/total)+"%";
+      await api("uploadOriginalPhotoChunk",{uploadId:uploadId,start:start,chunkData:arrayBufferToBase64(buffer)});
+    }
+    $("loadingText").textContent="Creating lightweight dashboard thumbnail…";
+    return await api("finalizeOriginalPhotoUpload",Object.assign({uploadId:uploadId,displayData:prepared.displayData,thumbData:prepared.thumbData},metadata||{}));
+  }catch(error){if(uploadId)try{await api("cancelOriginalPhotoUpload",{uploadId:uploadId});}catch(ignore){}throw error;}
+}
+
 async function previewPhoto() {
-  const file=$("photoFile").files[0]; if(!file)return; if(!/^image\/(jpeg|png|webp)$/.test(file.type))return toast("Choose a JPG, PNG or WebP image.","error");
-  showLoading("Preparing photo…"); try { const full=await resizeImage(file,1600,.82),thumb=await resizeImage(file,280,.55); state.pendingPhoto={name:file.name.replace(/[^A-Za-z0-9._-]/g,"_"),fullData:full,thumbData:thumb}; $("photoPreview").src=full; $("photoPreview").classList.remove("hidden"); if(!$("photoTitle").value)$("photoTitle").value=file.name.replace(/\.[^.]+$/,"").replace(/[_-]+/g," "); } catch(e){toast("This photo could not be prepared.","error");} finally{hideLoading();}
+  const file=$("photoFile").files[0];if(!file||!validOriginalPhotoFile(file))return;
+  showLoading("Preparing photo preview…");try{state.pendingPhoto=await prepareOriginalPhoto(file,1600,260);$("photoPreview").src=state.pendingPhoto.displayData;$("photoPreview").classList.remove("hidden");if(!$("photoTitle").value)$("photoTitle").value=file.name.replace(/\.[^.]+$/,"").replace(/[_-]+/g," ");}catch(e){if(e.message!=="Invalid photo")toast(e.message||"This photo could not be prepared.","error");}finally{hideLoading();}
 }
 async function previewMemberPhoto() {
-  const file=$("memberPhotoFile").files[0]; if(!file)return;
-  if(!/^image\/(jpeg|png|webp)$/.test(file.type))return toast("Choose a JPG, PNG or WebP image.","error");
+  const file=$("memberPhotoFile").files[0]; if(!file||!validOriginalPhotoFile(file))return;
   showLoading("Preparing member photo…");
   try {
-    const full=await resizeImage(file,800,.84),thumb=await resizeImage(file,140,.72);
-    state.pendingMemberPhoto={name:file.name.replace(/[^A-Za-z0-9._-]/g,"_"),fullData:full,thumbData:thumb};
-    $("memberPhotoCurrent").innerHTML='<img src="'+h(thumb)+'" alt="Selected member photo preview">';
-  } catch(error) { toast("This member photo could not be prepared.","error"); }
+    state.pendingMemberPhoto=await prepareOriginalPhoto(file,1200,180);
+    $("memberPhotoCurrent").innerHTML='<img src="'+h(state.pendingMemberPhoto.thumbData)+'" alt="Selected member photo preview">';
+  } catch(error) { if(error.message!=="Invalid photo")toast(error.message||"This member photo could not be prepared.","error"); }
   finally { hideLoading(); }
 }
 async function previewParentsPortrait() {
-  const file=$("parentsPortraitFile").files[0]; if(!file)return;
+  const file=$("parentsPortraitFile").files[0]; if(!file||!validOriginalPhotoFile(file))return;
   if(!isAdmin())return toast("Only an administrator can change the parents’ portrait.","error");
-  if(!/^image\/(jpeg|png|webp)$/.test(file.type))return toast("Choose a JPG, PNG or WebP image.","error");
   showLoading("Preparing parents’ portrait…");
   try {
-    const full=await resizeImage(file,1400,.86),thumb=await resizeImage(file,300,.68);
-    if(thumb.length>48000)throw new Error("The portrait is still too large after resizing.");
-    state.pendingParentsPortrait={name:file.name.replace(/[^A-Za-z0-9._-]/g,"_"),fullData:full,thumbData:thumb};
-    setParentsPortraitPreview($("adminParentsPortraitPreview"),thumb);
-  } catch(error){toast(error.message||"This portrait could not be prepared.","error");}
+    state.pendingParentsPortrait=await prepareOriginalPhoto(file,1600,260);
+    setParentsPortraitPreview($("adminParentsPortraitPreview"),state.pendingParentsPortrait.thumbData);
+  } catch(error){if(error.message!=="Invalid photo")toast(error.message||"This portrait could not be prepared.","error");}
   finally{hideLoading();}
 }
 async function saveParentsPortrait() {
   if(!state.pendingParentsPortrait)return toast("Choose your mother and father’s photo first.","error");
-  const portrait=state.pendingParentsPortrait;
-  await mutate("uploadParentsPortrait",{fileName:portrait.name,fullData:portrait.fullData,thumbData:portrait.thumbData,caption:$("settingParentsPortraitCaption").value.trim()},"Parents’ portrait updated.",null,"Saving parents’ portrait privately to Google Drive…");
+  showLoading("Saving original parents’ portrait privately to Google Drive…");
+  try { await uploadOriginalPhoto("PARENTS_PORTRAIT","",state.pendingParentsPortrait,{caption:$("settingParentsPortraitCaption").value.trim()}); await refreshData(); renderAdmin(); toast("Parents’ portrait updated.","success"); }
+  catch(error){if(!handleSessionError(error))toast(friendlyApiError(error),"error");}
+  finally{hideLoading();}
 }
 async function deleteParentsPortrait() {
   if(!window.confirm("Remove the parents’ portrait from the dashboard? The private Drive file will be moved to Trash."))return;
@@ -2839,15 +2985,13 @@ function setImportantDatePhotoPreview(dataUrl) {
   $("removeImportantDatePhoto").classList.toggle("hidden",!dataUrl);
 }
 async function previewImportantDatePhoto() {
-  const file=$("importantDatePhotoFile").files[0]; if(!file)return;
+  const file=$("importantDatePhotoFile").files[0]; if(!file||!validOriginalPhotoFile(file))return;
   if(!isAdmin())return toast("Only the administrator can attach reminder photos.","error");
-  if(!/^image\/(jpeg|png|webp)$/.test(file.type))return toast("Choose a JPG, PNG or WebP image.","error");
   showLoading("Preparing reminder photo…");
   try {
-    const full=await resizeImage(file,1000,.84),thumb=await resizeImage(file,180,.72);
-    state.pendingImportantDatePhoto={name:file.name.replace(/[^A-Za-z0-9._-]/g,"_"),fullData:full,thumbData:thumb};
-    state.removeImportantDatePhoto=false; setImportantDatePhotoPreview(thumb);
-  } catch(error){toast("This reminder photo could not be prepared.","error");}
+    state.pendingImportantDatePhoto=await prepareOriginalPhoto(file,1400,200);
+    state.removeImportantDatePhoto=false; setImportantDatePhotoPreview(state.pendingImportantDatePhoto.thumbData);
+  } catch(error){if(error.message!=="Invalid photo")toast(error.message||"This reminder photo could not be prepared.","error");}
   finally{hideLoading();}
 }
 function removeImportantDatePhotoPreview() {

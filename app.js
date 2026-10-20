@@ -2,7 +2,7 @@
 
 const CONFIG = window.FAMILY_DASHBOARD_CONFIG || {};
 const PLACEHOLDER_URL = "PASTE_YOUR_APPS_SCRIPT_WEB_APP_URL_HERE";
-const FRONTEND_VERSION = "1.0.61";
+const FRONTEND_VERSION = "1.0.62";
 const SAVED_USERNAME_KEY = "familyDashboardUsername";
 const SESSION_TOKEN_KEY = "familyDashboardToken";
 const DEFAULT_IDLE_TIMEOUT_MINUTES = 60;
@@ -708,6 +708,7 @@ function bindNavigation() {
   $("calendarPrev").addEventListener("click", function () { state.calendarCursor.setMonth(state.calendarCursor.getMonth() - 1); renderCalendar(); });
   $("calendarNext").addEventListener("click", function () { state.calendarCursor.setMonth(state.calendarCursor.getMonth() + 1); renderCalendar(); });
   $("calendarToday").addEventListener("click", function () { state.calendarCursor = new Date(new Date().getFullYear(), new Date().getMonth(), 1); renderCalendar(); });
+  $("printOdiaFestivalYearbook").addEventListener("click", printOdiaFestivalYearbook);
 }
 function closeSidebar() { $("sidebar").classList.remove("open"); $("sidebarShade").classList.remove("show"); }
 function goTo(view) {
@@ -1225,7 +1226,7 @@ function bindForms() {
 }
 
 function bindFilters() {
-  const expenseSearchRender = debounce(renderExpenses, 120), recurringSearchRender=debounce(renderRecurringExpenses,120), incomeSearchRender = debounce(renderIncome, 120), dateSearchRender = debounce(renderDates, 120), photoSearchRender = debounce(renderPhotos, 120), experienceSearchRender = debounce(renderExperiences, 120), diarySearchRender = debounce(renderDiary, 120), familySearchRender = debounce(renderFamilyTree, 120), globalSearchRender = debounce(renderGlobalSearch, 120);
+  const expenseSearchRender = debounce(renderExpenses, 120), recurringSearchRender=debounce(renderRecurringExpenses,120), incomeSearchRender = debounce(renderIncome, 120), dateSearchRender = debounce(renderDates, 120), photoSearchRender = debounce(renderPhotos, 120), experienceSearchRender = debounce(renderExperiences, 120), diarySearchRender = debounce(renderDiary, 120), familySearchRender = debounce(renderFamilyTree, 120), globalSearchRender = debounce(renderGlobalSearch, 120), odiaFestivalSearchRender=debounce(renderOdiaFestivalYearbook,120);
   ["expenseMonth", "expenseStatusFilter", "expenseMemberFilter", "expenseCategoryFilter", "expenseSubcategoryFilter", "expenseMajorPlanFilter", "expenseSendToFilter", "expenseAccountFilter"].forEach(function (id) { $(id).addEventListener("input", renderExpenses); });
   $("expenseSearch").addEventListener("input", expenseSearchRender);
   $("majorPlanStatusFilter").addEventListener("input", renderMajorPlans);
@@ -1240,6 +1241,8 @@ function bindFilters() {
   $("incomeSearch").addEventListener("input", incomeSearchRender);
   $("dateTypeFilter").addEventListener("input", renderDates);
   $("dateSearch").addEventListener("input", dateSearchRender);
+  $("odiaFestivalYear").addEventListener("input", renderOdiaFestivalYearbook);
+  $("odiaFestivalSearch").addEventListener("input", odiaFestivalSearchRender);
   $("photoSearch").addEventListener("input", photoSearchRender);
   $("printMemories").addEventListener("click", openMemoryPrintView);
   $("experienceYear").addEventListener("input", renderExperiences);
@@ -2661,6 +2664,70 @@ function renderCalendar() {
     const mainDay=calendarDisplayIncludes("ENGLISH")?d.getDate():new Intl.NumberFormat("or-IN-u-nu-orya").format(d.getDate()),odiaChip=calendarDisplayIncludes("ENGLISH")&&calendarDisplayIncludes("ODIA")?'<small class="odia-day-chip" title="'+h(formatOdiaScriptDate(iso))+'"><b>'+h(new Intl.NumberFormat("or-IN-u-nu-orya").format(d.getDate()))+'</b><em>ଓ</em></small>':'';
     cells.push('<div class="calendar-cell '+(d.getMonth()!==month?'other-month ':'')+(iso===today?'today':'')+'"><div class="calendar-day-pair"><span class="calendar-day">'+mainDay+'</span>'+odiaChip+'</div><div class="calendar-events">'+events.slice(0,4).map(function(e){const action=e.sourceType?' data-action="open-tradition-guide" data-source-type="'+h(e.sourceType)+'" data-source-id="'+h(e.sourceId||"")+'" data-source-key="'+h(e.sourceKey||"")+'"':'';return '<button class="calendar-event '+e.type+'" title="'+h(e.title)+'"'+action+'>'+h(e.title)+'</button>';}).join("")+(events.length>4?'<span class="calendar-event">+'+(events.length-4)+' more</span>':"")+'</div></div>');
   } $("calendarGrid").innerHTML=cells.join("");
+  renderOdiaFestivalYearbook();
+}
+
+function odiaFestivalYears() {
+  return Array.from(new Set((state.data.odiaFestivals||[]).map(function(item){return Number(String(item.eventDate||"").slice(0,4));}).filter(Boolean))).sort(function(a,b){return b-a;});
+}
+function syncOdiaFestivalYearOptions() {
+  const select=$("odiaFestivalYear"),years=odiaFestivalYears(),currentYear=new Date().getFullYear(),previous=Number(select.value||0);
+  if(!years.length)years.push(currentYear);
+  select.innerHTML=years.map(function(year){return '<option value="'+year+'">'+year+'</option>';}).join("");
+  const preferred=years.indexOf(previous)>=0?previous:(years.indexOf(currentYear)>=0?currentYear:years[0]);
+  select.value=String(preferred);
+  return preferred;
+}
+function filteredOdiaFestivalYearItems() {
+  const year=Number($("odiaFestivalYear").value||syncOdiaFestivalYearOptions()),query=normalize($("odiaFestivalSearch").value);
+  return (state.data.odiaFestivals||[]).filter(function(item){
+    if(Number(String(item.eventDate||"").slice(0,4))!==year)return false;
+    if(!query)return true;
+    const monthName=item.eventDate?new Date(item.eventDate+"T00:00:00Z").toLocaleDateString("en-IN",{month:"long",timeZone:"UTC"}):"";
+    return normalize([item.name,item.source,item.eventDate,monthName,formatOdiaScriptDate(item.eventDate)].join(" ")).includes(query);
+  }).sort(function(a,b){return String(a.eventDate).localeCompare(String(b.eventDate))||String(a.name).localeCompare(String(b.name));});
+}
+function odiaFestivalMonthHeading(monthIndex,year) {
+  const date=new Date(Date.UTC(year,monthIndex,1));
+  const english=date.toLocaleDateString("en-IN",{month:"long",timeZone:"UTC"});
+  let odia="";try{odia=date.toLocaleDateString("or-IN-u-nu-orya",{month:"long",timeZone:"UTC"});}catch(error){odia=english;}
+  return '<span>'+h(english)+'</span><small>'+h(odia)+'</small>';
+}
+function renderOdiaFestivalYearbook() {
+  if(!state.data||!$("odiaFestivalYear"))return;
+  const select=$("odiaFestivalYear"),available=odiaFestivalYears();
+  if(!select.options.length||!available.map(String).includes(select.value))syncOdiaFestivalYearOptions();
+  const year=Number(select.value),items=filteredOdiaFestivalYearItems(),groups={};
+  items.forEach(function(item){const month=Number(String(item.eventDate).slice(5,7))-1;if(!groups[month])groups[month]=[];groups[month].push(item);});
+  $("odiaFestivalYearCount").textContent=items.length+" "+(items.length===1?"festival":"festivals");
+  $("odiaFestivalYearList").innerHTML=Object.keys(groups).map(Number).sort(function(a,b){return a-b;}).map(function(month){
+    const rows=groups[month].map(function(item){
+      const date=new Date(item.eventDate+"T00:00:00Z"),weekday=date.toLocaleDateString("en-IN",{weekday:"short",timeZone:"UTC"}),guide=traditionGuideForSource("ODIA_FESTIVAL",item.id,traditionKey(item.name));
+      const guideButton=(guide||isAdmin())?'<button class="tiny-button tradition-button" data-action="open-tradition-guide" data-source-type="ODIA_FESTIVAL" data-source-id="'+h(item.id)+'" data-source-key="'+h(traditionKey(item.name))+'">'+(guide?'✿ Family guide':'＋ Add guide')+'</button>':'';
+      return '<article class="odia-festival-row"><time datetime="'+h(item.eventDate)+'"><strong>'+h(String(date.getUTCDate()).padStart(2,"0"))+'</strong><span>'+h(weekday)+'</span></time><div class="odia-festival-copy"><h4>'+h(item.name)+'</h4><div class="odia-festival-date-pair"><span><small>ENGLISH</small>'+h(formatEnglishDate(item.eventDate))+'</span><span><small>ଓଡ଼ିଆ ଅଙ୍କ</small>'+h(formatOdiaScriptDate(item.eventDate))+'</span></div></div><div class="odia-festival-guide">'+(guide?'<span class="guide-saved-chip">Guide saved</span>':'')+guideButton+'</div></article>';
+    }).join("");
+    return '<section class="odia-festival-month"><header><h4>'+odiaFestivalMonthHeading(month,year)+'</h4><span>'+groups[month].length+'</span></header><div>'+rows+'</div></section>';
+  }).join("");
+  $("odiaFestivalYearEmpty").classList.toggle("hidden",items.length>0);
+  const settings=state.data.settings||{},sourceYear=settings.odiaFestivalSourceYear||"cached edition",last=settings.odiaFestivalLastRefreshAt?new Date(settings.odiaFestivalLastRefreshAt).toLocaleString("en-IN",{dateStyle:"medium",timeStyle:"short"}):"not recorded";
+  $("odiaFestivalYearSource").textContent="Source: IMD Rashtriya Panchang · "+sourceYear+" · last refreshed "+last+". Odia-script dates use Odia numerals; festival dates follow the cached Panchang source.";
+}
+function printOdiaFestivalYearbook() {
+  const year=Number($("odiaFestivalYear").value||new Date().getFullYear()),items=filteredOdiaFestivalYearItems();
+  if(!items.length)return toast("No Odia festivals match this year and search.","error");
+  const familyName=state.data.settings&&state.data.settings.familyName||"Our Family Hub",query=$("odiaFestivalSearch").value.trim(),groups={};
+  items.forEach(function(item){const month=Number(String(item.eventDate).slice(5,7))-1;if(!groups[month])groups[month]=[];groups[month].push(item);});
+  const monthSections=Object.keys(groups).map(Number).sort(function(a,b){return a-b;}).map(function(month){
+    const date=new Date(Date.UTC(year,month,1)),english=date.toLocaleDateString("en-IN",{month:"long",timeZone:"UTC"});let odia=english;try{odia=date.toLocaleDateString("or-IN-u-nu-orya",{month:"long",timeZone:"UTC"});}catch(error){}
+    return '<section class="month"><header><div><small>MONTH</small><h2>'+h(english)+'</h2><span>'+h(odia)+'</span></div><b>'+groups[month].length+'</b></header>'+groups[month].map(function(item){const d=new Date(item.eventDate+"T00:00:00Z"),weekday=d.toLocaleDateString("en-IN",{weekday:"long",timeZone:"UTC"}),guide=traditionGuideForSource("ODIA_FESTIVAL",item.id,traditionKey(item.name));return '<article><time><strong>'+h(String(d.getUTCDate()).padStart(2,"0"))+'</strong><span>'+h(weekday.slice(0,3))+'</span></time><div><h3>'+h(item.name)+'</h3><p><span>'+h(formatEnglishDate(item.eventDate))+'</span><em>'+h(formatOdiaScriptDate(item.eventDate))+'</em></p></div>'+(guide?'<b class="guide">✿ Family guide</b>':'')+'</article>';}).join("")+'</section>';
+  }).join("");
+  const source=state.data.settings&&state.data.settings.odiaFestivalSourceYear||"cached official edition",reportWindow=window.open("","odiaFestivalYearbook","width=1040,height=880");
+  if(!reportWindow)return toast("Allow pop-ups for this page to view or print the Odia Festival Yearbook.","error");
+  reportWindow.document.open();
+  reportWindow.document.write("<!doctype html><html lang='en'><head><meta charset='utf-8'><meta name='viewport' content='width=device-width,initial-scale=1'><title>Odia Festival Yearbook "+year+" · "+h(familyName)+"</title><style>"+
+    "@page{size:A4 portrait;margin:11mm}*{box-sizing:border-box}body{margin:0;padding:70px 22px 30px;color:#202238;background:#eeedf4;font:12px Arial,sans-serif;-webkit-print-color-adjust:exact;print-color-adjust:exact}.actions{position:fixed;z-index:5;top:0;left:0;right:0;display:flex;justify-content:center;gap:9px;padding:12px;background:#272342}.actions button{border:0;border-radius:10px;padding:10px 17px;font-weight:800;cursor:pointer}.actions .print{color:#fff;background:#7652d6}.actions .close{color:#2b2940;background:#fff}.page{width:190mm;min-height:277mm;margin:auto;padding:10mm;background:#fff;border-radius:8px;box-shadow:0 10px 35px rgba(35,31,65,.14)}.hero{display:grid;grid-template-columns:1fr auto;align-items:end;gap:8px;padding:8mm;border-radius:7mm;color:#fff;background:linear-gradient(125deg,#352878,#7654d7 55%,#c84f86)}.hero small{font-size:8px;font-weight:900;letter-spacing:2px}.hero h1{margin:3px 0 2px;font-size:24px}.hero p{margin:0;color:#e9e3ff}.year{font-size:28px;font-weight:900}.meta{display:flex;justify-content:space-between;gap:8px;padding:4mm 1mm;color:#77758b;font-size:9px}.months{columns:2;column-gap:5mm}.month{break-inside:avoid;margin:0 0 5mm;border:1px solid #e5e0ef;border-radius:4mm;overflow:hidden}.month>header{display:flex;align-items:center;justify-content:space-between;padding:3mm 4mm;background:linear-gradient(120deg,#f2edff,#fff0f5)}.month>header small{display:block;color:#8a71ba;font-size:7px;letter-spacing:1.2px}.month>header h2{display:inline;margin:0 5px 0 0;font-size:13px}.month>header span{color:#9b4771;font-weight:800}.month>header>b{display:grid;place-items:center;width:25px;height:25px;border-radius:50%;color:#fff;background:#6f51c7}.month article{display:grid;grid-template-columns:11mm minmax(0,1fr) auto;align-items:center;gap:3mm;padding:3mm 4mm;border-top:1px solid #efedf4}.month time{text-align:center}.month time strong,.month time span{display:block}.month time strong{font-size:15px;color:#6d4fc7}.month time span{font-size:7px;color:#8a8898;text-transform:uppercase}.month h3{margin:0 0 1mm;font-size:10px;line-height:1.2}.month p{display:flex;gap:5px;flex-wrap:wrap;margin:0;color:#77758a;font-size:7.5px}.month p em{color:#a34570;font-style:normal}.guide{align-self:center;color:#1f7b70;font-size:7px;white-space:nowrap}.foot{margin-top:5mm;padding-top:3mm;border-top:1px solid #dedbea;color:#858296;font-size:8px;line-height:1.4}@media print{body{padding:0;background:#fff}.actions{display:none}.page{width:auto;min-height:0;padding:0;border-radius:0;box-shadow:none}.months{column-gap:4mm}}"+
+    "</style></head><body><div class='actions'><button class='close' onclick='window.close()'>Close view</button><button class='print' onclick='window.print()'>Print yearbook</button></div><main class='page'><header class='hero'><div><small>ODIA FESTIVAL YEARBOOK</small><h1>"+h(familyName)+"</h1><p>Annual festival reference · English and Odia-script date display</p></div><div class='year'>"+year+"</div></header><div class='meta'><span>"+items.length+" festivals"+(query?" · Filter: "+h(query):"")+"</span><span>Prepared "+h(new Date().toLocaleDateString("en-IN",{dateStyle:"medium"}))+"</span></div><div class='months'>"+monthSections+"</div><footer class='foot'>Source: IMD Rashtriya Panchang · "+h(source)+". Please verify unusual observance timings against your trusted printed Kohinoor/Panjika. Family guides remain private in MyFamily and are not printed in full here.</footer></main></body></html>");
+  reportWindow.document.close();
 }
 
 /* ---------- Family tree & family register ---------- */

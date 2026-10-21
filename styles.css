@@ -883,7 +883,7 @@ th { box-shadow:inset 0 -1px #e6e4ef; }
 .odia-day-chip { display:inline-flex; align-items:center; gap:3px; min-width:32px; justify-content:center; padding:3px 6px; border:1px solid #eaaac3; border-radius:999px; color:#922b57; background:linear-gradient(135deg,#fff0f6,#ffe1ed); font-size:.54rem; font-weight:800; white-space:nowrap; }.odia-day-chip em { color:#b23c6d; font-size:.45rem; font-style:normal; font-weight:900; }
 .calendar-event.odia-reminder { color:#842c52; border-color:#e6a9c0; background:#ffe8f1; }
 
-/* v1.0.63 · Odia Festival Yearbook with Panjika tithi */
+/* v1.0.65 · organized Drive home + Odisha-only Kohinoor Festival Yearbook */
 .odia-festival-yearbook { margin-top:18px; padding:19px; border:1px solid #e2dced; border-radius:22px; background:linear-gradient(145deg,#fff,#fdf8ff 52%,#fff9ef); box-shadow:0 10px 30px rgba(55,43,101,.07); }
 .odia-yearbook-head { display:flex; align-items:center; justify-content:space-between; gap:20px; }
 .odia-yearbook-head h3 { margin:3px 0 5px; font-size:1.18rem; }
@@ -1307,7 +1307,7 @@ th { box-shadow:inset 0 -1px #e6e4ef; }
 }
 
 /* ========================================================================== 
-   MyFamily v1.0.63 — premium responsive visual system + private photo archive
+   MyFamily v1.0.65 — premium responsive visual system + organized private Drive archive
    Pure CSS enhancement: no external font, framework or render-blocking asset.
    ========================================================================== */
 :root {

@@ -2,7 +2,7 @@
 
 const CONFIG = window.FAMILY_DASHBOARD_CONFIG || {};
 const PLACEHOLDER_URL = "PASTE_YOUR_APPS_SCRIPT_WEB_APP_URL_HERE";
-const FRONTEND_VERSION = "1.0.65";
+const FRONTEND_VERSION = "1.0.69";
 const SAVED_USERNAME_KEY = "familyDashboardUsername";
 const SESSION_TOKEN_KEY = "familyDashboardToken";
 const DEFAULT_IDLE_TIMEOUT_MINUTES = 60;
@@ -23,6 +23,9 @@ const state = {
   pendingParentsPortrait: null,
   pendingImportantDatePhoto: null,
   removeImportantDatePhoto: false,
+  otpIdentifier: "",
+  otpChannel: "EMAIL",
+  passwordResetIdentifier: "",
   stickyView: "active",
   stickyDrag: null,
   stickyHighestZ: 100,
@@ -50,6 +53,7 @@ const state = {
   lastToastAt: 0
 };
 const pendingRequests = new Map();
+let refreshPromise = null;
 const viewTitles = {
   home: "Family overview", expenses: "Expenditure", income: "Income", targets: "Family targets",
   dates: "Reminders", calendar: "Family calendar", diary: "Family diary", photos: "Family memories",
@@ -140,6 +144,10 @@ function idleTimeoutLabel(minutes) {
   if (value === 60) return "1 hour";
   if (value === 120) return "2 hours";
   return value + " minutes";
+}
+function sessionClosePolicy() {
+  const value=String(state.data&&state.data.settings&&state.data.settings.sessionClosePolicy||"KEEP_UNTIL_IDLE").toUpperCase();
+  return value==="STRICT"?"STRICT":"KEEP_UNTIL_IDLE";
 }
 function calendarDisplayMode() {
   const value=String(state.data&&state.data.settings&&state.data.settings.calendarDisplayMode||"ENGLISH_ODIA").toUpperCase();
@@ -484,6 +492,7 @@ function init() {
   $("diaryMonth").value = currentMonth();
   bindNavigation();
   bindDialogs();
+  bindPremiumUpgrade();
   bindForms();
   bindFilters();
   bindActions();
@@ -501,8 +510,8 @@ function init() {
     clearLocalSession();
     return;
   }
-  loadBackendVersion();
   if (state.token) restoreSession();
+  else loadBackendVersion();
 }
 
 async function loadBackendVersion() {
@@ -513,6 +522,11 @@ async function loadBackendVersion() {
     state.backendVersion = /Unknown dashboard action/i.test((error && error.message) || "") ? "Update required" : "Unavailable";
   }
   renderVersionLabels();
+}
+
+function syncPublicOtpOptions() {
+  if($("loginOtpChannel"))$("loginOtpChannel").value="EMAIL";
+  if($("resetOtpChannel"))$("resetOtpChannel").value="EMAIL";
 }
 
 function renderVersionLabels() {
@@ -567,7 +581,12 @@ function bindSessionSafety() {
   });
   window.addEventListener("pagehide", leaveDashboard);
   window.addEventListener("beforeunload", leaveDashboard);
-  window.addEventListener("pageshow", function (event) { if (event.persisted && !state.token) showLogin(); });
+  window.addEventListener("pageshow", function (event) {
+    if (!event.persisted) return;
+    if (!state.token) { showLogin(); return; }
+    resetIdleTimer();
+    startDashboardClock();
+  });
 }
 
 function recordActivity() {
@@ -607,6 +626,11 @@ function sendLogoutBeacon(token) {
 }
 
 function leaveDashboard() {
+  if (sessionClosePolicy() === "KEEP_UNTIL_IDLE") {
+    stopIdleTimer();
+    stopDashboardClock();
+    return;
+  }
   const token = state.token;
   clearLocalSession();
   showLogin();
@@ -641,7 +665,7 @@ async function repairBrowserSession() {
   const url = new URL(window.location.href); url.searchParams.set("fresh", String(Date.now())); window.location.replace(url.toString());
 }
 function loadSavedUsername() { const saved = localStorage.getItem(SAVED_USERNAME_KEY) || ""; $("loginUsername").value = saved; $("rememberUsername").checked = !!saved || $("rememberUsername").checked; }
-function normalizeBootstrapData(data) { const result = data || {}; ["members","familyPeople","expenses","recurringExpenses","settlements","majorPlans","majorPlanPhases","income","targets","importantDates","odiaFestivals","traditionGuides","photos","experiences","diary","stickyNotes"].forEach(function (key) { if (!Array.isArray(result[key])) result[key] = []; }); if (!result.settings) result.settings = {}; if (!Array.isArray(result.expenseCategories) || !result.expenseCategories.length) result.expenseCategories = fallbackExpenseCategories(); return result; }
+function normalizeBootstrapData(data) { const result = data || {}; ["members","familyPeople","expenses","recurringExpenses","settlements","majorPlans","majorPlanPhases","income","targets","importantDates","odiaFestivals","traditionGuides","photos","experiences","diary","stickyNotes","quickExpenseLinks"].forEach(function (key) { if (!Array.isArray(result[key])) result[key] = []; }); if (!result.settings) result.settings = {}; if (!Array.isArray(result.expenseCategories) || !result.expenseCategories.length) result.expenseCategories = fallbackExpenseCategories(); return result; }
 
 function majorPlanById(id) { return (state.data && state.data.majorPlans || []).find(function (item) { return item.id === id; }); }
 function majorPlanPhaseById(id) { return (state.data && state.data.majorPlanPhases || []).find(function (item) { return item.id === id; }); }
@@ -720,9 +744,58 @@ function goTo(view) {
   state.view = view;
   all(".view").forEach(function (el) { const active = el.id === "view-" + view; el.classList.toggle("active", active); el.setAttribute("aria-hidden", active ? "false" : "true"); });
   all(".nav-button").forEach(function (el) { const active = el.dataset.view === view; el.classList.toggle("active", active); if (active) el.setAttribute("aria-current", "page"); else el.removeAttribute("aria-current"); });
+  const activeGroupedNav = document.querySelector('.grouped-main-nav .nav-button[data-view="'+CSS.escape(view)+'"]');
+  if (activeGroupedNav && activeGroupedNav.closest("details")) activeGroupedNav.closest("details").open = true;
   $("viewTitle").textContent = viewTitles[view] || "Family Dashboard";
   renderView(view);
   window.scrollTo({ top: 0, behavior: prefersReducedMotion() ? "auto" : "smooth" });
+}
+
+function bindPremiumUpgrade() {
+  if ($("mobileQuickAddButton")) $("mobileQuickAddButton").addEventListener("click", function () {
+    if (!state.data) return;
+    openDialog("quickAddDialog");
+  });
+  all("[data-quick-add]").forEach(function (button) {
+    button.addEventListener("click", function () {
+      const action = button.dataset.quickAdd;
+      const requirements = { expense:"EXPENSES", reminder:"DATES", diary:"DIARY", photo:"PHOTOS", target:"TARGETS" };
+      if (requirements[action] && !hasModuleAccess(requirements[action])) return toast("Your administrator has not enabled this section for your account.", "error");
+      if (action === "sticky" && !canWriteStickyNotes()) return toast("Your administrator has not enabled sticky-note writing for your account.", "error");
+      if ($("quickAddDialog").open) $("quickAddDialog").close();
+      if (action === "expense") { prepareNewDialog("expenseDialog"); setExpenseFormMode("quick"); openDialog("expenseDialog"); setTimeout(function(){ $("expenseAmount").focus(); },80); }
+      if (action === "reminder") { prepareNewDialog("dateDialog"); openDialog("dateDialog"); }
+      if (action === "diary") { prepareNewDialog("diaryDialog"); openDialog("diaryDialog"); }
+      if (action === "photo") { prepareNewDialog("photoDialog"); openDialog("photoDialog"); }
+      if (action === "target") { prepareNewDialog("targetDialog"); openDialog("targetDialog"); }
+      if (action === "sticky") openStickyBoard("active");
+    });
+  });
+  all("[data-admin-jump]").forEach(function (button) {
+    button.addEventListener("click", function () {
+      const target = $(button.dataset.adminJump);
+      if (target) target.scrollIntoView({ behavior:prefersReducedMotion()?"auto":"smooth", block:"start" });
+    });
+  });
+  all("[data-permission-preset]").forEach(function (button) {
+    button.addEventListener("click", function () { applyPermissionPreset(button.dataset.permissionPreset); });
+  });
+  window.addEventListener("keydown", function (event) {
+    if (!state.data || document.querySelector("dialog[open]") || /INPUT|TEXTAREA|SELECT/.test(document.activeElement && document.activeElement.tagName || "")) return;
+    if ((event.ctrlKey || event.metaKey) && event.key.toLowerCase() === "k") { event.preventDefault(); openDialog("searchDialog"); setTimeout(function(){ $("globalSearch").focus(); },50); }
+    if (!event.ctrlKey && !event.metaKey && !event.altKey && event.key === "+") { event.preventDefault(); openDialog("quickAddDialog"); }
+  });
+}
+
+function applyPermissionPreset(preset) {
+  const presets = {
+    FULL:["EXPENSES","INCOME","TARGETS","DATES","CALENDAR","PHOTOS","EXPERIENCES","DIARY","STICKY_WRITE"],
+    FINANCE:["EXPENSES","INCOME","TARGETS"],
+    CALENDAR:["DATES","CALENDAR","STICKY_WRITE"],
+    VIEW:["DATES","CALENDAR","PHOTOS","EXPERIENCES","DIARY"],
+    NONE:[]
+  };
+  setMemberPermissions(presets[preset] || []);
 }
 
 function bindDialogs() {
@@ -808,11 +881,12 @@ function prepareNewDialog(id) {
   if (id === "contributionDialog") { $("contributionForm").reset(); $("contributionDate").value = todayIso(); }
   if (id === "dateDialog") { $("dateDialogTitle").textContent = "Add important date"; $("importantDateCalendarSystem").value="GREGORIAN"; $("importantDateReminderBasis").value="GREGORIAN_ODIA"; $("importantDateOdiaMonth").value="BAISAKHA"; $("importantDateOdiaPaksha").value="SHUKLA"; $("importantDateOdiaTithi").value="1"; $("importantDateOdiaEquivalent").value=todayIso(); state.pendingImportantDatePhoto=null; state.removeImportantDatePhoto=false; $("importantDatePhotoFile").value=""; setImportantDatePhotoPreview(null); $("removeImportantDatePhoto").classList.add("hidden"); $("importantDateAdminControls").classList.toggle("hidden",!isAdmin()); const saka=gregorianToSaka($("importantDateValue").value||todayIso()); if(saka){$("importantDateSakaYear").value=saka.year;$("importantDateSakaMonth").value=String(saka.month);$("importantDateSakaDay").value=saka.day;} syncImportantDateCalendar(); $("notifyEveryone").checked = true; $("recipientChecks").classList.add("hidden"); renderRecipientChecks([]); }
   if (id === "photoDialog") { $("photoForm").reset(); $("photoTakenDate").value = todayIso(); $("photoPreview").classList.add("hidden"); state.pendingPhoto = null; }
-  if (id === "memberDialog") { $("memberDialogTitle").textContent = "Add family member"; $("memberActive").checked = true; $("memberPassword").required = true; setMemberPermissions(["EXPENSES","INCOME","TARGETS","DATES","CALENDAR","PHOTOS","EXPERIENCES","DIARY"]); syncMemberAccessRole(); }
+  if (id === "memberDialog") { $("memberDialogTitle").textContent = "Add family member"; $("memberActive").checked = true; $("memberPasswordLogin").checked = true; $("memberOtpLogin").checked = false; $("memberPassword").required = true; setMemberPermissions(["EXPENSES","INCOME","TARGETS","DATES","CALENDAR","PHOTOS","EXPERIENCES","DIARY"]); syncMemberAccessRole(); syncMemberLoginMethods(); }
   if (id === "familyPersonDialog") prepareFamilyPersonDialog();
   if (id === "experienceDialog") $("experienceDialogTitle").textContent = "Add experience";
   if (id === "diaryDialog") $("diaryDialogTitle").textContent = "Write diary entry";
   if (id === "expenseCategoryDialog") { state.categoryDraft = JSON.parse(JSON.stringify(expenseCategoryConfig())); state.categoryEditIds.clear(); state.subcategoryEditIds.clear(); $("newExpenseCategoryName").value = ""; renderExpenseCategoryManager(); }
+  if (id === "quickExpenseLinkDialog") prepareQuickExpenseLinkDialog();
 }
 
 function setExpenseFormMode(mode) {
@@ -1178,6 +1252,17 @@ async function saveExpenseCategories() {
 
 function bindForms() {
   $("loginForm").addEventListener("submit", login);
+  $("requestOtpButton").addEventListener("click", requestLoginOtp);
+  $("verifyOtpButton").addEventListener("click", verifyLoginOtp);
+  $("resendOtpButton").addEventListener("click", requestLoginOtp);
+  $("cancelOtpButton").addEventListener("click", cancelLoginOtp);
+  $("forgotPasswordButton").addEventListener("click", openPasswordReset);
+  $("requestPasswordResetOtpButton").addEventListener("click", requestPasswordResetOtp);
+  $("completePasswordResetButton").addEventListener("click", completePasswordReset);
+  $("cancelPasswordResetButton").addEventListener("click", cancelPasswordReset);
+  $("loginOtp").addEventListener("input", function () { this.value = this.value.replace(/\D/g, "").slice(0, 6); });
+  $("loginOtp").addEventListener("keydown", function (event) { if (event.key === "Enter") { event.preventDefault(); verifyLoginOtp(); } });
+  $("passwordResetOtp").addEventListener("input", function () { this.value = this.value.replace(/\D/g, "").slice(0, 6); });
   $("expenseForm").addEventListener("submit", saveExpense);
   $("recurringExpenseForm").addEventListener("submit", saveRecurringExpense);
   $("majorPlanForm").addEventListener("submit", saveMajorPlan);
@@ -1192,12 +1277,17 @@ function bindForms() {
   $("experienceForm").addEventListener("submit", saveExperience);
   $("diaryForm").addEventListener("submit", saveDiary);
   $("memberForm").addEventListener("submit", saveMember);
+  $("memberPasswordLogin").addEventListener("change", syncMemberLoginMethods);
   $("memberPasswordForm").addEventListener("submit", saveAdminMemberPassword);
   $("memberPhotoForm").addEventListener("submit", saveMemberPhoto);
   $("familyPersonForm").addEventListener("submit", saveFamilyPerson);
   $("traditionGuideForm").addEventListener("submit", saveTraditionGuide);
   $("familyTreePrintForm").addEventListener("submit", printFamilyTree);
   $("settingsForm").addEventListener("submit", saveSettings);
+  $("quickExpenseLinkForm").addEventListener("submit", saveQuickExpenseLink);
+  $("quickExpensePayerMode").addEventListener("change", syncQuickExpenseLinkFields);
+  $("quickExpenseDefaultCategory").addEventListener("change", syncQuickExpenseLinkSubcategories);
+  $("quickExpenseUntilDisabled").addEventListener("change", syncQuickExpenseLinkValidity);
   $("expenseSettlementForm").addEventListener("submit", saveExpenseSettlement);
   $("stickyNoteForm").addEventListener("submit", saveStickyNote);
   $("stickyQuickForm").addEventListener("submit", saveQuickStickyNote);
@@ -1256,7 +1346,7 @@ function bindFilters() {
   $("familyTreeSearch").addEventListener("input", familySearchRender);
   ["familyTreeStatus","familyTreeBranch","familyTreeLayout"].forEach(function(id){$(id).addEventListener("input",renderFamilyTree);});
   $("globalSearch").addEventListener("input", globalSearchRender);
-  $("exportExpenses").addEventListener("click", function () { exportCsv("family-expenditure.csv", filteredExpenses().map(function(item){return Object.assign({},item,{memberName:memberName(expenseMemberId(item)),majorPlanName:majorPlanName(item.majorPlanId),majorPlanPhaseName:majorPlanPhaseName(item.majorPlanPhaseId)});}), ["amount", "date", "status", "memberName", "category", "subcategory", "majorPlanName", "majorPlanPhaseName", "sentTo", "fromAccount", "reason"], ["Amt (Rs.)", "Date", "Status", "Member", "Category", "Subcategory", "Major plan", "Phase", "Send to", "From Acct", "Reason"]); });
+  $("exportExpenses").addEventListener("click", function () { exportCsv("family-expenditure.csv", filteredExpenses().map(function(item){return Object.assign({},item,{memberName:memberName(expenseMemberId(item)),paidByName:item.externalPayerName||memberName(item.paidByMemberId),entrySourceName:item.entrySource==="QUICK_LINK"?"Quick link":"Dashboard",majorPlanName:majorPlanName(item.majorPlanId),majorPlanPhaseName:majorPlanPhaseName(item.majorPlanPhaseId)});}), ["amount", "date", "status", "memberName", "paidByName", "entrySourceName", "submittedByName", "category", "subcategory", "majorPlanName", "majorPlanPhaseName", "sentTo", "fromAccount", "reason"], ["Amt (Rs.)", "Date", "Status", "Expenditure for", "Paid by", "Entry source", "Entered by", "Category", "Subcategory", "Major plan", "Phase", "Send to", "From Acct", "Reason"]); });
   $("exportIncome").addEventListener("click", function () { exportCsv("family-income.csv", filteredIncome(), ["date", "source", "category", "receivedByName", "receivingMode", "amount"]); });
   $("printExpenses").addEventListener("click", function () { prepareExpensePrintDialog(); openDialog("expensePrintDialog"); });
   $("printIncome").addEventListener("click", function () { window.print(); });
@@ -1351,6 +1441,10 @@ function bindActions() {
     if (action === "edit-member") editMember(id);
     if (action === "set-password") openMemberPasswordDialog(id);
     if (action === "manage-member-photo") openMemberPhotoDialog(id);
+    if (action === "edit-quick-expense-link") editQuickExpenseLink(id);
+    if (action === "copy-quick-expense-link") copyQuickExpenseLink(id);
+    if (action === "toggle-quick-expense-link") toggleQuickExpenseLink(id, button.dataset.active === "true");
+    if (action === "regenerate-quick-expense-link") regenerateQuickExpenseLink(id);
     if (action === "edit-family-person") editFamilyPerson(id);
     if (action === "delete-family-person") confirmDelete("deleteFamilyPerson", id, "Delete this person from the family tree? Photos saved only for this record will be moved to Trash.");
     if (action === "filter-expense-member") { $("expenseMemberFilter").value=id; renderExpenses(); $("expenseTable").scrollIntoView({behavior:"smooth",block:"start"}); }
@@ -1480,18 +1574,90 @@ async function login(event) {
   if (!CONFIG.API_URL || CONFIG.API_URL === PLACEHOLDER_URL) return toast("Paste the Apps Script Web App URL in config.js first.", "error");
   showLoading("Signing you in…");
   try {
-    const username = $("loginUsername").value.trim();
-    const result = await api("login", { username: username, password: $("loginPassword").value });
-    if ($("rememberUsername").checked) localStorage.setItem(SAVED_USERNAME_KEY, username); else localStorage.removeItem(SAVED_USERNAME_KEY);
-    state.token = result.token;
-    state.data = normalizeBootstrapData(result.bootstrap);
-    sessionStorage.setItem(SESSION_TOKEN_KEY, state.token);
-    localStorage.removeItem(SESSION_TOKEN_KEY);
-    state.lastKeepAliveAt = Date.now();
-    $("loginForm").reset();
-    showApp();
+    const identifier = $("loginUsername").value.trim();
+    const result = await api("login", { identifier: identifier, password: $("loginPassword").value });
+    completeLogin(result, identifier);
   } catch (error) { toast(error.message, "error"); }
   finally { hideLoading(); }
+}
+async function requestLoginOtp() {
+  if (!CONFIG.API_URL || CONFIG.API_URL === PLACEHOLDER_URL) return toast("Paste the Apps Script Web App URL in config.js first.", "error");
+  const identifier = $("loginUsername").value.trim();
+  const channel = "EMAIL";
+  if (!identifier) { $("loginUsername").focus(); return toast("Enter your username, registered email or mobile number first.", "error"); }
+  showLoading("Sending your secure OTP…");
+  try {
+    const result = await api("requestLoginOtp", { identifier: identifier, channel: channel });
+    state.otpIdentifier = identifier;
+    state.otpChannel = channel;
+    $("otpLoginPanel").classList.remove("hidden");
+    $("loginOtp").value = "";
+    $("otpDeliveryHint").textContent = (result && result.message) || "If eligible, the OTP has been sent to your registered email address.";
+    $("loginOtp").focus();
+    toast("Check your registered email for the OTP.", "success");
+  } catch (error) { toast(error.message, "error"); }
+  finally { hideLoading(); }
+}
+async function verifyLoginOtp() {
+  const identifier = state.otpIdentifier || $("loginUsername").value.trim();
+  const code = $("loginOtp").value.replace(/\D/g, "");
+  if (!identifier || code.length !== 6) return toast("Enter the 6-digit OTP you received.", "error");
+  showLoading("Verifying your OTP…");
+  try {
+    const result = await api("verifyLoginOtp", { identifier: identifier, code: code, channel: state.otpChannel || $("loginOtpChannel").value });
+    completeLogin(result, identifier);
+  } catch (error) { toast(error.message, "error"); }
+  finally { hideLoading(); }
+}
+function cancelLoginOtp() {
+  state.otpIdentifier = "";
+  $("loginOtp").value = "";
+  $("otpLoginPanel").classList.add("hidden");
+  $("loginPassword").focus();
+}
+function openPasswordReset() {
+  cancelLoginOtp();
+  $("passwordResetPanel").classList.remove("hidden");
+  $("passwordResetFields").classList.add("hidden");
+  $("passwordResetOtp").value="";$("passwordResetNew").value="";$("passwordResetConfirm").value="";
+  $("loginUsername").focus();
+}
+function cancelPasswordReset() {
+  state.passwordResetIdentifier="";
+  $("passwordResetPanel").classList.add("hidden");
+  $("passwordResetFields").classList.add("hidden");
+  $("loginPassword").focus();
+}
+async function requestPasswordResetOtp() {
+  if (!CONFIG.API_URL || CONFIG.API_URL === PLACEHOLDER_URL) return toast("Paste the Apps Script Web App URL in config.js first.", "error");
+  const identifier=$("loginUsername").value.trim(),channel="EMAIL";
+  if(!identifier){$("loginUsername").focus();return toast("Enter your username, registered email or mobile number first.","error");}
+  showLoading("Sending password-reset OTP…");
+  try{const result=await api("requestPasswordResetOtp",{identifier:identifier,channel:channel});state.passwordResetIdentifier=identifier;$("passwordResetFields").classList.remove("hidden");toast((result&&result.message)||"If eligible, the reset OTP has been sent.","success");$("passwordResetOtp").focus();}
+  catch(error){toast(error.message,"error");}finally{hideLoading();}
+}
+async function completePasswordReset() {
+  const identifier=state.passwordResetIdentifier||$("loginUsername").value.trim(),channel="EMAIL",code=$("passwordResetOtp").value.replace(/\D/g,""),password=$("passwordResetNew").value,confirm=$("passwordResetConfirm").value;
+  if(code.length!==6)return toast("Enter the 6-digit password-reset OTP.","error");
+  if(password.length<8||password.length>64||!/[A-Za-z]/.test(password)||!/[0-9]/.test(password))return toast("Password must contain 8–64 characters with at least one letter and one number.","error");
+  if(password!==confirm)return toast("The two new passwords do not match.","error");
+  showLoading("Updating your password securely…");
+  try{const result=await api("resetPasswordWithOtp",{identifier:identifier,channel:channel,code:code,newPassword:password});cancelPasswordReset();$("loginPassword").value="";toast((result&&result.message)||"Password updated. Sign in with the new password.","success");}
+  catch(error){toast(error.message,"error");}finally{hideLoading();}
+}
+function completeLogin(result, identifier) {
+  if ($("rememberUsername").checked) localStorage.setItem(SAVED_USERNAME_KEY, identifier); else localStorage.removeItem(SAVED_USERNAME_KEY);
+  state.token = result.token;
+  state.data = normalizeBootstrapData(result.bootstrap);
+  sessionStorage.setItem(SESSION_TOKEN_KEY, state.token);
+  localStorage.removeItem(SESSION_TOKEN_KEY);
+  state.lastKeepAliveAt = Date.now();
+  state.otpIdentifier = "";
+  state.passwordResetIdentifier = "";
+  $("loginForm").reset();
+  $("otpLoginPanel").classList.add("hidden");
+  $("passwordResetPanel").classList.add("hidden");
+  showApp();
 }
 async function logout() {
   const token = state.token;
@@ -1873,8 +2039,10 @@ async function saveMember(event) {
   event.preventDefault();
   const id = $("memberId").value;
   const permissions = all("input[name='memberPermission']:checked").map(function (el) { return el.value; });
-  const payload = { id: id, name: $("memberName").value.trim(), username: $("memberUsername").value.trim(), email: $("memberEmail").value.trim(), role: $("memberRole").value, password: $("memberPassword").value, active: $("memberActive").checked, permissions: permissions };
-  if (!id && !payload.password) return toast("Enter a password for the new member.", "error");
+  const payload = { id: id, name: $("memberName").value.trim(), username: $("memberUsername").value.trim(), email: $("memberEmail").value.trim(), mobile: $("memberMobile").value.trim(), passwordLoginEnabled: $("memberPasswordLogin").checked, otpLoginEnabled: $("memberOtpLogin").checked, role: $("memberRole").value, password: $("memberPassword").value, active: $("memberActive").checked, permissions: permissions };
+  if (!id && payload.passwordLoginEnabled && !payload.password) return toast("Enter a password for the new member, or disable password sign-in and enable verified email OTP.", "error");
+  if (!payload.passwordLoginEnabled && !payload.otpLoginEnabled) return toast("Enable password sign-in, verified email OTP sign-in, or both.", "error");
+  if (payload.otpLoginEnabled && !payload.email) return toast("Add an email address before enabling email OTP sign-in.", "error");
   if (id && id === state.data.user.id && payload.password) {
     showLoading("Updating your administrator password…");
     try { await api("saveMember", payload); if ($("memberDialog").open) $("memberDialog").close(); window.alert("Your password was updated. Please sign in again with the new password."); clearLocalSession(); showLogin(); }
@@ -1920,10 +2088,113 @@ async function saveSettings(event) {
     memoryUploadPolicy: $("settingMemoryUploadPolicy").value,
     memoryPrintPages: Number($("settingMemoryPrintPages").value),
     sessionIdleMinutes: Number($("settingSessionIdleMinutes").value),
+    sessionClosePolicy: $("settingSessionClosePolicy").value,
     monthlyExpenseBudget: Number($("settingMonthlyExpenseBudget").value)||0,
     expenseSettlementEnabled: $("settingExpenseSettlementEnabled").checked
   }, "Family settings updated.");
   if (result) resetIdleTimer();
+}
+
+function quickExpenseLinkUrl(item) {
+  const url=new URL("quick-expense.html",window.location.href);
+  url.searchParams.set("t",item.token||"");
+  return url.href;
+}
+function localDateTimeValue(value) {
+  if(!value)return "";
+  const date=new Date(value),offset=date.getTimezoneOffset()*60000;
+  return new Date(date.getTime()-offset).toISOString().slice(0,16);
+}
+function quickExpenseDefaultTimes() {
+  const from=new Date(),until=new Date(from.getTime()+7*86400000);
+  return {from:localDateTimeValue(from.toISOString()),until:localDateTimeValue(until.toISOString())};
+}
+function prepareQuickExpenseLinkDialog(item) {
+  const times=quickExpenseDefaultTimes(),link=item||{};
+  $("quickExpenseLinkForm").reset();
+  $("quickExpenseLinkId").value=link.id||"";
+  $("quickExpenseLinkDialogTitle").textContent=link.id?"Edit expenditure link":"Create expenditure link";
+  $("quickExpenseLinkTitle").value=link.title||"Travel expenses";
+  $("quickExpenseLinkFrom").value=localDateTimeValue(link.validFrom)||times.from;
+  $("quickExpenseUntilDisabled").checked=!link.validUntil;
+  $("quickExpenseLinkUntil").value=link.validUntil?localDateTimeValue(link.validUntil):"";
+  $("quickExpensePayerMode").value=link.payerMode||"ANYONE";
+  fillMemberSelect($("quickExpenseFixedPayer"),link.fixedPayerMemberId||state.data.user.id,false);
+  fillMemberSelect($("quickExpenseDefaultMember"),link.defaultMemberId||"ALL",true);
+  $("quickExpenseMaxAmount").value=Number(link.maxAmount||100000);
+  fillExpenseCategorySelect($("quickExpenseDefaultCategory"),link.defaultCategory||(activeExpenseCategories().some(function(category){return category.name==="Travel";})?"Travel":""));
+  fillExpenseSubcategorySelect($("quickExpenseDefaultSubcategory"),$("quickExpenseDefaultCategory").value,link.defaultSubcategory||"");
+  $("quickExpenseDefaultAccount").value=link.defaultFromAccount||"Cash / UPI";
+  $("quickExpenseDefaultPlan").innerHTML=majorPlanOptions(link.defaultMajorPlanId||"",false);
+  $("quickExpenseDefaultPlan").value=link.defaultMajorPlanId||"";
+  syncQuickExpenseLinkFields();
+  syncQuickExpenseLinkValidity();
+}
+function syncQuickExpenseLinkFields() {
+  $("quickExpenseFixedPayerRow").classList.toggle("hidden",$("quickExpensePayerMode").value!=="FIXED");
+  $("quickExpenseFixedPayer").required=$("quickExpensePayerMode").value==="FIXED";
+}
+function syncQuickExpenseLinkSubcategories() {
+  fillExpenseSubcategorySelect($("quickExpenseDefaultSubcategory"),$("quickExpenseDefaultCategory").value,"");
+}
+function syncQuickExpenseLinkValidity(){const permanent=$("quickExpenseUntilDisabled").checked,until=$("quickExpenseLinkUntil");until.disabled=permanent;until.required=!permanent;if(permanent)until.value="";else if(!until.value)until.value=quickExpenseDefaultTimes().until;}
+async function saveQuickExpenseLink(event) {
+  event.preventDefault();
+  const from=$("quickExpenseLinkFrom").value,until=$("quickExpenseUntilDisabled").checked?"":$("quickExpenseLinkUntil").value;
+  const result=await mutate("saveQuickExpenseLink",{
+    id:$("quickExpenseLinkId").value,
+    title:$("quickExpenseLinkTitle").value.trim(),
+    validFrom:from?new Date(from).toISOString():"",
+    validUntil:until?new Date(until).toISOString():"",
+    payerMode:$("quickExpensePayerMode").value,
+    fixedPayerMemberId:$("quickExpenseFixedPayer").value,
+    defaultMemberId:$("quickExpenseDefaultMember").value,
+    defaultCategory:$("quickExpenseDefaultCategory").value,
+    defaultSubcategory:$("quickExpenseDefaultSubcategory").value,
+    defaultFromAccount:$("quickExpenseDefaultAccount").value.trim(),
+    defaultMajorPlanId:$("quickExpenseDefaultPlan").value,
+    maxAmount:Number($("quickExpenseMaxAmount").value)
+  },"Quick expenditure link saved.","quickExpenseLinkDialog","Creating private quick-entry link…");
+  if(result){const item=(state.data.quickExpenseLinks||[]).find(function(link){return link.id===result.id;});if(item)await copyText(quickExpenseLinkUrl(item),"Link copied. Share it only with the travellers who should add expenses.");}
+}
+function editQuickExpenseLink(id) {
+  const item=(state.data.quickExpenseLinks||[]).find(function(link){return link.id===id;});
+  if(!item)return;
+  prepareQuickExpenseLinkDialog(item);openDialog("quickExpenseLinkDialog");
+}
+async function copyText(text,message) {
+  try{await navigator.clipboard.writeText(text);toast(message||"Copied.","success");}
+  catch(error){window.prompt("Copy this private link:",text);}
+}
+function copyQuickExpenseLink(id) {
+  const item=(state.data.quickExpenseLinks||[]).find(function(link){return link.id===id;});
+  if(item)copyText(quickExpenseLinkUrl(item),"Quick expenditure link copied.");
+}
+async function toggleQuickExpenseLink(id,active) {
+  const verb=active?"turn off":"reactivate";
+  if(!window.confirm("Do you want to "+verb+" this quick expenditure link?"))return;
+  await mutate("setQuickExpenseLinkActive",{id:id,active:!active},active?"Quick link turned off.":"Quick link reactivated.");
+}
+async function regenerateQuickExpenseLink(id) {
+  if(!window.confirm("Replace this private link? The old link will immediately stop working."))return;
+  const result=await mutate("regenerateQuickExpenseLink",{id:id},"A new private link was generated.",null,"Replacing the private quick-entry link…");
+  if(result){const item=(state.data.quickExpenseLinks||[]).find(function(link){return link.id===id;});if(item)copyText(quickExpenseLinkUrl(item),"New link copied. The previous link no longer works.");}
+}
+function quickExpenseLinkStatus(item) {
+  const now=Date.now(),from=new Date(item.validFrom||0).getTime(),until=item.validUntil?new Date(item.validUntil).getTime():Infinity;
+  if(!item.active)return {label:"Off",className:"inactive"};
+  if(from>now)return {label:"Scheduled",className:"scheduled"};
+  if(until<now)return {label:"Expired",className:"expired"};
+  return {label:"Active",className:"active"};
+}
+function renderQuickExpenseLinks() {
+  const list=$("quickExpenseLinkList"),items=state.data.quickExpenseLinks||[];
+  if(!items.length){list.innerHTML='<p class="muted">No quick link created yet. Create one before a trip or busy period.</p>';return;}
+  list.innerHTML=items.map(function(item){
+    const status=quickExpenseLinkStatus(item),payer=item.payerMode==="FIXED"?memberName(item.fixedPayerMemberId):item.payerMode==="MEMBERS_ONLY"?"Family members":"Members or another person";
+    const period=new Date(item.validFrom).toLocaleString("en-IN",{dateStyle:"medium",timeStyle:"short"})+" → "+(item.validUntil?new Date(item.validUntil).toLocaleString("en-IN",{dateStyle:"medium",timeStyle:"short"}):"until revoked");
+    return '<article class="quick-link-row"><div class="quick-link-row-main"><span class="quick-link-status '+h(status.className)+'">'+h(status.label)+'</span><div><strong>'+h(item.title)+'</strong><small>'+h(period)+'</small><small>'+h(payer)+' · '+h(item.defaultCategory)+' · limit '+h(money(item.maxAmount))+'</small><small>'+h(plural(Number(item.submissionCount||0),"saved entry","saved entries"))+(item.lastUsedAt?' · Last used '+h(new Date(item.lastUsedAt).toLocaleString("en-IN")):'')+'</small></div></div><div class="quick-link-row-actions"><button class="tiny-button primary-copy" data-action="copy-quick-expense-link" data-id="'+h(item.id)+'">Copy link</button><button class="tiny-button" data-action="edit-quick-expense-link" data-id="'+h(item.id)+'">Edit</button><button class="tiny-button" data-action="toggle-quick-expense-link" data-id="'+h(item.id)+'" data-active="'+(item.active?'true':'false')+'">'+(item.active?'Turn off':'Reactivate')+'</button><button class="tiny-button danger-text" data-action="regenerate-quick-expense-link" data-id="'+h(item.id)+'">Replace link</button></div></article>';
+  }).join("");
 }
 async function refreshOdiaCalendarNow() {
   const result=await mutate("refreshOdiaFestivals",{},"Odia calendar refreshed.",null,"Downloading and calculating Odia calendar dates…");
@@ -1955,7 +2226,17 @@ async function mutate(action, payload, successMessage, closeId, loadingMessage) 
   } catch (error) { if (!handleSessionError(error)) toast(friendlyApiError(error), "error"); return null; }
   finally { hideLoading(); }
 }
-async function refreshData() { state.data = normalizeBootstrapData(await api("bootstrap", {})); renderVersionLabels(); renderAll(); }
+async function refreshData() {
+  if (refreshPromise) return refreshPromise;
+  refreshPromise=(async function(){
+    state.data=normalizeBootstrapData(await api("bootstrap",{}));
+    renderVersionLabels();
+    renderAll();
+    return state.data;
+  })();
+  try { return await refreshPromise; }
+  finally { refreshPromise=null; }
+}
 async function confirmDelete(action, id, message) { if (window.confirm(message)) await mutate(action, { id: id }, "Deleted."); }
 
 function editExpense(id) {
@@ -2065,9 +2346,10 @@ function editDiary(id) {
 }
 function editMember(id) {
   const item = (state.data.adminMembers || []).find(function (x) { return x.id === id; }); if (!item) return;
-  prepareNewDialog("memberDialog"); $("memberId").value = item.id; $("memberName").value = item.name; $("memberUsername").value = item.username; $("memberEmail").value = item.email || ""; $("memberRole").value = item.role; setMemberPermissions(item.permissions || []); syncMemberAccessRole(); $("memberActive").checked = item.active; $("memberPassword").value = ""; $("memberPassword").required = false; $("memberDialogTitle").textContent = "Edit family member"; openDialog("memberDialog");
+  prepareNewDialog("memberDialog"); $("memberId").value = item.id; $("memberName").value = item.name; $("memberUsername").value = item.username; $("memberEmail").value = item.email || ""; $("memberMobile").value = item.mobile || ""; $("memberPasswordLogin").checked = item.passwordLoginEnabled !== false; $("memberOtpLogin").checked = item.otpLoginEnabled === true; $("memberRole").value = item.role; setMemberPermissions(item.permissions || []); syncMemberAccessRole(); $("memberActive").checked = item.active; $("memberPassword").value = ""; $("memberPassword").required = false; $("memberDialogTitle").textContent = "Edit family member"; openDialog("memberDialog");
 }
 function setMemberPermissions(permissions) { all("input[name='memberPermission']").forEach(function (el) { el.checked = permissions.indexOf(el.value) >= 0; }); }
+function syncMemberLoginMethods() { $("memberPassword").required = !$("memberId").value && $("memberPasswordLogin").checked; }
 function syncMemberAccessRole() { const admin = $("memberRole").value === "ADMIN"; if (admin) setMemberPermissions(["EXPENSES","INCOME","TARGETS","DATES","CALENDAR","PHOTOS","EXPERIENCES","DIARY","STICKY_WRITE"]); all("input[name='memberPermission']").forEach(function (el) { el.disabled = admin; }); }
 function openMemberPasswordDialog(id) {
   const member = (state.data.adminMembers || []).find(function (item) { return item.id === id; });
@@ -2135,6 +2417,7 @@ function renderAll() {
   $("loginFamilyName").textContent = settings.familyName || "Our Family Hub";
   $("userName").textContent = state.data.user.name;
   $("userRole").textContent = state.data.user.role === "ADMIN" ? "Administrator" : "Family member";
+  const verificationBadge=$("userVerificationBadge"),emailVerified=!!state.data.user.emailVerified; verificationBadge.textContent=emailVerified?"✓ Email verified":"Email not verified"; verificationBadge.classList.toggle("verified",emailVerified); verificationBadge.classList.remove("hidden");
   $("userAvatar").innerHTML = state.data.user.photoThumbData?'<img src="'+h(state.data.user.photoThumbData)+'" alt="'+h(state.data.user.name)+'">':h(state.data.user.name.charAt(0).toUpperCase());
   $("adminNav").classList.toggle("hidden", !isAdmin());
   all(".family-admin-only").forEach(function(el){el.classList.toggle("hidden",!isAdmin());});
@@ -2242,7 +2525,7 @@ function renderActivity() {
   $("activityList").classList.toggle("empty-block", !items.length); $("activityList").innerHTML = items.length ? items.map(function(x){return '<div class="activity-item"><span class="activity-icon">'+h(x.icon)+'</span><p><strong>'+h(x.title)+'</strong><br><small>'+h(x.meta)+'</small></p></div>';}).join("") : "Your family's latest additions will appear here.";
 }
 
-function normalizeExpense(item) { const entryType=String(item.entryType||"REGULAR").toUpperCase(); return Object.assign({}, item, { memberId:expenseMemberId(item), paidByMemberId:item.paidByMemberId||item.createdBy||item.paidBy||expenseMemberId(item), sharedWithIds:item.sharedWithIds||"", splitMethod:String(item.splitMethod||"PERSONAL").toUpperCase(), shareAmounts:item.shareAmounts||"", sentTo: item.sentTo || item.description || "", fromAccount: item.fromAccount || item.paymentMode || "", reason: item.reason || item.description || "", entryType: entryType, category: item.category || (entryType==="OLD"?"Old expenditure":entryType==="RECURRING"?"Regular payment":"Other"), subcategory: item.subcategory || "General", status: String(item.status || (entryType==="PREPLANNED"?"PLANNED":"PAID")).toUpperCase() }); }
+function normalizeExpense(item) { const entryType=String(item.entryType||"REGULAR").toUpperCase(); return Object.assign({}, item, { memberId:expenseMemberId(item), paidByMemberId:item.paidByMemberId||item.createdBy||item.paidBy||expenseMemberId(item), sharedWithIds:item.sharedWithIds||"", splitMethod:String(item.splitMethod||"PERSONAL").toUpperCase(), shareAmounts:item.shareAmounts||"", sentTo: item.sentTo || item.description || "", fromAccount: item.fromAccount || item.paymentMode || "", reason: item.reason || item.description || "", entryType: entryType, entrySource:String(item.entrySource||"DASHBOARD").toUpperCase(), submittedByName:String(item.submittedByName||""), externalPayerName:String(item.externalPayerName||""), category: item.category || (entryType==="OLD"?"Old expenditure":entryType==="RECURRING"?"Regular payment":"Other"), subcategory: item.subcategory || "General", status: String(item.status || (entryType==="PREPLANNED"?"PLANNED":"PAID")).toUpperCase() }); }
 function majorPlanTotals(plan) {
   const entries=(state.data.expenses||[]).map(normalizeExpense).filter(function(item){return item.majorPlanId===plan.id;});
   const paid=entries.filter(function(item){return item.status==="PAID";}).reduce(function(sum,item){return sum+Number(item.amount||0);},0);
@@ -2306,8 +2589,9 @@ function renderInlineExpenseRow(item) {
 function renderExpenseDisplayRow(item) {
   const plan=majorPlanName(item.majorPlanId),phase=majorPlanPhaseName(item.majorPlanPhaseId);
   const shared=item.splitMethod&&item.splitMethod!=="PERSONAL"?'<small class="expense-split-line">'+h(item.splitMethod==="EQUAL"?'Equal split':'Custom split')+' · paid by '+h(memberName(item.paidByMemberId))+'</small>':'';
+  const quick=item.entrySource==="QUICK_LINK"?'<small class="expense-quick-source">⚡ Quick link · paid by '+h(item.externalPayerName||memberName(item.paidByMemberId))+(item.submittedByName?' · entered by '+h(item.submittedByName):'')+'</small>':'';
   const canEdit=mayDelete(item),actions=canEdit?((item.status==="PLANNED"?'<button class="tiny-button paid-button" data-action="mark-planned-paid" data-id="'+h(item.id)+'">✓ Mark paid</button>':'')+'<button class="row-edit-primary" data-action="inline-edit-expense" data-id="'+h(item.id)+'">✎ Edit row</button><button class="tiny-button" data-action="edit-expense" data-id="'+h(item.id)+'" title="Open every field">Full form</button><button class="danger-button" data-action="delete-expense" data-id="'+h(item.id)+'">Delete</button>'):'<span class="muted">View only</span>';
-  return '<tr class="expense-'+h(item.status.toLowerCase())+'"><td><div class="expense-description-cell"><span class="expense-row-icon">₹</span><span><strong>'+h(item.reason||item.sentTo||"Expenditure")+'</strong><small>Paid to '+h(item.sentTo||"—")+' · From '+h(item.fromAccount||"—")+'</small>'+shared+'</span></div></td><td><strong>'+h(formatDate(item.date))+'</strong><span class="expense-status '+h(item.status.toLowerCase())+'">'+(item.status==="PLANNED"?'PREPLANNED':'PAID')+'</span></td><td><span class="expense-category-chip">'+h(item.category)+'</span><small class="expense-subcategory-line">'+h(item.subcategory)+'</small></td><td>'+memberIdentityMarkup(expenseMemberId(item),false)+'</td><td class="number expense-amount-cell"><strong>'+h(money(item.amount))+'</strong></td><td>'+(plan?'<span class="major-plan-link-chip">'+h(plan)+(phase?'<small>'+h(phase)+'</small>':'')+'</span>':'<span class="muted">—</span>')+'</td><td class="row-edit-cell"><div class="statement-actions">'+actions+'</div></td></tr>';
+  return '<tr class="expense-'+h(item.status.toLowerCase())+'"><td><div class="expense-description-cell"><span class="expense-row-icon">₹</span><span><strong>'+h(item.reason||item.sentTo||"Expenditure")+'</strong><small>Paid to '+h(item.sentTo||"—")+' · From '+h(item.fromAccount||"—")+'</small>'+quick+shared+'</span></div></td><td><strong>'+h(formatDate(item.date))+'</strong><span class="expense-status '+h(item.status.toLowerCase())+'">'+(item.status==="PLANNED"?'PREPLANNED':'PAID')+'</span></td><td><span class="expense-category-chip">'+h(item.category)+'</span><small class="expense-subcategory-line">'+h(item.subcategory)+'</small></td><td>'+memberIdentityMarkup(expenseMemberId(item),false)+'</td><td class="number expense-amount-cell"><strong>'+h(money(item.amount))+'</strong></td><td>'+(plan?'<span class="major-plan-link-chip">'+h(plan)+(phase?'<small>'+h(phase)+'</small>':'')+'</span>':'<span class="muted">—</span>')+'</td><td class="row-edit-cell"><div class="statement-actions">'+actions+'</div></td></tr>';
 }
 async function saveInlineExpenseRow(button) {
   const row = button.closest("tr"), id = button.dataset.id;
@@ -2860,6 +3144,7 @@ function printFamilyTree(event) {
 }
 
 function renderAdmin() {
+  renderAdminHealth();
   $("settingFamilyName").value=state.data.settings.familyName||""; $("settingCurrency").value=state.data.settings.currency||"INR"; $("settingTimezone").value=state.data.settings.timezone||"Asia/Kolkata";
   $("settingCalendarDisplayMode").value=["ENGLISH","ODIA","ENGLISH_ODIA"].includes(String(state.data.settings.calendarDisplayMode||"ENGLISH_ODIA"))?String(state.data.settings.calendarDisplayMode||"ENGLISH_ODIA"):"ENGLISH_ODIA";
   $("settingOdiaFestivalAutoEnabled").checked=String(state.data.settings.odiaFestivalAutoEnabled===undefined?"true":state.data.settings.odiaFestivalAutoEnabled).toLowerCase()!=="false";
@@ -2871,14 +3156,39 @@ function renderAdmin() {
   $("settingTraditionPhotoLimit").value=Math.max(1,Math.min(20,Number(state.data.settings.traditionPhotoLimit||8)));
   $("settingMemoryUploadPolicy").value=state.data.settings.memoryUploadPolicy==="MEMBERS_WITH_ACCESS"?"MEMBERS_WITH_ACCESS":"ADMIN_ONLY";
   $("settingMemoryPrintPages").value=String(memoryPrintPages());
-  const idleTimeoutSupported=adjustableIdleTimeoutSupported(),idleSelect=$("settingSessionIdleMinutes"),idleHelp=$("sessionIdleTimeoutHelp"); idleSelect.value=String(idleTimeoutMinutes()); idleSelect.disabled=!idleTimeoutSupported; idleHelp.textContent=idleTimeoutSupported?("Current inactivity sign-out: "+idleTimeoutLabel(idleTimeoutMinutes())+". Closing or leaving the page still signs out immediately."):"Deploy BE v1.0.37 to enable this control. Until then, the existing 5-minute timeout remains active."; idleHelp.classList.toggle("version-warning",!idleTimeoutSupported);
+  const idleTimeoutSupported=adjustableIdleTimeoutSupported(),idleSelect=$("settingSessionIdleMinutes"),closePolicySelect=$("settingSessionClosePolicy"),idleHelp=$("sessionIdleTimeoutHelp"); idleSelect.value=String(idleTimeoutMinutes()); idleSelect.disabled=!idleTimeoutSupported; closePolicySelect.value=sessionClosePolicy(); closePolicySelect.disabled=!idleTimeoutSupported; idleHelp.textContent=idleTimeoutSupported?(sessionClosePolicy()==="STRICT"?("Current inactivity sign-out: "+idleTimeoutLabel(idleTimeoutMinutes())+". Strict mode also signs out when the page closes or leaves."):("Current inactivity sign-out: "+idleTimeoutLabel(idleTimeoutMinutes())+". Refresh and back navigation stay smooth; closing the browser removes the device token.")):"Deploy the matching backend to enable session controls."; idleHelp.classList.toggle("version-warning",!idleTimeoutSupported);
   $("settingMonthlyExpenseBudget").value=Number(state.data.settings.monthlyExpenseBudget||0)||"";
   $("settingExpenseSettlementEnabled").checked=expenseSharingEnabled();
   const configuredCategories=expenseCategoryConfig(), activeCategories=configuredCategories.filter(function(category){return category.active!==false;}); $("adminExpenseCategorySummary").textContent=plural(configuredCategories.length,"category","categories")+" · "+activeCategories.length+" active";
+  renderQuickExpenseLinks();
   const backup=state.data.backupStatus||{}; $("automaticBackupStatus").textContent=backup.automatic?"● Monthly backup enabled":"● Monthly backup needs setup"; $("automaticBackupStatus").classList.toggle("success",!!backup.automatic); $("lastBackupText").textContent=backup.lastBackupAt?("Last backup: "+new Date(backup.lastBackupAt).toLocaleString("en-IN")+(backup.lastBackupName?" · "+backup.lastBackupName:"")):"No backup created yet."; $("backupFolderLink").classList.toggle("hidden",!backup.folderUrl); if(backup.folderUrl)$("backupFolderLink").href=backup.folderUrl;
   const storage=state.data.driveStorage||{},storageWarnings=Array.isArray(storage.warnings)?storage.warnings:[]; $("driveStorageStatus").textContent=storage.configured?("● Main folder ready · "+Number(storage.photoFolderCount||6)+" photo folders"):"● Run setup or organize now"; $("driveStorageStatus").classList.toggle("success",!!storage.configured&&!storageWarnings.length); $("driveStorageWarning").classList.toggle("hidden",!storageWarnings.length); $("driveStorageWarning").textContent=storageWarnings.length?("Manual check: "+storageWarnings.join(" ")):""; const mainFolderLink=$("driveMainFolderLink"),photoRootLink=$("drivePhotoRootLink"); mainFolderLink.classList.toggle("hidden",!storage.mainFolderUrl); photoRootLink.classList.toggle("hidden",!storage.photoRootFolderUrl); if(storage.mainFolderUrl)mainFolderLink.href=storage.mainFolderUrl;if(storage.photoRootFolderUrl)photoRootLink.href=storage.photoRootFolderUrl;
   const photoFolder=$("memberPhotoFolderLink"),folderUrl=state.data.memberPhotoFolderUrl||""; photoFolder.classList.toggle("hidden",!folderUrl); if(folderUrl)photoFolder.href=folderUrl;
-  const labels={EXPENSES:"Exp",INCOME:"Income",TARGETS:"Targets",DATES:"Reminders",CALENDAR:"Calendar",PHOTOS:"Photos",EXPERIENCES:"Experiences",DIARY:"Diary",STICKY_WRITE:"Write sticky notes"}; const items=state.data.adminMembers||[]; $("memberCount").textContent=plural(items.length,"person","people"); $("memberList").innerHTML=items.map(function(x){const access=x.role==="ADMIN"?"All sections · Write sticky notes":(x.permissions||[]).map(function(key){return labels[key]||key;}).join(", ")||"No sections";return '<div class="member-row">'+memberAvatarMarkup(x.id,"admin")+'<div><strong>'+h(x.name)+'</strong><small>@'+h(x.username)+'</small></div><div><strong>'+h(x.email||"No email")+'</strong><small>Access: '+h(access)+'</small></div><span class="role-chip">'+(x.role==="ADMIN"?"ADMIN":"MEMBER")+'</span><span class="active-chip '+(!x.active?'inactive':'')+'">'+(x.active?'● Active':'● Inactive')+'</span><div class="member-actions"><button class="tiny-button photo-button" data-action="manage-member-photo" data-id="'+h(x.id)+'">'+(x.photoThumbData?'Update photo':'Add photo')+'</button><button class="tiny-button" data-action="edit-member" data-id="'+h(x.id)+'">Edit</button><button class="tiny-button" data-action="set-password" data-id="'+h(x.id)+'">Set/change password</button></div></div>';}).join("");
+  const labels={EXPENSES:"Exp",INCOME:"Income",TARGETS:"Targets",DATES:"Reminders",CALENDAR:"Calendar",PHOTOS:"Photos",EXPERIENCES:"Experiences",DIARY:"Diary",STICKY_WRITE:"Write sticky notes"}; const items=state.data.adminMembers||[]; $("memberCount").textContent=plural(items.length,"person","people"); $("memberList").innerHTML=items.map(function(x){const access=x.role==="ADMIN"?"All sections · Write sticky notes":(x.permissions||[]).map(function(key){return labels[key]||key;}).join(", ")||"No sections",methods=[x.passwordLoginEnabled!==false?"Password":"",x.otpLoginEnabled?"Email OTP":""].filter(Boolean).join(" + ");const emailStatus=x.email?(x.emailVerifiedAt?'<span class="identity-badge verified">✓ Email verified</span>':'<span class="identity-badge pending">Email not verified</span>'):'<span class="identity-badge muted">No email</span>',mobileStatus=x.mobile?'<span class="identity-badge muted">Mobile saved · contact only</span>':'<span class="identity-badge muted">No mobile</span>';return '<div class="member-row">'+memberAvatarMarkup(x.id,"admin")+'<div><strong>'+h(x.name)+'</strong><small>@'+h(x.username)+'</small><small>Login: '+h(methods||"Disabled")+'</small></div><div class="member-contact"><strong>'+h(x.email||"No email")+'</strong><small>'+h(x.mobile||"No mobile")+'</small><div class="identity-badges">'+emailStatus+mobileStatus+'</div><small>Access: '+h(access)+'</small></div><span class="role-chip">'+(x.role==="ADMIN"?"ADMIN":"MEMBER")+'</span><span class="active-chip '+(!x.active?'inactive':'')+'">'+(x.active?'● Active':'● Inactive')+'</span><div class="member-actions"><button class="tiny-button photo-button" data-action="manage-member-photo" data-id="'+h(x.id)+'">'+(x.photoThumbData?'Update photo':'Add photo')+'</button><button class="tiny-button" data-action="edit-member" data-id="'+h(x.id)+'">Edit</button><button class="tiny-button" data-action="set-password" data-id="'+h(x.id)+'">Set/change password</button></div></div>';}).join("");
+}
+
+function renderAdminHealth() {
+  if (!isAdmin() || !state.data) return;
+  const backend=String(state.data.backendVersion||state.backendVersion||""),versionsMatch=backend==="1.0.50";
+  const members=state.data.adminMembers||[],activeMembers=members.filter(function(item){return item.active!==false;}),verifiedEmails=activeMembers.filter(function(item){return !!item.emailVerifiedAt;}).length;
+  const links=state.data.quickExpenseLinks||[],now=Date.now(),activeLinks=links.filter(function(item){const start=item.validFrom?new Date(item.validFrom).getTime():0,end=item.validUntil?new Date(item.validUntil).getTime():Infinity;return item.active!==false&&start<=now&&end>=now;}).length;
+  const backup=state.data.backupStatus||{},storage=state.data.driveStorage||{},settings=state.data.settings||{},calendarReady=!!(settings.odiaFestivalLastRefreshAt||(state.data.odiaFestivals||[]).length);
+  $("healthVersions").textContent="FE "+FRONTEND_VERSION+" · BE "+(backend||"—");
+  $("healthVersionsNote").textContent=versionsMatch?"Versions match":"Deploy both files together";
+  $("healthEmail").textContent=verifiedEmails+" of "+activeMembers.length+" verified";
+  $("healthEmailNote").textContent="Email-only OTP & recovery";
+  $("healthMembers").textContent=activeMembers.length+" active";
+  $("healthMembersNote").textContent=members.length+" total account"+(members.length===1?"":"s");
+  $("healthBackup").textContent=backup.automatic?"Automatic":"Needs setup";
+  $("healthBackupNote").textContent=backup.lastBackupAt?"Last copy "+new Date(backup.lastBackupAt).toLocaleDateString("en-IN"):"No completed copy yet";
+  $("healthCalendar").textContent=calendarReady?"Ready":"Needs refresh";
+  $("healthCalendarNote").textContent=(state.data.odiaFestivals||[]).length+" cached festival"+((state.data.odiaFestivals||[]).length===1?"":"s");
+  $("healthLinks").textContent=activeLinks+" active";
+  $("healthLinksNote").textContent=links.length+" configured shared link"+(links.length===1?"":"s");
+  const healthy=versionsMatch&&backup.automatic&&storage.configured&&calendarReady;
+  $("adminHealthOverall").textContent=healthy?"● All core systems ready":"● Review suggested";
+  $("adminHealthOverall").classList.toggle("healthy",healthy);
+  $("adminHealthOverall").classList.toggle("attention",!healthy);
 }
 
 function renderStickyNotes() {
@@ -3086,12 +3396,18 @@ function removeImportantDatePhotoPreview() {
 function resizeImage(file,maxDimension,quality){return new Promise(function(resolve,reject){const reader=new FileReader();reader.onerror=reject;reader.onload=function(){const img=new Image();img.onerror=reject;img.onload=function(){let w=img.width,hgt=img.height;if(Math.max(w,hgt)>maxDimension){const scale=maxDimension/Math.max(w,hgt);w=Math.round(w*scale);hgt=Math.round(hgt*scale);}const canvas=document.createElement("canvas");canvas.width=w;canvas.height=hgt;const ctx=canvas.getContext("2d");ctx.fillStyle="#fff";ctx.fillRect(0,0,w,hgt);ctx.drawImage(img,0,0,w,hgt);resolve(canvas.toDataURL("image/jpeg",quality));};img.src=reader.result;};reader.readAsDataURL(file);});}
 function exportCsv(filename,items,fields,headers){if(!items.length)return toast("There is no filtered data to export.","error");const lines=[(headers||fields).join(",")].concat(items.map(function(item){return fields.map(function(field){return '"'+String(item[field]==null?"":item[field]).replace(/"/g,'""')+'"';}).join(",");}));const blob=new Blob(["\ufeff"+lines.join("\n")],{type:"text/csv;charset=utf-8"});const url=URL.createObjectURL(blob),a=document.createElement("a");a.href=url;a.download=filename;a.click();setTimeout(function(){URL.revokeObjectURL(url);},1000);}
 
+function secureRequestId(prefix) {
+  const bytes=new Uint32Array(4);
+  if(window.crypto&&window.crypto.getRandomValues)window.crypto.getRandomValues(bytes);
+  else for(let index=0;index<bytes.length;index+=1)bytes[index]=Math.floor(Math.random()*0xffffffff);
+  return String(prefix||"req")+"_"+Date.now()+"_"+Array.from(bytes).map(function(value){return value.toString(36);}).join("");
+}
 function api(action,payload) {
   return new Promise(function (resolve,reject) {
-    const requestId="fd_"+Date.now()+"_"+Math.random().toString(36).slice(2),frameName="family_api_"+requestId;
+    const requestId=secureRequestId("fd"),frameName="family_api_"+requestId;
     const iframe=document.createElement("iframe"); iframe.name=frameName; iframe.hidden=true; iframe.setAttribute("aria-hidden","true"); document.body.appendChild(iframe);
     const form=document.createElement("form"); form.method="POST"; form.action=CONFIG.API_URL; form.target=frameName; form.style.display="none";
-    const body=Object.assign({},payload||{}); if(action!=="login"&&action!=="version")body.token=state.token;
+    const body=Object.assign({},payload||{}); if(["login","requestLoginOtp","verifyLoginOtp","requestPasswordResetOtp","resetPasswordWithOtp","version","getQuickExpenseLink","submitQuickExpense"].indexOf(action)<0)body.token=state.token;
     [["action",action],["requestId",requestId],["payload",JSON.stringify(body)]].forEach(function(pair){const input=document.createElement("textarea");input.name=pair[0];input.value=pair[1];form.appendChild(input);}); document.body.appendChild(form);
     const timeout=setTimeout(function(){cleanupRequest(requestId);reject(new Error("The server took too long to respond. Please try again."));},Number(CONFIG.REQUEST_TIMEOUT_MS)||60000);
     pendingRequests.set(requestId,{resolve:resolve,reject:reject,iframe:iframe,form:form,timeout:timeout}); form.submit();

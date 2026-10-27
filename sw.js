@@ -1,11 +1,14 @@
 "use strict";
 
-const CACHE_NAME = "myfamily-shell-v1065-drive-home";
+const CACHE_NAME = "myfamily-shell-v1069-premium-email-only";
 const SHELL_ASSETS = [
   "./",
-  "./styles.css?v=1.0.65",
-  "./config.js?v=1.0.65",
-  "./app.js?v=1.0.65",
+  "./styles.css?v=1.0.69",
+  "./config.js?v=1.0.69",
+  "./app.js?v=1.0.69",
+  "./quick-expense.html",
+  "./quick-expense.css?v=1.0.69",
+  "./quick-expense.js?v=1.0.69",
   "./family-unity-v1058-32.png",
   "./family-unity-v1058-180.png",
   "./family-unity-v1058-192.png",

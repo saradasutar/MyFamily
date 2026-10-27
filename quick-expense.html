@@ -1,0 +1,60 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+  <meta name="theme-color" content="#4935a2">
+  <meta name="description" content="Fast private travel expenditure entry for MyFamily.">
+  <title>Quick expenditure · MyFamily</title>
+  <link rel="icon" href="family-unity-v1058-32.png?v=1.0.69" type="image/png" sizes="32x32">
+  <link rel="apple-touch-icon" href="family-unity-v1058-180.png?v=1.0.69" sizes="180x180">
+  <link rel="preconnect" href="https://script.google.com">
+  <link rel="stylesheet" href="quick-expense.css?v=1.0.69">
+</head>
+<body>
+  <main class="quick-shell">
+    <header class="quick-brand">
+      <img src="family-unity-v1058-192.png?v=1.0.69" width="48" height="48" alt="MyFamily">
+      <div><small id="familyName">MYFAMILY</small><strong>Quick expenditure</strong></div>
+      <span class="secure-chip">Private link</span>
+    </header>
+
+    <section id="loadingCard" class="state-card" aria-live="polite"><span class="loader"></span><h1>Opening quick entry…</h1><p>Checking this link with the family dashboard.</p></section>
+    <section id="errorCard" class="state-card error-card hidden" role="alert"><span class="state-icon">!</span><h1>This link cannot be used</h1><p id="errorText">Ask the administrator for a current link.</p><a href="./">Open MyFamily</a></section>
+
+    <section id="entryCard" class="entry-card hidden">
+      <div class="entry-heading"><div><p class="eyebrow">FAST &amp; EASY</p><h1 id="linkTitle">Travel expense</h1><p id="validityText">Valid private entry link</p></div><span class="live-dot">● Active</span></div>
+      <form id="quickExpenseForm" autocomplete="on">
+        <label class="amount-field"><span>Amount paid</span><div><b id="currencySymbol">₹</b><input id="amount" type="number" inputmode="decimal" min="0.01" step="0.01" required placeholder="0"></div><small id="amountLimit"></small></label>
+
+        <label>Paid by<select id="paidBy" required></select></label>
+        <label id="externalPayerRow" class="hidden">Name of person who paid<input id="externalPayerName" maxlength="80" autocomplete="name" placeholder="Enter payer's name"></label>
+
+        <div class="two-fields"><label>Date paid<input id="expenseDate" type="date" required></label><label>Category<select id="category" required></select></label></div>
+        <label>Paid to<input id="sentTo" maxlength="100" required autocomplete="organization" placeholder="Shop, hotel, driver or person"></label>
+        <label>What was it for?<textarea id="reason" rows="2" maxlength="500" required placeholder="e.g. Dinner for four people"></textarea></label>
+
+        <details class="more-details">
+          <summary><span>＋ More details</span><small>Optional account, project and entered-by name</small></summary>
+          <div class="details-grid">
+            <label>Subcategory<select id="subcategory"></select></label>
+            <label>Payment method / account<input id="fromAccount" maxlength="100" placeholder="Cash / UPI"></label>
+            <label>Expenditure for<select id="memberId"></select></label>
+            <label>Major plan<select id="majorPlanId"></select></label>
+            <label class="wide">Entered by <small>(for audit)</small><input id="submittedByName" maxlength="80" autocomplete="name" placeholder="Your name"></label>
+          </div>
+        </details>
+        <label class="bot-field" aria-hidden="true">Website<input id="website" tabindex="-1" autocomplete="off"></label>
+        <button id="saveButton" class="save-button" type="submit"><span>Save expenditure</span><b>→</b></button>
+        <p class="privacy-note">Only this new entry is sent. This page cannot view family expenditure or other dashboard data.</p>
+      </form>
+    </section>
+
+    <section id="successCard" class="state-card success-card hidden" aria-live="polite"><span class="state-icon">✓</span><p class="eyebrow">SAVED TO MYFAMILY</p><h1 id="successAmount">₹0</h1><p id="successText">The expenditure is now in the family register.</p><button id="addAnother" type="button">＋ Add another expenditure</button><a href="./">Open full dashboard</a></section>
+    <footer>MyFamily quick entry · FE v1.0.69</footer>
+  </main>
+  <div id="toast" class="toast hidden" role="alert"></div>
+  <script src="config.js?v=1.0.69" defer></script>
+  <script src="quick-expense.js?v=1.0.69" defer></script>
+</body>
+</html>

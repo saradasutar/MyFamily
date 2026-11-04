@@ -2,7 +2,7 @@
 
 const CONFIG = window.FAMILY_DASHBOARD_CONFIG || {};
 const PLACEHOLDER_URL = "PASTE_YOUR_APPS_SCRIPT_WEB_APP_URL_HERE";
-const FRONTEND_VERSION = "1.0.69";
+const FRONTEND_VERSION = "1.0.70";
 const SAVED_USERNAME_KEY = "familyDashboardUsername";
 const SESSION_TOKEN_KEY = "familyDashboardToken";
 const DEFAULT_IDLE_TIMEOUT_MINUTES = 60;
@@ -557,6 +557,7 @@ async function restoreSession() {
 function showApp() {
   $("loginScreen").classList.add("hidden");
   $("appShell").classList.remove("hidden");
+  $("appShell").removeAttribute("inert");
   renderVersionLabels();
   renderAll();
   resetIdleTimer();
@@ -571,6 +572,7 @@ function showLogin() {
   $("stickyLauncher").classList.add("hidden");
   $("stickyPinnedLayer").classList.add("hidden");
   $("appShell").classList.add("hidden");
+  $("appShell").setAttribute("inert", "");
   $("loginScreen").classList.remove("hidden");
   loadSavedUsername();
 }
@@ -1394,6 +1396,7 @@ function saveExpenseColumnWidths() { const table=$("expenseTable"); if(!table)re
 function finishExpenseColumnResize() { if(!state.expenseResize)return; state.expenseResize.handle.classList.remove("dragging"); state.expenseResize=null; saveExpenseColumnWidths(); }
 
 function bindActions() {
+  $("testSystemConnections").addEventListener("click", testSystemConnections);
   document.addEventListener("click", async function (event) {
     const button = event.target.closest("[data-action]");
     if (!button) return;
@@ -2593,6 +2596,13 @@ function renderExpenseDisplayRow(item) {
   const canEdit=mayDelete(item),actions=canEdit?((item.status==="PLANNED"?'<button class="tiny-button paid-button" data-action="mark-planned-paid" data-id="'+h(item.id)+'">✓ Mark paid</button>':'')+'<button class="row-edit-primary" data-action="inline-edit-expense" data-id="'+h(item.id)+'">✎ Edit row</button><button class="tiny-button" data-action="edit-expense" data-id="'+h(item.id)+'" title="Open every field">Full form</button><button class="danger-button" data-action="delete-expense" data-id="'+h(item.id)+'">Delete</button>'):'<span class="muted">View only</span>';
   return '<tr class="expense-'+h(item.status.toLowerCase())+'"><td><div class="expense-description-cell"><span class="expense-row-icon">₹</span><span><strong>'+h(item.reason||item.sentTo||"Expenditure")+'</strong><small>Paid to '+h(item.sentTo||"—")+' · From '+h(item.fromAccount||"—")+'</small>'+quick+shared+'</span></div></td><td><strong>'+h(formatDate(item.date))+'</strong><span class="expense-status '+h(item.status.toLowerCase())+'">'+(item.status==="PLANNED"?'PREPLANNED':'PAID')+'</span></td><td><span class="expense-category-chip">'+h(item.category)+'</span><small class="expense-subcategory-line">'+h(item.subcategory)+'</small></td><td>'+memberIdentityMarkup(expenseMemberId(item),false)+'</td><td class="number expense-amount-cell"><strong>'+h(money(item.amount))+'</strong></td><td>'+(plan?'<span class="major-plan-link-chip">'+h(plan)+(phase?'<small>'+h(phase)+'</small>':'')+'</span>':'<span class="muted">—</span>')+'</td><td class="row-edit-cell"><div class="statement-actions">'+actions+'</div></td></tr>';
 }
+function renderExpenseMobileCard(item) {
+  const plan=majorPlanName(item.majorPlanId),phase=majorPlanPhaseName(item.majorPlanPhaseId),canEdit=mayDelete(item);
+  const quick=item.entrySource==="QUICK_LINK"?'<span class="expense-mobile-source">⚡ Quick link</span>':'';
+  const shared=item.splitMethod&&item.splitMethod!=="PERSONAL"?'<span class="expense-mobile-source">'+h(item.splitMethod==="EQUAL"?'Equal split':'Custom split')+'</span>':'';
+  const actions=canEdit?((item.status==="PLANNED"?'<button class="tiny-button paid-button" data-action="mark-planned-paid" data-id="'+h(item.id)+'">✓ Mark paid</button>':'')+'<button class="row-edit-primary" data-action="edit-expense" data-id="'+h(item.id)+'">✎ Edit</button><button class="danger-button" data-action="delete-expense" data-id="'+h(item.id)+'">Delete</button>'):'<span class="muted">View only</span>';
+  return '<article class="expense-mobile-card '+h(item.status.toLowerCase())+'"><header><div><span class="expense-category-chip">'+h(item.category)+'</span><span class="expense-status '+h(item.status.toLowerCase())+'">'+(item.status==="PLANNED"?'PREPLANNED':'PAID')+'</span></div><strong>'+h(money(item.amount))+'</strong></header><h3>'+h(item.reason||item.sentTo||"Expenditure")+'</h3><div class="expense-mobile-meta"><span><small>Date</small><b>'+h(formatDate(item.date))+'</b></span><span><small>For</small>'+memberIdentityMarkup(expenseMemberId(item),false)+'</span><span><small>Paid to</small><b>'+h(item.sentTo||"—")+'</b></span><span><small>From</small><b>'+h(item.fromAccount||"—")+'</b></span></div>'+(item.subcategory?'<p><b>'+h(item.subcategory)+'</b></p>':'')+(plan?'<p class="major-plan-link-chip">'+h(plan)+(phase?'<small>'+h(phase)+'</small>':'')+'</p>':'')+'<div class="expense-mobile-flags">'+quick+shared+'</div><footer>'+actions+'</footer></article>';
+}
 async function saveInlineExpenseRow(button) {
   const row = button.closest("tr"), id = button.dataset.id;
   const original = state.data.expenses.find(function (item) { return item.id === id; });
@@ -2615,6 +2625,7 @@ function renderExpenses() {
   renderExpenseOverview(items);
   renderExpenseSettlements();
   $("expenseRows").innerHTML=items.map(function(item){return item.id===state.inlineExpenseId?renderInlineExpenseRow(item):renderExpenseDisplayRow(item);}).join("");
+  $("expenseMobileCards").innerHTML=items.map(renderExpenseMobileCard).join("");
   $("expenseEmpty").classList.toggle("hidden",items.length>0);
 }
 function renderExpenseMemberQuickFilters() {
@@ -3189,6 +3200,34 @@ function renderAdminHealth() {
   $("adminHealthOverall").textContent=healthy?"● All core systems ready":"● Review suggested";
   $("adminHealthOverall").classList.toggle("healthy",healthy);
   $("adminHealthOverall").classList.toggle("attention",!healthy);
+}
+
+async function testSystemConnections() {
+  if (!isAdmin() || !state.data) return;
+  const button=$("testSystemConnections"),details=$("healthTestDetails"),started=performance.now();
+  button.disabled=true;
+  button.textContent="Testing…";
+  details.textContent="Checking the deployed backend and the services reported by your latest dashboard data…";
+  details.className="health-test-details testing";
+  try {
+    const result=await api("version",{}),liveVersion=String(result&&result.version||"");
+    state.backendVersion=liveVersion||state.backendVersion;
+    const storage=state.data.driveStorage||{},backup=state.data.backupStatus||{},settings=state.data.settings||{};
+    const calendarReady=!!(settings.odiaFestivalLastRefreshAt||(state.data.odiaFestivals||[]).length),backendReady=liveVersion==="1.0.50",elapsed=Math.max(1,Math.round(performance.now()-started));
+    const checks=[backendReady?"Backend connected":"Backend version needs review",storage.configured?"Drive ready":"Drive setup needed",calendarReady?"Odia calendar ready":"Odia calendar refresh needed",backup.automatic?"Automatic backup ready":"Automatic backup needs setup"];
+    details.textContent=checks.join(" · ")+" · Response "+elapsed+" ms";
+    details.className="health-test-details "+(backendReady&&storage.configured&&calendarReady?"success":"attention");
+    renderVersionLabels();
+    renderAdminHealth();
+    toast(backendReady?"Connection test completed.":"Backend responded, but its version needs review.",backendReady?"success":"error");
+  } catch (error) {
+    details.textContent="Backend could not be reached. Your saved data was not changed. Check the Apps Script deployment and internet connection.";
+    details.className="health-test-details error";
+    toast("Connection test failed: "+(error.message||"Backend unavailable"),"error");
+  } finally {
+    button.disabled=false;
+    button.textContent="↻ Test connections";
+  }
 }
 
 function renderStickyNotes() {

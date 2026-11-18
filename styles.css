@@ -1865,3 +1865,47 @@ html { scroll-padding-top:96px; }
   .ambient,.hero-glow,.family-orbit { display:none!important; }
   .premium-ui .panel,.premium-ui .summary-card,.admin-health-panel { box-shadow:none!important; }
 }
+
+
+/* v1.0.71 · collaborative Activities & Rituals family legacy journal */
+.activities-journal-hero{display:flex;align-items:flex-end;justify-content:space-between;gap:22px;padding:26px 28px;border:1px solid rgba(103,82,199,.15);border-radius:22px;background:linear-gradient(125deg,#f7f2ff 0%,#f1fbf9 58%,#fff8ef 100%);box-shadow:0 12px 32px rgba(48,41,94,.06)}
+.activities-journal-hero h3{font-size:clamp(1.45rem,2.5vw,2.1rem);margin:3px 0 7px;color:#31265e}
+.activities-journal-hero p:not(.eyebrow){max-width:720px;color:#69647d;margin:0}
+.activities-journal-hero-actions{display:flex;gap:9px;flex-wrap:wrap;justify-content:flex-end}
+.activities-journal-principles{display:flex;gap:9px;flex-wrap:wrap;margin:13px 0 18px}
+.activities-journal-principles span{padding:7px 11px;border:1px solid #e7e2f0;border-radius:999px;background:#fff;color:#625c75;font-size:.72rem;font-weight:700}
+.activities-journal-filters{margin-bottom:12px}
+.activities-journal-summary{margin:8px 0 13px;color:#777389;font-size:.82rem;font-weight:700}
+.activities-journal-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(min(100%,285px),1fr));gap:15px}
+.activities-journal-card{min-width:0;padding:17px;border:1px solid #e4dfef;border-radius:18px;background:#fff;box-shadow:0 7px 20px rgba(43,37,96,.045);display:flex;flex-direction:column;gap:9px}
+.activities-journal-card.private{border-color:#e8d5e2;background:linear-gradient(150deg,#fff,#fff9fc)}
+.activities-journal-card-top{display:flex;align-items:center;justify-content:space-between;gap:8px}
+.activities-journal-type,.activities-journal-visibility{font-size:.66rem;font-weight:850;letter-spacing:.04em;text-transform:uppercase}
+.activities-journal-type{color:#6853b3;background:#f1edff;border-radius:999px;padding:5px 8px}
+.activities-journal-visibility{color:#23816e}
+.activities-journal-visibility.private{color:#a34d78}
+.activities-journal-card h3{margin:3px 0 0;font-size:1.08rem;line-height:1.3;overflow-wrap:anywhere}
+.activities-journal-odia{margin:-5px 0 0;color:#a04f77;font-size:.94rem}
+.activities-journal-excerpt{margin:0;color:#68647a;font-size:.84rem;line-height:1.55;white-space:pre-line;overflow-wrap:anywhere}
+.activities-journal-card-meta{display:flex;justify-content:space-between;gap:8px;flex-wrap:wrap;margin-top:auto;padding-top:7px;border-top:1px solid #f0edf5;color:#777389;font-size:.68rem}
+.activities-journal-card-actions{display:flex;justify-content:flex-end;margin-top:2px}
+.activities-journal-loading{grid-column:1/-1;padding:35px;text-align:center;color:#777389}
+.activities-journal-error{margin:14px 0;padding:13px 15px;border:1px solid #e8b7bd;border-radius:12px;background:#fff6f6;color:#a53143}
+.activities-journal-dialog{width:min(850px,calc(100vw - 24px));max-width:850px}
+.activities-journal-dialog form{max-height:min(88vh,900px);overflow:auto}
+.activities-journal-form-grid{display:grid;gap:13px}
+.activities-journal-form-grid>label,.activities-journal-form-grid>.two-fields{min-width:0}
+.activities-journal-form-grid textarea{min-height:70px;resize:vertical}
+.activities-journal-photo-section{margin-top:17px;padding:16px;border:1px solid rgba(104,82,190,.16);border-radius:18px;background:linear-gradient(145deg,#faf9ff,#f1fbf9)}
+.activities-journal-photo-section h4{margin:2px 0 3px}
+.activities-journal-modal-actions{position:sticky;bottom:-1px;padding:12px 0 3px;background:linear-gradient(180deg,rgba(255,255,255,.9),#fff 35%)}
+.activities-journal-view .empty-state{margin-top:18px}
+@media(max-width:760px){
+ .activities-journal-hero{align-items:stretch;flex-direction:column;padding:19px}
+ .activities-journal-hero-actions{justify-content:stretch}
+ .activities-journal-hero-actions button{flex:1}
+ .activities-journal-filters{grid-template-columns:1fr 1fr}
+ .activities-journal-filters .search-label{grid-column:1/-1}
+ .activities-journal-card{padding:14px}
+ .activities-journal-modal-actions{flex-wrap:wrap}
+}

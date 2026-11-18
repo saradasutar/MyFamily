@@ -6,18 +6,18 @@
   <meta name="color-scheme" content="light">
   <meta name="description" content="Private family dashboard for expenses, goals, important dates and photos.">
   <title>Our Family Hub</title>
-  <link rel="icon" href="family-unity-v1058-32.png?v=1.0.72" type="image/png" sizes="32x32">
-  <link rel="shortcut icon" href="family-unity-v1058-32.png?v=1.0.72" type="image/png">
-  <link rel="apple-touch-icon" href="family-unity-v1058-180.png?v=1.0.72" sizes="180x180">
-  <link rel="manifest" href="family-unity-v1058.webmanifest?v=1.0.72">
+  <link rel="icon" href="family-unity-v1058-32.png?v=1.0.73" type="image/png" sizes="32x32">
+  <link rel="shortcut icon" href="family-unity-v1058-32.png?v=1.0.73" type="image/png">
+  <link rel="apple-touch-icon" href="family-unity-v1058-180.png?v=1.0.73" sizes="180x180">
+  <link rel="manifest" href="family-unity-v1058.webmanifest?v=1.0.73">
   <meta name="theme-color" content="#5b43b5">
   <link rel="preconnect" href="https://script.google.com">
   <link rel="dns-prefetch" href="//script.google.com">
-  <link rel="preload" href="styles.css?v=1.0.72" as="style">
-  <link rel="preload" href="config.js?v=1.0.72" as="script">
-  <link rel="preload" href="app.js?v=1.0.72" as="script">
-  <link rel="preload" href="family-unity-v1058-192.png?v=1.0.72" as="image" type="image/png" fetchpriority="high">
-  <link rel="stylesheet" href="styles.css?v=1.0.72">
+  <link rel="preload" href="styles.css?v=1.0.73" as="style">
+  <link rel="preload" href="config.js?v=1.0.73" as="script">
+  <link rel="preload" href="app.js?v=1.0.73" as="script">
+  <link rel="preload" href="family-unity-v1058-192.png?v=1.0.73" as="image" type="image/png" fetchpriority="high">
+  <link rel="stylesheet" href="styles.css?v=1.0.73">
 </head>
 <body class="premium-ui">
   <a class="skip-link" href="#mainContent">Skip to dashboard content</a>
@@ -27,7 +27,7 @@
   <section id="loginScreen" class="login-screen">
     <div class="login-visual" aria-hidden="true">
       <div class="family-orbit">
-        <img src="family-unity-v1058-192.png?v=1.0.72" alt="" width="136" height="136" decoding="async" fetchpriority="high">
+        <img src="family-unity-v1058-192.png?v=1.0.73" alt="" width="136" height="136" decoding="async" fetchpriority="high">
         <i class="orbit-dot dot-one">₹</i>
         <i class="orbit-dot dot-two">📅</i>
         <i class="orbit-dot dot-three">📷</i>
@@ -36,7 +36,7 @@
       <div class="login-trust-row"><span>Private</span><span>Fast</span><span>Family-first</span></div>
     </div>
     <div class="login-card">
-      <div class="brand-mark family-bond-brand"><img src="family-unity-v1058-192.png?v=1.0.72" alt="Four family members united around a shared heart" width="62" height="62" decoding="async" fetchpriority="high"></div>
+      <div class="brand-mark family-bond-brand"><img src="family-unity-v1058-192.png?v=1.0.73" alt="Four family members united around a shared heart" width="62" height="62" decoding="async" fetchpriority="high"></div>
       <p class="eyebrow">WELCOME HOME</p>
       <h1 id="loginFamilyName">Our Family Hub</h1>
       <p class="muted">Sign in with the username, email address or mobile number managed by your family administrator. Verification and recovery use email only.</p>
@@ -86,7 +86,7 @@
   <div id="appShell" class="app-shell hidden" inert>
     <aside id="sidebar" class="sidebar">
       <div class="sidebar-brand">
-        <div class="brand-mark small family-bond-brand"><img src="family-unity-v1058-192.png?v=1.0.72" alt="MyFamily bond emblem" width="46" height="46" decoding="async" loading="lazy"></div>
+        <div class="brand-mark small family-bond-brand"><img src="family-unity-v1058-192.png?v=1.0.73" alt="MyFamily bond emblem" width="46" height="46" decoding="async" loading="lazy"></div>
         <div>
           <strong id="sidebarFamilyName">Our Family Hub</strong>
           <span class="brand-kicker">PRIVATE FAMILY SPACE</span>
@@ -300,7 +300,7 @@
           </div>
           <div id="dateGrid" class="date-grid"></div>
           <div id="dateEmpty" class="empty-state hidden"><span>◫</span><h3>No important dates</h3><p>Add a date and choose when the family should receive email reminders.</p></div>
-          <section class="tradition-vault" aria-labelledby="traditionVaultTitle">
+          <section class="tradition-vault hidden" aria-labelledby="traditionVaultTitle" aria-hidden="true">
             <div class="tradition-vault-head"><div><p class="eyebrow">FOR FUTURE GENERATIONS</p><h3 id="traditionVaultTitle">Family Tradition &amp; Celebration Guide</h3><p>Preserve how your family observes an Odia festival or important date—rituals, food, responsibilities, instructions, memories and lessons.</p></div><button id="addTraditionGuide" class="primary-button tradition-admin-only hidden" type="button">＋ Add tradition guide</button></div>
             <div id="traditionGuideGrid" class="tradition-guide-grid"></div>
             <div id="traditionGuideEmpty" class="empty-state compact-empty"><span>✿</span><h3>No celebration guide saved yet</h3><p>An administrator can attach the first guide to an important date or Odia festival.</p></div>
@@ -356,6 +356,10 @@
             <label>Year<select id="activitiesJournalYear"><option value="">All years</option></select></label>
             <label>Type<select id="activitiesJournalType"><option value="">All types</option><option value="FESTIVAL">Festival</option><option value="ACTIVITY">Activity</option><option value="RITUAL">Ritual</option><option value="TRADITION">Tradition</option><option value="CELEBRATION">Celebration</option><option value="CUSTOM">Custom</option></select></label>
             <label>Visibility<select id="activitiesJournalVisibilityFilter"><option value="ALL">Family + my private</option><option value="FAMILY">Family only</option><option value="PRIVATE">My private only</option></select></label>
+          </div>
+          <div id="activitiesJournalLinkedFilterBanner" class="activities-journal-linked-filter hidden">
+            <span id="activitiesJournalLinkedFilterText"></span>
+            <button id="activitiesJournalClearLinkFilter" class="tiny-button" type="button">Clear event filter</button>
           </div>
           <div id="activitiesJournalSummary" class="activities-journal-summary" aria-live="polite"></div>
           <div id="activitiesJournalGrid" class="activities-journal-grid"></div>
@@ -843,6 +847,28 @@
         <label>People and responsibilities<textarea id="activitiesJournalResponsibilities" rows="3" maxlength="3000" placeholder="Participants, family roles, responsibilities and arrangements"></textarea></label>
         <label>Personal memories, lessons and stories<textarea id="activitiesJournalMemories" rows="4" maxlength="6000" placeholder="Memories from earlier generations, special moments, lessons and things worth preserving"></textarea></label>
       </div>
+      <section id="activitiesJournalLinksSection" class="activities-journal-links-section">
+        <div class="activities-journal-links-heading">
+          <div><p class="eyebrow">CALENDAR CONNECTIONS</p><h4>Show this knowledge with future events</h4>
+            <small>Link this one family memory to recurring Odia festivals or important dates. The same entry appears in future years; no duplicate story is created.</small></div>
+        </div>
+        <div class="activities-journal-links-grid">
+          <label>Odia Kohinoor festivals
+            <select id="activitiesJournalFestivalLinks" multiple size="6" aria-label="Link to future Odia festivals"></select>
+            <small>Select one or more festivals. Festival links use a stable festival name, not one year's date.</small>
+          </label>
+          <label>Important Dates
+            <select id="activitiesJournalImportantDateLinks" multiple size="6" aria-label="Link to important dates"></select>
+            <small>Birthdays, anniversaries and other dates already saved in MyFamily.</small>
+          </label>
+        </div>
+        <div class="activities-journal-link-options">
+          <label><input id="activitiesJournalShowInCalendar" type="checkbox" checked> Show in calendar event details</label>
+          <label><input id="activitiesJournalShowInYearbook" type="checkbox" checked> Show in Odia Festival Yearbook</label>
+        </div>
+        <p id="activitiesJournalLinksReadonly" class="tradition-readonly-note hidden">Calendar connections are maintained by the entry owner. You can still read this entry and contribute photographs.</p>
+        <p id="activitiesJournalLinksPrivateNote" class="activities-journal-private-note hidden">Private entries are not linked to shared calendars or yearbooks.</p>
+      </section>
       <p id="activitiesJournalReadonlyNote" class="tradition-readonly-note hidden">This is a family member's story. You can read it and contribute photographs, but only the author can edit the written entry.</p>
       <section id="activitiesJournalPhotoSection" class="activities-journal-photo-section hidden">
         <div class="tradition-photo-heading">
@@ -1095,12 +1121,12 @@
   <div id="loadingOverlay" class="loading-overlay hidden" role="status" aria-live="polite" aria-atomic="true"><div class="spinner" aria-hidden="true"></div><p id="loadingText">Working…</p></div>
   <div id="toastRegion" class="toast-region" role="status" aria-live="polite" aria-atomic="true"></div>
 
-  <script src="config.js?v=1.0.72" defer></script>
-  <script src="app.js?v=1.0.72" defer></script>
+  <script src="config.js?v=1.0.73" defer></script>
+  <script src="app.js?v=1.0.73" defer></script>
   <script>
     if ("serviceWorker" in navigator) {
       window.addEventListener("load", function () {
-        var registerWorker = function () { navigator.serviceWorker.register("./sw.js?v=1.0.72", { scope: "./" }).catch(function () {}); };
+        var registerWorker = function () { navigator.serviceWorker.register("./sw.js?v=1.0.73", { scope: "./" }).catch(function () {}); };
         if ("requestIdleCallback" in window) requestIdleCallback(registerWorker, { timeout: 2200 });
         else setTimeout(registerWorker, 600);
       }, { once: true });

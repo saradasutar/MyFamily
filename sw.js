@@ -1,14 +1,14 @@
 "use strict";
 
-const CACHE_NAME = "myfamily-shell-v1072-activities-journal-layout";
+const CACHE_NAME = "myfamily-shell-v1073-unified-heritage-links";
 const SHELL_ASSETS = [
   "./",
-  "./styles.css?v=1.0.72",
-  "./config.js?v=1.0.72",
-  "./app.js?v=1.0.72",
+  "./styles.css?v=1.0.73",
+  "./config.js?v=1.0.73",
+  "./app.js?v=1.0.73",
   "./quick-expense.html",
-  "./quick-expense.css?v=1.0.72",
-  "./quick-expense.js?v=1.0.72",
+  "./quick-expense.css?v=1.0.73",
+  "./quick-expense.js?v=1.0.73",
   "./family-unity-v1058-32.png",
   "./family-unity-v1058-180.png",
   "./family-unity-v1058-192.png",

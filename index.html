@@ -13,11 +13,11 @@
   <meta name="theme-color" content="#5b43b5">
   <link rel="preconnect" href="https://script.google.com">
   <link rel="dns-prefetch" href="//script.google.com">
-  <link rel="preload" href="styles.css?v=1.0.71" as="style">
+  <link rel="preload" href="styles.css?v=1.0.72" as="style">
   <link rel="preload" href="config.js?v=1.0.71" as="script">
   <link rel="preload" href="app.js?v=1.0.71" as="script">
   <link rel="preload" href="family-unity-v1058-192.png?v=1.0.71" as="image" type="image/png" fetchpriority="high">
-  <link rel="stylesheet" href="styles.css?v=1.0.71">
+  <link rel="stylesheet" href="styles.css?v=1.0.72">
 </head>
 <body class="premium-ui">
   <a class="skip-link" href="#mainContent">Skip to dashboard content</a>
@@ -825,6 +825,7 @@
         <button class="modal-close" type="button" data-close>×</button>
       </div>
       <input id="activitiesJournalEntryId" type="hidden">
+      <div class="activities-journal-scroll">
       <div class="activities-journal-form-grid">
         <label>Title *<input id="activitiesJournalTitle" required maxlength="120" placeholder="e.g. Raja Sankranti in our family"></label>
         <label>Odia name<input id="activitiesJournalOdiaName" maxlength="120" placeholder="ଓଡ଼ିଆ ନାମ (optional)"></label>
@@ -860,6 +861,7 @@
           <button id="activitiesJournalUploadPhoto" class="primary-button" type="button">Upload original &amp; add photo</button>
         </div>
       </section>
+      </div>
       <div class="modal-actions activities-journal-modal-actions">
         <button type="button" class="secondary-button" data-close>Close</button>
         <button id="activitiesJournalPrintEntry" type="button" class="secondary-button hidden">▧ Print memory</button>

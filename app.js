@@ -2,7 +2,7 @@
 
 const CONFIG = window.FAMILY_DASHBOARD_CONFIG || {};
 const PLACEHOLDER_URL = "PASTE_YOUR_APPS_SCRIPT_WEB_APP_URL_HERE";
-const FRONTEND_VERSION = "1.0.70";
+const FRONTEND_VERSION = "1.0.71";
 const SAVED_USERNAME_KEY = "familyDashboardUsername";
 const SESSION_TOKEN_KEY = "familyDashboardToken";
 const DEFAULT_IDLE_TIMEOUT_MINUTES = 60;
@@ -48,6 +48,11 @@ const state = {
   traditionGuideId: "",
   traditionGuidePhotos: [],
   pendingTraditionPhoto: null,
+  activitiesJournalEntries: [],
+  activitiesJournalPhotos: [],
+  activitiesJournalEntryId: "",
+  pendingActivitiesJournalPhoto: null,
+  activitiesJournalLoadPromise: null,
   smartPasteResult: null,
   lastToastText: "",
   lastToastAt: 0
@@ -56,10 +61,10 @@ const pendingRequests = new Map();
 let refreshPromise = null;
 const viewTitles = {
   home: "Family overview", expenses: "Expenditure", income: "Income", targets: "Family targets",
-  dates: "Reminders", calendar: "Family calendar", diary: "Family diary", photos: "Family memories",
+  dates: "Reminders", calendar: "Family calendar", activities: "Activities & Rituals", diary: "Family diary", photos: "Family memories",
   experiences: "Family experiences", family: "Family tree", admin: "Administration"
 };
-const viewModules = { expenses: "EXPENSES", income: "INCOME", targets: "TARGETS", dates: "DATES", calendar: "CALENDAR", diary: "DIARY", photos: "PHOTOS", experiences: "EXPERIENCES" };
+const viewModules = { expenses: "EXPENSES", income: "INCOME", targets: "TARGETS", dates: "DATES", calendar: "CALENDAR", activities: "CALENDAR", diary: "DIARY", photos: "PHOTOS", experiences: "EXPERIENCES" };
 const currencySymbols = { INR: "₹", USD: "$", EUR: "€", GBP: "£" };
 const DEFAULT_EXPENSE_SUBCATEGORIES = {
   "Home": ["Maintenance", "Repairs", "Rent", "Furniture", "Domestic help", "Other home"],
@@ -492,6 +497,7 @@ function init() {
   $("diaryMonth").value = currentMonth();
   bindNavigation();
   bindDialogs();
+  bindActivitiesJournalUi();
   bindPremiumUpgrade();
   bindForms();
   bindFilters();
@@ -2441,6 +2447,7 @@ function renderView(view) {
   if (view === "targets") renderTargets();
   if (view === "dates") renderDates();
   if (view === "calendar") renderCalendar();
+  if (view === "activities") renderActivitiesJournal();
   if (view === "photos") renderPhotos();
   if (view === "experiences") renderExperiences();
   if (view === "diary") renderDiary();
@@ -2970,6 +2977,331 @@ function renderCalendar() {
     cells.push('<div class="calendar-cell '+(d.getMonth()!==month?'other-month ':'')+(iso===today?'today':'')+'"><div class="calendar-day-pair"><span class="calendar-day">'+mainDay+'</span>'+odiaChip+'</div><div class="calendar-events">'+events.slice(0,4).map(function(e){const action=e.sourceType?' data-action="open-tradition-guide" data-source-type="'+h(e.sourceType)+'" data-source-id="'+h(e.sourceId||"")+'" data-source-key="'+h(e.sourceKey||"")+'"':'';return '<button class="calendar-event '+e.type+'" title="'+h(e.title)+'"'+action+'>'+h(e.title)+'</button>';}).join("")+(events.length>4?'<span class="calendar-event">+'+(events.length-4)+' more</span>':"")+'</div></div>');
   } $("calendarGrid").innerHTML=cells.join("");
   renderOdiaFestivalYearbook();
+}
+
+
+function activitiesJournalTypeLabel(value) {
+  return ({FESTIVAL:"Festival",ACTIVITY:"Activity",RITUAL:"Ritual",TRADITION:"Tradition",CELEBRATION:"Celebration",CUSTOM:"Custom"})[String(value||"").toUpperCase()] || "Family memory";
+}
+function activitiesJournalIsOwner(entry) {
+  return !!entry && String(entry.ownerId || entry.createdBy || "") === String(state.data && state.data.user && state.data.user.id || "");
+}
+function activitiesJournalCanManage(entry) {
+  if (!entry || !state.data || !state.data.user) return false;
+  if (activitiesJournalIsOwner(entry)) return true;
+  return String(entry.visibility || "FAMILY").toUpperCase() === "FAMILY" && isAdmin();
+}
+function activitiesJournalCurrentEntry() {
+  return (state.activitiesJournalEntries || []).find(function(item){return item.id === state.activitiesJournalEntryId;}) || null;
+}
+async function loadActivitiesJournal() {
+  if (!state.data || !hasModuleAccess("CALENDAR")) return [];
+  if (state.activitiesJournalLoadPromise) return state.activitiesJournalLoadPromise;
+  state.activitiesJournalLoadPromise = (async function() {
+    const response = await api("listActivitiesJournal", {visibility:"ALL"});
+    const entries = response && Array.isArray(response.entries) ? response.entries : [];
+    state.activitiesJournalEntries = entries.filter(function(item) {
+      return String(item.sourceType || "").toUpperCase() === "CUSTOM";
+    });
+    return state.activitiesJournalEntries;
+  })();
+  try { return await state.activitiesJournalLoadPromise; }
+  finally { state.activitiesJournalLoadPromise = null; }
+}
+async function renderActivitiesJournal() {
+  const grid = $("activitiesJournalGrid");
+  if (!grid || !state.data) return;
+  $("activitiesJournalError").classList.add("hidden");
+  grid.innerHTML = '<div class="activities-journal-loading">Loading family memories…</div>';
+  try {
+    await loadActivitiesJournal();
+    const query = normalize($("activitiesJournalSearch").value);
+    const year = $("activitiesJournalYear").value;
+    const type = $("activitiesJournalType").value;
+    const visibility = $("activitiesJournalVisibilityFilter").value;
+    const allEntries = state.activitiesJournalEntries || [];
+    const years = Array.from(new Set(allEntries.map(function(item){return String(item.eventDate || "").slice(0,4);}).filter(Boolean))).sort(function(a,b){return Number(b)-Number(a);});
+    const yearSelect = $("activitiesJournalYear"), selectedYear = yearSelect.value;
+    yearSelect.innerHTML = '<option value="">All years</option>' + years.map(function(value){return '<option value="'+h(value)+'">'+h(value)+'</option>';}).join("");
+    if (years.indexOf(selectedYear) >= 0) yearSelect.value = selectedYear;
+    const items = allEntries.filter(function(item) {
+      const itemVisibility = String(item.visibility || "FAMILY").toUpperCase();
+      const searchText = [item.title,item.odiaName,item.entryType,item.eventDate,item.meaning,item.instructions,item.rituals,item.food,item.responsibilities,item.memories,memberName(item.ownerId || item.createdBy)].join(" ");
+      return (!year || String(item.eventDate || "").slice(0,4) === year)
+        && (!type || String(item.entryType || "").toUpperCase() === type)
+        && (visibility === "ALL" || itemVisibility === visibility)
+        && (!query || normalize(searchText).includes(query));
+    });
+    $("activitiesJournalSummary").textContent = items.length + (items.length === 1 ? " memory" : " memories") + " · " + allEntries.length + " saved in your accessible journal";
+    grid.innerHTML = items.map(function(item) {
+      const isPrivate = String(item.visibility || "FAMILY").toUpperCase() === "PRIVATE";
+      const summary = item.meaning || item.memories || item.instructions || item.rituals || item.food || "Open this memory to read the family story.";
+      const creator = memberName(item.ownerId || item.createdBy);
+      return '<article class="activities-journal-card '+(isPrivate?'private':'family')+'">'
+        + '<div class="activities-journal-card-top"><span class="activities-journal-type">'+h(activitiesJournalTypeLabel(item.entryType))+'</span><span class="activities-journal-visibility '+(isPrivate?'private':'family')+'">'+(isPrivate?'🔒 Private':'♡ Family')+'</span></div>'
+        + '<h3>'+h(item.title || "Untitled memory")+'</h3>'
+        + (item.odiaName?'<p class="activities-journal-odia">'+h(item.odiaName)+'</p>':"")
+        + '<p class="activities-journal-excerpt">'+h(summary).slice(0,230)+(summary.length>230?'…':'')+'</p>'
+        + '<div class="activities-journal-card-meta"><span>'+h(item.eventDate?formatDate(item.eventDate):"Date not recorded")+'</span><span>Added by '+h(creator)+'</span></div>'
+        + '<div class="activities-journal-card-actions"><button type="button" class="secondary-button" data-journal-action="open" data-id="'+h(item.id)+'">Read memory</button></div>'
+        + '</article>';
+    }).join("");
+    $("activitiesJournalEmpty").classList.toggle("hidden", items.length > 0);
+    if (!items.length) grid.innerHTML = "";
+  } catch (error) {
+    grid.innerHTML = "";
+    $("activitiesJournalEmpty").classList.add("hidden");
+    $("activitiesJournalError").textContent = friendlyApiError(error);
+    $("activitiesJournalError").classList.remove("hidden");
+  }
+}
+async function openActivitiesJournalDialog(entryId) {
+  const entry = entryId ? (state.activitiesJournalEntries || []).find(function(item){return item.id === entryId;}) : null;
+  const isNew = !entry;
+  const isOwner = isNew || activitiesJournalIsOwner(entry);
+  state.activitiesJournalEntryId = entry ? entry.id : "";
+  state.pendingActivitiesJournalPhoto = null;
+  $("activitiesJournalForm").reset();
+  $("activitiesJournalEntryId").value = entry && entry.id || "";
+  $("activitiesJournalTitle").value = entry && entry.title || "";
+  $("activitiesJournalOdiaName").value = entry && entry.odiaName || "";
+  $("activitiesJournalEventDate").value = entry && entry.eventDate || (isNew ? todayIso() : "");
+  $("activitiesJournalEntryType").value = entry && entry.entryType || "FESTIVAL";
+  $("activitiesJournalVisibility").value = entry && entry.visibility || "FAMILY";
+  $("activitiesJournalMeaning").value = entry && entry.meaning || "";
+  $("activitiesJournalInstructions").value = entry && entry.instructions || "";
+  $("activitiesJournalRituals").value = entry && entry.rituals || "";
+  $("activitiesJournalFood").value = entry && entry.food || "";
+  $("activitiesJournalResponsibilities").value = entry && entry.responsibilities || "";
+  $("activitiesJournalMemories").value = entry && entry.memories || "";
+  $("activitiesJournalDialogTitle").textContent = isNew ? "Add a family memory" : (isOwner ? "Your family memory" : "Family memory");
+  $("activitiesJournalDialogSubtitle").textContent = isNew ? "A new Family entry can be enriched by everyone. Private entries stay with you." : "Read, preserve and contribute to this family memory.";
+  $("activitiesJournalReadonlyNote").classList.toggle("hidden", isOwner);
+  ["activitiesJournalTitle","activitiesJournalOdiaName","activitiesJournalEventDate","activitiesJournalEntryType","activitiesJournalVisibility","activitiesJournalMeaning","activitiesJournalInstructions","activitiesJournalRituals","activitiesJournalFood","activitiesJournalResponsibilities","activitiesJournalMemories"].forEach(function(id){$(id).disabled = !isOwner;});
+  $("activitiesJournalSave").classList.toggle("hidden", !isOwner);
+  $("activitiesJournalArchiveEntry").classList.toggle("hidden", !entry || !activitiesJournalIsOwner(entry));
+  $("activitiesJournalPrintEntry").classList.toggle("hidden", !entry);
+  $("activitiesJournalPhotoSection").classList.toggle("hidden", !entry);
+  $("activitiesJournalPhotoUploader").classList.toggle("hidden", !entry || (String(entry.visibility || "FAMILY").toUpperCase() === "PRIVATE" && !activitiesJournalIsOwner(entry)));
+  $("activitiesJournalPhotoFile").value = "";
+  $("activitiesJournalPhotoCaption").value = "";
+  $("activitiesJournalPhotoDate").value = "";
+  $("activitiesJournalPhotoSource").value = "";
+  $("activitiesJournalPhotoPreview").src = "";
+  $("activitiesJournalPhotoPreview").classList.add("hidden");
+  state.activitiesJournalPhotos = [];
+  renderActivitiesJournalPhotos();
+  openDialog("activitiesJournalDialog");
+  if (entry) await loadActivitiesJournalPhotos(entry.id);
+}
+async function saveActivitiesJournal(event) {
+  event.preventDefault();
+  const existingId = $("activitiesJournalEntryId").value;
+  const payload = {
+    id: existingId,
+    title: $("activitiesJournalTitle").value.trim(),
+    odiaName: $("activitiesJournalOdiaName").value.trim(),
+    eventDate: $("activitiesJournalEventDate").value,
+    entryType: $("activitiesJournalEntryType").value,
+    visibility: $("activitiesJournalVisibility").value,
+    meaning: $("activitiesJournalMeaning").value.trim(),
+    instructions: $("activitiesJournalInstructions").value.trim(),
+    rituals: $("activitiesJournalRituals").value.trim(),
+    food: $("activitiesJournalFood").value.trim(),
+    responsibilities: $("activitiesJournalResponsibilities").value.trim(),
+    memories: $("activitiesJournalMemories").value.trim()
+  };
+  showLoading(existingId ? "Saving family memory…" : "Preserving your family memory…");
+  try {
+    const result = await api("saveActivitiesJournal", payload);
+    state.activitiesJournalEntryId = result.id;
+    $("activitiesJournalEntryId").value = result.id;
+    await loadActivitiesJournal();
+    const saved = (state.activitiesJournalEntries || []).find(function(item){return item.id === result.id;});
+    $("activitiesJournalArchiveEntry").classList.toggle("hidden", !saved || !activitiesJournalIsOwner(saved));
+    $("activitiesJournalPrintEntry").classList.remove("hidden");
+    $("activitiesJournalPhotoSection").classList.remove("hidden");
+    $("activitiesJournalPhotoUploader").classList.toggle("hidden", !saved || (String(saved.visibility || "FAMILY").toUpperCase() === "PRIVATE" && !activitiesJournalIsOwner(saved)));
+    await loadActivitiesJournalPhotos(result.id);
+    toast(existingId ? "Family memory updated." : "Family memory saved. You can now add photographs.", "success");
+  } catch (error) {
+    if (!handleSessionError(error)) toast(friendlyApiError(error), "error");
+  } finally { hideLoading(); }
+}
+async function archiveActivitiesJournalEntry() {
+  const id = $("activitiesJournalEntryId").value;
+  if (!id || !window.confirm("Archive this memory? It will be hidden from the active journal, not permanently erased.")) return;
+  showLoading("Archiving family memory…");
+  try {
+    await api("deleteActivitiesJournal", {id:id});
+    $("activitiesJournalDialog").close();
+    await loadActivitiesJournal();
+    toast("Memory archived. Its content and photographs have been retained.", "success");
+  } catch (error) {
+    if (!handleSessionError(error)) toast(friendlyApiError(error), "error");
+  } finally { hideLoading(); }
+}
+async function loadActivitiesJournalPhotos(guideId) {
+  try {
+    const photos = await api("getTraditionGuidePhotos", {guideId:guideId});
+    state.activitiesJournalPhotos = Array.isArray(photos) ? photos : [];
+    renderActivitiesJournalPhotos();
+  } catch (error) {
+    if (!handleSessionError(error)) toast(friendlyApiError(error), "error");
+  }
+}
+function renderActivitiesJournalPhotos() {
+  const gallery = $("activitiesJournalPhotoGallery"), entry = activitiesJournalCurrentEntry();
+  const items = state.activitiesJournalPhotos || [];
+  const canManage = activitiesJournalCanManage(entry);
+  gallery.innerHTML = items.map(function(photo) {
+    const photographer = memberName(photo.createdBy || "");
+    const meta = [photo.photoDate ? formatDate(photo.photoDate) : "", photographer ? "Added by " + photographer : "", photo.sourceNote || ""].filter(Boolean).join(" · ");
+    const actions = canManage ? '<div class="tradition-photo-actions">'
+      + (!photo.featured ? '<button type="button" class="tiny-button" data-journal-photo-action="cover" data-id="'+h(photo.id)+'">Make cover</button>' : '<span class="featured-photo-chip">★ Cover</span>')
+      + '<button type="button" class="danger-button" data-journal-photo-action="archive" data-id="'+h(photo.id)+'">Archive photo</button></div>' : "";
+    return '<article class="tradition-photo-card '+(photo.featured?'featured':'')+'">'
+      + '<button type="button" class="tradition-photo-image" data-journal-photo-action="view" data-id="'+h(photo.id)+'"><img src="'+h(photo.thumbData||"")+'" alt="'+h(photo.caption||"Family photograph")+'" loading="lazy" decoding="async"><span>View</span></button>'
+      + '<div><strong>'+h(photo.caption||photo.originalName||"Family photograph")+'</strong><small>'+h(meta)+'</small>'+actions+'</div></article>';
+  }).join("");
+  $("activitiesJournalPhotoEmpty").classList.toggle("hidden", items.length > 0);
+}
+async function previewActivitiesJournalPhoto() {
+  const file = $("activitiesJournalPhotoFile").files[0];
+  if (!file || !validOriginalPhotoFile(file)) return;
+  showLoading("Preparing family photograph…");
+  try {
+    state.pendingActivitiesJournalPhoto = await prepareOriginalPhoto(file, 1800, 260);
+    $("activitiesJournalPhotoPreview").src = state.pendingActivitiesJournalPhoto.displayData;
+    $("activitiesJournalPhotoPreview").classList.remove("hidden");
+  } catch (error) {
+    if (error.message !== "Invalid photo") toast(error.message || "This photograph could not be prepared.", "error");
+  } finally { hideLoading(); }
+}
+async function uploadActivitiesJournalPhoto() {
+  const guideId = state.activitiesJournalEntryId;
+  if (!guideId) return toast("Save the memory before adding photographs.", "error");
+  if (!state.pendingActivitiesJournalPhoto) return toast("Choose a photograph first.", "error");
+  showLoading("Saving original family photograph privately to Drive…");
+  try {
+    await uploadOriginalPhoto("TRADITION_GUIDE", guideId, state.pendingActivitiesJournalPhoto, {
+      caption: $("activitiesJournalPhotoCaption").value.trim(),
+      photoDate: $("activitiesJournalPhotoDate").value,
+      sourceNote: $("activitiesJournalPhotoSource").value.trim()
+    });
+    state.pendingActivitiesJournalPhoto = null;
+    $("activitiesJournalPhotoFile").value = "";
+    $("activitiesJournalPhotoCaption").value = "";
+    $("activitiesJournalPhotoDate").value = "";
+    $("activitiesJournalPhotoSource").value = "";
+    $("activitiesJournalPhotoPreview").src = "";
+    $("activitiesJournalPhotoPreview").classList.add("hidden");
+    await loadActivitiesJournalPhotos(guideId);
+    toast("Photograph added to the family archive.", "success");
+  } catch (error) {
+    if (!handleSessionError(error)) toast(friendlyApiError(error), "error");
+  } finally { hideLoading(); }
+}
+async function viewActivitiesJournalPhoto(id) {
+  const item = (state.activitiesJournalPhotos || []).find(function(photo){return photo.id === id;});
+  if (!item) return;
+  $("viewerTitle").textContent = item.caption || "Family photograph";
+  $("viewerMeta").textContent = [item.photoDate ? formatDate(item.photoDate) : "", memberName(item.createdBy || ""), item.sourceNote || ""].filter(Boolean).join(" · ");
+  $("viewerText").textContent = "Private Drive original · authorised family journal view";
+  $("viewerImage").classList.add("hidden");
+  $("viewerLoading").textContent = "Loading photograph…";
+  $("viewerLoading").classList.remove("hidden");
+  openDialog("photoViewer");
+  try {
+    const result = await api("getOptimizedPhoto", {kind:"TRADITION_GUIDE", id:id});
+    $("viewerImage").src = result.dataUrl;
+    $("viewerImage").classList.remove("hidden");
+    $("viewerLoading").classList.add("hidden");
+  } catch (error) {
+    if (!handleSessionError(error)) $("viewerLoading").textContent = friendlyApiError(error);
+  }
+}
+async function archiveActivitiesJournalPhoto(id) {
+  const entry = activitiesJournalCurrentEntry();
+  if (!entry || !activitiesJournalCanManage(entry)) return toast("Only the entry owner or administrator can archive this photograph.", "error");
+  if (!window.confirm("Archive this photograph? The original file will remain in Drive and can be recovered later.")) return;
+  showLoading("Archiving photograph…");
+  try {
+    await api("deleteTraditionGuidePhoto", {id:id});
+    await loadActivitiesJournalPhotos(entry.id);
+    toast("Photograph archived; the Drive original has been retained.", "success");
+  } catch (error) {
+    if (!handleSessionError(error)) toast(friendlyApiError(error), "error");
+  } finally { hideLoading(); }
+}
+async function setActivitiesJournalCover(id) {
+  const entry = activitiesJournalCurrentEntry();
+  if (!entry || !activitiesJournalCanManage(entry)) return toast("Only the entry owner or administrator can change the cover.", "error");
+  showLoading("Updating family memory cover…");
+  try {
+    await api("setTraditionGuidePhotoCover", {id:id});
+    await loadActivitiesJournalPhotos(entry.id);
+    toast("Family memory cover updated.", "success");
+  } catch (error) {
+    if (!handleSessionError(error)) toast(friendlyApiError(error), "error");
+  } finally { hideLoading(); }
+}
+function printActivitiesJournalItems(items) {
+  if (!items || !items.length) return toast("There are no journal entries to print.", "error");
+  const familyName = (state.data.settings && state.data.settings.familyName) || "Our Family Hub";
+  const pages = items.map(function(item) {
+    const sections = [
+      ["Significance and history", item.meaning],
+      ["Preparations and materials", item.instructions],
+      ["Rituals and activities", item.rituals],
+      ["Food and recipes", item.food],
+      ["People and responsibilities", item.responsibilities],
+      ["Memories and lessons", item.memories]
+    ].filter(function(pair){return String(pair[1]||"").trim();}).map(function(pair){return '<section><h2>'+h(pair[0])+'</h2><p>'+h(pair[1]).replace(/\n/g,"<br>")+'</p></section>';}).join("");
+    return '<article class="journal-print-entry"><header><span>'+h(activitiesJournalTypeLabel(item.entryType))+' · '+h(item.visibility||"FAMILY")+'</span><h1>'+h(item.title||"Family memory")+'</h1>'+(item.odiaName?'<h2>'+h(item.odiaName)+'</h2>':"")+'<small>'+h(item.eventDate?formatDate(item.eventDate):"Date not recorded")+' · Recorded by '+h(memberName(item.ownerId||item.createdBy))+'</small></header>'+sections+'</article>';
+  }).join("");
+  const win = window.open("", "activitiesJournalPrint", "width=980,height=850");
+  if (!win) return toast("Allow pop-ups to print family memories.", "error");
+  win.document.open();
+  win.document.write("<!doctype html><html><head><meta charset='utf-8'><title>"+h(familyName)+" · Activities &amp; Rituals</title><style>@page{size:A4;margin:15mm}*{box-sizing:border-box}body{font-family:Georgia,serif;color:#27243a;line-height:1.65;margin:0}.journal-print-entry{page-break-after:always;padding:8mm 4mm}.journal-print-entry:last-child{page-break-after:auto}header{border-bottom:2px solid #ded8ef;padding-bottom:14px;margin-bottom:20px}header span{font:700 10px Arial;letter-spacing:2px;color:#6752c7;text-transform:uppercase}h1{font-size:28px;margin:8px 0}header h2{font-size:18px;margin:0 0 8px}header small{font:12px Arial;color:#777}section{margin:20px 0;break-inside:avoid}section h2{font:700 13px Arial;color:#6752c7;margin-bottom:6px}section p{white-space:normal;margin:0;font-size:12pt}@media screen{body{max-width:800px;margin:30px auto;padding:30px;box-shadow:0 0 20px #ddd}}</style></head><body>"+pages+"</body></html>");
+  win.document.close();
+  win.focus();
+  win.print();
+}
+function printActivitiesJournalList() {
+  const query = normalize($("activitiesJournalSearch").value), year = $("activitiesJournalYear").value, type = $("activitiesJournalType").value, visibility = $("activitiesJournalVisibilityFilter").value;
+  const items = (state.activitiesJournalEntries || []).filter(function(item) {
+    const itemVisibility = String(item.visibility || "FAMILY").toUpperCase();
+    return (!year || String(item.eventDate || "").slice(0,4) === year)
+      && (!type || String(item.entryType || "").toUpperCase() === type)
+      && (visibility === "ALL" || itemVisibility === visibility)
+      && (!query || normalize([item.title,item.odiaName,item.meaning,item.instructions,item.rituals,item.food,item.responsibilities,item.memories,memberName(item.ownerId||item.createdBy)].join(" ")).includes(query));
+  });
+  printActivitiesJournalItems(items);
+}
+function bindActivitiesJournalUi() {
+  $("addActivitiesJournal").addEventListener("click", function(){openActivitiesJournalDialog();});
+  $("activitiesJournalEmpty").querySelector("[data-open-activities-journal]").addEventListener("click", function(){openActivitiesJournalDialog();});
+  $("activitiesJournalPrint").addEventListener("click", printActivitiesJournalList);
+  $("activitiesJournalSearch").addEventListener("input", renderActivitiesJournal);
+  ["activitiesJournalYear","activitiesJournalType","activitiesJournalVisibilityFilter"].forEach(function(id){$(id).addEventListener("change", renderActivitiesJournal);});
+  $("activitiesJournalForm").addEventListener("submit", saveActivitiesJournal);
+  $("activitiesJournalArchiveEntry").addEventListener("click", archiveActivitiesJournalEntry);
+  $("activitiesJournalPrintEntry").addEventListener("click", function(){const entry=activitiesJournalCurrentEntry();if(entry)printActivitiesJournalItems([entry]);});
+  $("activitiesJournalPhotoFile").addEventListener("change", previewActivitiesJournalPhoto);
+  $("activitiesJournalUploadPhoto").addEventListener("click", uploadActivitiesJournalPhoto);
+  $("activitiesJournalGrid").addEventListener("click", function(event) {
+    const button = event.target.closest("[data-journal-action]");
+    if (button && button.dataset.journalAction === "open") openActivitiesJournalDialog(button.dataset.id);
+  });
+  $("activitiesJournalPhotoGallery").addEventListener("click", function(event) {
+    const button = event.target.closest("[data-journal-photo-action]");
+    if (!button) return;
+    const action = button.dataset.journalPhotoAction, id = button.dataset.id;
+    if (action === "view") viewActivitiesJournalPhoto(id);
+    if (action === "archive") archiveActivitiesJournalPhoto(id);
+    if (action === "cover") setActivitiesJournalCover(id);
+  });
 }
 
 function odiaFestivalYears() {

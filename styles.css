@@ -2074,3 +2074,27 @@ html { scroll-padding-top:96px; }
     grid-column:1/-1;
   }
 }
+
+/* v1.0.73 · one unified heritage archive with recurring calendar links */
+.tradition-vault{display:none!important}
+.activities-journal-links-section{margin:0 24px 18px;padding:15px 16px;border:1px solid #ded8f0;border-radius:17px;background:linear-gradient(145deg,#f8f6ff,#f1fbf9)}
+.activities-journal-links-heading h4{margin:2px 0 4px}
+.activities-journal-links-heading small{display:block;max-width:720px;color:#777389;line-height:1.5}
+.activities-journal-links-grid{display:grid;grid-template-columns:1fr 1fr;gap:13px;margin-top:13px}
+.activities-journal-links-grid label{display:grid;gap:6px;color:#514b68;font-size:.75rem;font-weight:780}
+.activities-journal-links-grid select{min-height:140px;border:1px solid #d9d2ed;border-radius:11px;padding:7px;background:#fff}
+.activities-journal-links-grid option{padding:6px}
+.activities-journal-link-options{display:flex;flex-wrap:wrap;gap:13px;margin-top:11px}
+.activities-journal-link-options label{display:flex;align-items:center;gap:7px;font-size:.72rem;color:#5f5975}
+.activities-journal-link-options input{width:auto}
+.activities-journal-private-note{margin:10px 0 0;color:#96506d;font-size:.74rem}
+.activities-journal-linked-label{color:#6450a6;font-size:.7rem;font-weight:760;line-height:1.45}
+.activities-journal-linked-filter{display:flex;align-items:center;justify-content:space-between;gap:10px;margin:7px 0;padding:9px 12px;border:1px solid #d9d0f2;border-radius:12px;background:#f6f2ff;color:#5d49a4;font-size:.78rem;font-weight:750}
+.activities-journal-linked-filter.hidden{display:none}
+@media(max-width:760px){
+ .activities-journal-links-section{margin:0 16px 13px;padding:12px}
+ .activities-journal-links-grid{grid-template-columns:1fr}
+ .activities-journal-links-grid select{min-height:110px}
+ .activities-journal-link-options{display:grid;gap:8px}
+ .activities-journal-linked-filter{align-items:flex-start;flex-direction:column}
+}

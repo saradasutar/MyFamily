@@ -6,18 +6,18 @@
   <meta name="color-scheme" content="light">
   <meta name="description" content="Private family dashboard for expenses, goals, important dates and photos.">
   <title>Our Family Hub</title>
-  <link rel="icon" href="family-unity-v1058-32.png?v=1.0.70" type="image/png" sizes="32x32">
-  <link rel="shortcut icon" href="family-unity-v1058-32.png?v=1.0.70" type="image/png">
-  <link rel="apple-touch-icon" href="family-unity-v1058-180.png?v=1.0.70" sizes="180x180">
-  <link rel="manifest" href="family-unity-v1058.webmanifest?v=1.0.70">
+  <link rel="icon" href="family-unity-v1058-32.png?v=1.0.71" type="image/png" sizes="32x32">
+  <link rel="shortcut icon" href="family-unity-v1058-32.png?v=1.0.71" type="image/png">
+  <link rel="apple-touch-icon" href="family-unity-v1058-180.png?v=1.0.71" sizes="180x180">
+  <link rel="manifest" href="family-unity-v1058.webmanifest?v=1.0.71">
   <meta name="theme-color" content="#5b43b5">
   <link rel="preconnect" href="https://script.google.com">
   <link rel="dns-prefetch" href="//script.google.com">
-  <link rel="preload" href="styles.css?v=1.0.70" as="style">
-  <link rel="preload" href="config.js?v=1.0.70" as="script">
-  <link rel="preload" href="app.js?v=1.0.70" as="script">
-  <link rel="preload" href="family-unity-v1058-192.png?v=1.0.70" as="image" type="image/png" fetchpriority="high">
-  <link rel="stylesheet" href="styles.css?v=1.0.70">
+  <link rel="preload" href="styles.css?v=1.0.71" as="style">
+  <link rel="preload" href="config.js?v=1.0.71" as="script">
+  <link rel="preload" href="app.js?v=1.0.71" as="script">
+  <link rel="preload" href="family-unity-v1058-192.png?v=1.0.71" as="image" type="image/png" fetchpriority="high">
+  <link rel="stylesheet" href="styles.css?v=1.0.71">
 </head>
 <body class="premium-ui">
   <a class="skip-link" href="#mainContent">Skip to dashboard content</a>
@@ -27,7 +27,7 @@
   <section id="loginScreen" class="login-screen">
     <div class="login-visual" aria-hidden="true">
       <div class="family-orbit">
-        <img src="family-unity-v1058-192.png?v=1.0.70" alt="" width="136" height="136" decoding="async" fetchpriority="high">
+        <img src="family-unity-v1058-192.png?v=1.0.71" alt="" width="136" height="136" decoding="async" fetchpriority="high">
         <i class="orbit-dot dot-one">₹</i>
         <i class="orbit-dot dot-two">📅</i>
         <i class="orbit-dot dot-three">📷</i>
@@ -36,7 +36,7 @@
       <div class="login-trust-row"><span>Private</span><span>Fast</span><span>Family-first</span></div>
     </div>
     <div class="login-card">
-      <div class="brand-mark family-bond-brand"><img src="family-unity-v1058-192.png?v=1.0.70" alt="Four family members united around a shared heart" width="62" height="62" decoding="async" fetchpriority="high"></div>
+      <div class="brand-mark family-bond-brand"><img src="family-unity-v1058-192.png?v=1.0.71" alt="Four family members united around a shared heart" width="62" height="62" decoding="async" fetchpriority="high"></div>
       <p class="eyebrow">WELCOME HOME</p>
       <h1 id="loginFamilyName">Our Family Hub</h1>
       <p class="muted">Sign in with the username, email address or mobile number managed by your family administrator. Verification and recovery use email only.</p>
@@ -86,7 +86,7 @@
   <div id="appShell" class="app-shell hidden" inert>
     <aside id="sidebar" class="sidebar">
       <div class="sidebar-brand">
-        <div class="brand-mark small family-bond-brand"><img src="family-unity-v1058-192.png?v=1.0.70" alt="MyFamily bond emblem" width="46" height="46" decoding="async" loading="lazy"></div>
+        <div class="brand-mark small family-bond-brand"><img src="family-unity-v1058-192.png?v=1.0.71" alt="MyFamily bond emblem" width="46" height="46" decoding="async" loading="lazy"></div>
         <div>
           <strong id="sidebarFamilyName">Our Family Hub</strong>
           <span class="brand-kicker">PRIVATE FAMILY SPACE</span>
@@ -110,6 +110,7 @@
         <details class="nav-group" open><summary><span>▦</span><strong>Calendar</strong><i>⌄</i></summary><div>
           <button class="nav-button" data-view="dates" data-module="DATES"><span>◫</span> Reminders</button>
           <button class="nav-button" data-view="calendar" data-module="CALENDAR"><span>▦</span> Calendar &amp; festivals</button>
+          <button class="nav-button" data-view="activities" data-module="CALENDAR"><span>✿</span> Activities &amp; Rituals</button>
         </div></details>
         <button id="adminNav" class="nav-button admin-nav-button hidden" data-view="admin"><span>⚙</span> Administration</button>
       </nav>
@@ -330,6 +331,39 @@
             <div id="odiaFestivalYearEmpty" class="empty-state compact-empty hidden"><span>✿</span><h3>No festival dates cached for this year</h3><p>An administrator can use <b>Administration → Refresh Odia calendar now</b>. Existing cached years are never changed by viewing or printing.</p></div>
             <p id="odiaFestivalYearSource" class="odia-yearbook-source"></p>
           </section>
+        </section>
+
+
+        <section id="view-activities" class="view activities-journal-view">
+          <div class="activities-journal-hero">
+            <div>
+              <p class="eyebrow">OUR FAMILY LEGACY</p>
+              <h3>Activities &amp; Rituals</h3>
+              <p>Preserve festivals, rituals, family celebrations, recipes and memories together—so the next generation can read, see and continue them.</p>
+            </div>
+            <div class="activities-journal-hero-actions">
+              <button id="activitiesJournalPrint" class="secondary-button" type="button">▧ Print filtered journal</button>
+              <button id="addActivitiesJournal" class="primary-button" type="button">＋ Add a memory</button>
+            </div>
+          </div>
+          <div class="activities-journal-principles">
+            <span>♡ Family entries are collaborative</span>
+            <span>🔒 Private entries stay with their creator</span>
+            <span>▧ Original photographs stay in private Drive</span>
+          </div>
+          <div class="filter-bar activities-journal-filters">
+            <label class="search-label">Search memories<input id="activitiesJournalSearch" type="search" placeholder="Festival, ritual, story, food or family member"></label>
+            <label>Year<select id="activitiesJournalYear"><option value="">All years</option></select></label>
+            <label>Type<select id="activitiesJournalType"><option value="">All types</option><option value="FESTIVAL">Festival</option><option value="ACTIVITY">Activity</option><option value="RITUAL">Ritual</option><option value="TRADITION">Tradition</option><option value="CELEBRATION">Celebration</option><option value="CUSTOM">Custom</option></select></label>
+            <label>Visibility<select id="activitiesJournalVisibilityFilter"><option value="ALL">Family + my private</option><option value="FAMILY">Family only</option><option value="PRIVATE">My private only</option></select></label>
+          </div>
+          <div id="activitiesJournalSummary" class="activities-journal-summary" aria-live="polite"></div>
+          <div id="activitiesJournalGrid" class="activities-journal-grid"></div>
+          <div id="activitiesJournalEmpty" class="empty-state hidden">
+            <span>✿</span><h3>No memories found</h3><p>Add the first family festival, tradition or celebration memory, or change your search filters.</p>
+            <button class="primary-button" type="button" data-open-activities-journal>Add the first memory</button>
+          </div>
+          <div id="activitiesJournalError" class="activities-journal-error hidden" role="alert"></div>
         </section>
 
         <section id="view-photos" class="view">
@@ -783,6 +817,58 @@
     <div class="modal-actions"><button type="button" class="secondary-button" data-close>Close</button></div>
   </dialog>
 
+
+  <dialog id="activitiesJournalDialog" class="modal activities-journal-dialog" aria-label="Activities and rituals memory">
+    <form id="activitiesJournalForm" method="dialog">
+      <div class="modal-head">
+        <div><p class="eyebrow">FAMILY LEGACY JOURNAL</p><h3 id="activitiesJournalDialogTitle">Add a family memory</h3><small id="activitiesJournalDialogSubtitle">Record what to celebrate, how to prepare and why it matters.</small></div>
+        <button class="modal-close" type="button" data-close>×</button>
+      </div>
+      <input id="activitiesJournalEntryId" type="hidden">
+      <div class="activities-journal-form-grid">
+        <label>Title *<input id="activitiesJournalTitle" required maxlength="120" placeholder="e.g. Raja Sankranti in our family"></label>
+        <label>Odia name<input id="activitiesJournalOdiaName" maxlength="120" placeholder="ଓଡ଼ିଆ ନାମ (optional)"></label>
+        <div class="two-fields">
+          <label>Event date<input id="activitiesJournalEventDate" type="date"></label>
+          <label>Entry type<select id="activitiesJournalEntryType"><option value="FESTIVAL">Festival</option><option value="ACTIVITY">Activity</option><option value="RITUAL">Ritual</option><option value="TRADITION">Tradition</option><option value="CELEBRATION">Celebration</option><option value="CUSTOM">Custom</option></select></label>
+        </div>
+        <label>Who can see this?<select id="activitiesJournalVisibility"><option value="FAMILY">Family — visible to authorised family members</option><option value="PRIVATE">Private — only visible to me</option></select></label>
+        <label>Significance and history<textarea id="activitiesJournalMeaning" rows="3" maxlength="1200" placeholder="What does this festival or activity mean? How did it begin in our family?"></textarea></label>
+        <label>Preparations and materials<textarea id="activitiesJournalInstructions" rows="4" maxlength="6000" placeholder="Items to arrange, preparation steps, timings and practical guidance"></textarea></label>
+        <div class="two-fields">
+          <label>Rituals and step-by-step activities<textarea id="activitiesJournalRituals" rows="4" maxlength="4000" placeholder="Write the sequence so a future family member can follow it"></textarea></label>
+          <label>Traditional food and recipes<textarea id="activitiesJournalFood" rows="4" maxlength="3000" placeholder="Dishes, ingredients, recipes and who prepares them"></textarea></label>
+        </div>
+        <label>People and responsibilities<textarea id="activitiesJournalResponsibilities" rows="3" maxlength="3000" placeholder="Participants, family roles, responsibilities and arrangements"></textarea></label>
+        <label>Personal memories, lessons and stories<textarea id="activitiesJournalMemories" rows="4" maxlength="6000" placeholder="Memories from earlier generations, special moments, lessons and things worth preserving"></textarea></label>
+      </div>
+      <p id="activitiesJournalReadonlyNote" class="tradition-readonly-note hidden">This is a family member's story. You can read it and contribute photographs, but only the author can edit the written entry.</p>
+      <section id="activitiesJournalPhotoSection" class="activities-journal-photo-section hidden">
+        <div class="tradition-photo-heading">
+          <div><p class="eyebrow">SHARED PHOTO ARCHIVE</p><h4>Photographs and contributors</h4><small>Every authorised family member can add photos to a Family entry. Private photos remain visible only to their creator.</small></div>
+        </div>
+        <div id="activitiesJournalPhotoGallery" class="tradition-photo-gallery"></div>
+        <div id="activitiesJournalPhotoEmpty" class="tradition-photo-empty"><span>▧</span><p>No photographs have been added yet. Add the first family memory photo.</p></div>
+        <div id="activitiesJournalPhotoUploader" class="tradition-photo-uploader">
+          <label class="upload-drop compact-upload"><input id="activitiesJournalPhotoFile" type="file" accept="image/jpeg,image/png,image/webp"><span>＋</span><strong>Choose a family photograph</strong><small>JPG, PNG or WebP · original up to 20 MB</small></label>
+          <img id="activitiesJournalPhotoPreview" class="photo-preview hidden" alt="Selected family journal photo preview">
+          <div class="two-fields">
+            <label>Photo date<input id="activitiesJournalPhotoDate" type="date"></label>
+            <label>Caption<input id="activitiesJournalPhotoCaption" maxlength="240" placeholder="Who, where and what is happening"></label>
+          </div>
+          <label>Photographer / source<input id="activitiesJournalPhotoSource" maxlength="160" placeholder="e.g. Family album · photographed by …"></label>
+          <button id="activitiesJournalUploadPhoto" class="primary-button" type="button">Upload original &amp; add photo</button>
+        </div>
+      </section>
+      <div class="modal-actions activities-journal-modal-actions">
+        <button type="button" class="secondary-button" data-close>Close</button>
+        <button id="activitiesJournalPrintEntry" type="button" class="secondary-button hidden">▧ Print memory</button>
+        <button id="activitiesJournalArchiveEntry" type="button" class="danger-button hidden">Archive entry</button>
+        <button id="activitiesJournalSave" type="submit" class="primary-button">Save memory</button>
+      </div>
+    </form>
+  </dialog>
+
   <dialog id="traditionGuideDialog" class="modal tradition-guide-dialog" aria-label="Family tradition and celebration guide">
     <form id="traditionGuideForm" method="dialog">
       <div class="modal-head"><div><p class="eyebrow">FAMILY LEGACY</p><h3 id="traditionGuideDialogTitle">Tradition &amp; Celebration Guide</h3><small>Keep trusted family knowledge attached to the date for future generations.</small></div><button class="modal-close" type="button" data-close>×</button></div>
@@ -1007,12 +1093,12 @@
   <div id="loadingOverlay" class="loading-overlay hidden" role="status" aria-live="polite" aria-atomic="true"><div class="spinner" aria-hidden="true"></div><p id="loadingText">Working…</p></div>
   <div id="toastRegion" class="toast-region" role="status" aria-live="polite" aria-atomic="true"></div>
 
-  <script src="config.js?v=1.0.70" defer></script>
-  <script src="app.js?v=1.0.70" defer></script>
+  <script src="config.js?v=1.0.71" defer></script>
+  <script src="app.js?v=1.0.71" defer></script>
   <script>
     if ("serviceWorker" in navigator) {
       window.addEventListener("load", function () {
-        var registerWorker = function () { navigator.serviceWorker.register("./sw.js?v=1.0.70", { scope: "./" }).catch(function () {}); };
+        var registerWorker = function () { navigator.serviceWorker.register("./sw.js?v=1.0.71", { scope: "./" }).catch(function () {}); };
         if ("requestIdleCallback" in window) requestIdleCallback(registerWorker, { timeout: 2200 });
         else setTimeout(registerWorker, 600);
       }, { once: true });

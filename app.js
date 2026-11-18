@@ -2,7 +2,7 @@
 
 const CONFIG = window.FAMILY_DASHBOARD_CONFIG || {};
 const PLACEHOLDER_URL = "PASTE_YOUR_APPS_SCRIPT_WEB_APP_URL_HERE";
-const FRONTEND_VERSION = "1.0.72";
+const FRONTEND_VERSION = "1.0.73";
 const SAVED_USERNAME_KEY = "familyDashboardUsername";
 const SESSION_TOKEN_KEY = "familyDashboardToken";
 const DEFAULT_IDLE_TIMEOUT_MINUTES = 60;
@@ -50,6 +50,9 @@ const state = {
   pendingTraditionPhoto: null,
   activitiesJournalEntries: [],
   activitiesJournalPhotos: [],
+  activitiesJournalLinks: [],
+  activitiesJournalCatalog: {importantDates:[],festivals:[]},
+  activitiesJournalTargetFilter: null,
   activitiesJournalEntryId: "",
   pendingActivitiesJournalPhoto: null,
   activitiesJournalLoadPromise: null,
@@ -2445,8 +2448,8 @@ function renderView(view) {
   if (view === "expenses") { renderMajorPlans(); renderExpenses(); renderRecurringExpenses(); }
   if (view === "income") renderIncome();
   if (view === "targets") renderTargets();
-  if (view === "dates") renderDates();
-  if (view === "calendar") renderCalendar();
+  if (view === "dates") { renderDates(); loadActivitiesJournalLinks().then(renderDates).catch(function(){}); }
+  if (view === "calendar") { renderCalendar(); loadActivitiesJournalLinks().then(renderCalendar).catch(function(){}); }
   if (view === "activities") renderActivitiesJournal();
   if (view === "photos") renderPhotos();
   if (view === "experiences") renderExperiences();
@@ -2999,10 +3002,11 @@ async function loadActivitiesJournal() {
   if (state.activitiesJournalLoadPromise) return state.activitiesJournalLoadPromise;
   state.activitiesJournalLoadPromise = (async function() {
     const response = await api("listActivitiesJournal", {visibility:"ALL"});
-    const entries = response && Array.isArray(response.entries) ? response.entries : [];
-    state.activitiesJournalEntries = entries.filter(function(item) {
-      return String(item.sourceType || "").toUpperCase() === "CUSTOM";
-    });
+    // Calendar-linked legacy Guides are now normal journal entries; keep every accessible row.
+    state.activitiesJournalEntries = response && Array.isArray(response.entries) ? response.entries : [];
+    const linkResponse = await api("getActivitiesJournalLinks", {});
+    state.activitiesJournalLinks = Array.isArray(linkResponse && linkResponse.links) ? linkResponse.links : [];
+    state.activitiesJournalCatalog = linkResponse && linkResponse.catalog ? linkResponse.catalog : {importantDates:[],festivals:[]};
     return state.activitiesJournalEntries;
   })();
   try { return await state.activitiesJournalLoadPromise; }

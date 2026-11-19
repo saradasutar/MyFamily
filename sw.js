@@ -1,11 +1,11 @@
 "use strict";
 
-const CACHE_NAME = "myfamily-shell-v1081-permanent-delete";
+const CACHE_NAME = "myfamily-shell-v1082-yearbook-photos";
 const SHELL_ASSETS = [
   "./",
-  "./styles.css?v=1.0.81",
-  "./config.js?v=1.0.81",
-  "./app.js?v=1.0.81",
+  "./styles.css?v=1.0.82",
+  "./config.js?v=1.0.82",
+  "./app.js?v=1.0.82",
   "./quick-expense.html",
   "./quick-expense.css?v=1.0.74",
   "./quick-expense.js?v=1.0.74",

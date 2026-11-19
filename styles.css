@@ -2139,3 +2139,25 @@ html { scroll-padding-top:96px; }
 .activities-journal-card-actions{gap:8px;flex-wrap:wrap}
 @media(max-width:760px){.activities-journal-categories{flex-wrap:nowrap;overflow-x:auto;padding:4px 1px 10px;scrollbar-width:thin}.knowledge-category{flex:0 0 auto}.activities-journal-card-actions{justify-content:stretch}.activities-journal-card-actions button{flex:1 1 auto}}
 @media print{.activities-journal-categories{display:none!important}}
+
+
+/* Family Knowledge version history */
+.activities-journal-history-dialog{width:min(760px,calc(100vw - 28px));max-height:min(86vh,900px);overflow:hidden}
+.activities-journal-history-note{margin:0 0 14px;padding:10px 12px;border:1px solid #e9e3f7;border-radius:12px;background:#faf8ff;color:#655b7d;font-size:.82rem;line-height:1.5}
+.activities-journal-history-list{display:grid;gap:12px;max-height:60vh;overflow:auto;padding:2px 4px 6px}
+.activities-journal-history-item{border:1px solid var(--line,#e8e5ef);border-radius:14px;padding:14px;background:var(--surface,#fff);display:grid;gap:8px}
+.activities-journal-history-item-head{display:flex;align-items:center;justify-content:space-between;gap:12px;color:var(--muted,#777188);font-size:.76rem}
+.activities-journal-history-item-head strong{color:var(--ink,#29263d);font-size:.86rem}
+.activities-journal-history-item h4{margin:0;font-size:1rem;color:var(--ink,#29263d)}
+.activities-journal-history-item>small{color:var(--muted,#777188);font-size:.78rem}
+.activities-journal-history-item details{border-top:1px solid var(--line,#e8e5ef);padding-top:8px}
+.activities-journal-history-item summary{cursor:pointer;color:#6551b8;font-weight:750;font-size:.8rem}
+.activities-journal-history-field{margin-top:10px}
+.activities-journal-history-field strong{font-size:.78rem;color:var(--ink,#29263d)}
+.activities-journal-history-field p{margin:4px 0 0;white-space:pre-wrap;overflow-wrap:anywhere;color:var(--muted,#615d72);font-size:.82rem;line-height:1.5}
+.activities-journal-history-no-detail,.activities-journal-history-empty p{color:var(--muted,#777188);font-size:.84rem}
+.activities-journal-history-item>button{justify-self:start}
+.activities-journal-history-empty{text-align:center;padding:26px 14px;border:1px dashed var(--line,#d8d3e4);border-radius:14px;color:var(--ink,#29263d)}
+.activities-journal-history-empty strong{font-size:.95rem}
+.activities-journal-history-empty p{margin:8px 0 0}
+@media(max-width:600px){.activities-journal-history-item-head{align-items:flex-start;flex-direction:column;gap:3px}.activities-journal-history-item>button{width:100%}}

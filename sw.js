@@ -1,14 +1,14 @@
 "use strict";
 
-const CACHE_NAME = "myfamily-shell-v1073-unified-heritage-links";
+const CACHE_NAME = "myfamily-shell-v1074-knowledge-preview";
 const SHELL_ASSETS = [
   "./",
-  "./styles.css?v=1.0.73",
-  "./config.js?v=1.0.73",
-  "./app.js?v=1.0.73",
+  "./styles.css?v=1.0.74",
+  "./config.js?v=1.0.74",
+  "./app.js?v=1.0.74",
   "./quick-expense.html",
-  "./quick-expense.css?v=1.0.73",
-  "./quick-expense.js?v=1.0.73",
+  "./quick-expense.css?v=1.0.74",
+  "./quick-expense.js?v=1.0.74",
   "./family-unity-v1058-32.png",
   "./family-unity-v1058-180.png",
   "./family-unity-v1058-192.png",

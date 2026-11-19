@@ -2,7 +2,7 @@
 
 const CONFIG = window.FAMILY_DASHBOARD_CONFIG || {};
 const PLACEHOLDER_URL = "PASTE_YOUR_APPS_SCRIPT_WEB_APP_URL_HERE";
-const FRONTEND_VERSION = "1.0.76";
+const FRONTEND_VERSION = "1.0.77";
 const SAVED_USERNAME_KEY = "familyDashboardUsername";
 const SESSION_TOKEN_KEY = "familyDashboardToken";
 const DEFAULT_IDLE_TIMEOUT_MINUTES = 60;
@@ -54,6 +54,7 @@ const state = {
   activitiesJournalCatalog: {importantDates:[],festivals:[]},
   activitiesJournalTargetFilter: null,
   activitiesJournalPreset: "ALL",
+  activitiesJournalCategory: "ALL",
   activitiesJournalEntryId: "",
   pendingActivitiesJournalPhoto: null,
   activitiesJournalLoadPromise: null,
@@ -3131,37 +3132,87 @@ async function loadActivitiesJournal(forceRefresh) {
   try { return await state.activitiesJournalLoadPromise; }
   finally { state.activitiesJournalLoadPromise = null; }
 }
+function activitiesJournalCompleteness(entry) {
+  const fields = [
+    ["Significance",entry.meaning],
+    ["Preparations",entry.instructions],
+    ["Rituals and activities",entry.rituals],
+    ["Food and recipes",entry.food],
+    ["People and responsibilities",entry.responsibilities],
+    ["Memories and lessons",entry.memories]
+  ];
+  const complete = fields.filter(function(item){return String(item[1] || "").trim();}).length;
+  return {complete:complete,total:fields.length,missing:fields.filter(function(item){return !String(item[1] || "").trim();}).map(function(item){return item[0];})};
+}
+function activitiesJournalUpdatedLabel(entry) {
+  const raw = String(entry && (entry.updatedAt || entry.createdAt) || "").slice(0,10);
+  if (!/^\\d{4}-\\d{2}-\\d{2}$/.test(raw)) return "Update date unavailable";
+  return "Updated " + formatDate(raw);
+}
+function activitiesJournalSortTimestamp(entry) {
+  const value = entry && (entry.updatedAt || entry.createdAt || entry.eventDate) || "";
+  const stamp = Date.parse(value);
+  return Number.isFinite(stamp) ? stamp : 0;
+}
 async function renderActivitiesJournal() {
   const grid = $("activitiesJournalGrid");
   if (!grid || !state.data) return;
   $("activitiesJournalError").classList.add("hidden");
-  grid.innerHTML = '<div class="activities-journal-loading">Loading family memories…</div>';
+  grid.innerHTML = '<div class="activities-journal-loading">Loading family knowledge…</div>';
   try {
     await loadActivitiesJournal();
     const query = normalize($("activitiesJournalSearch").value);
     const year = $("activitiesJournalYear").value;
     const type = $("activitiesJournalType").value;
     const visibility = $("activitiesJournalVisibilityFilter").value;
+    const sort = $("activitiesJournalSort").value || "UPDATED";
+    const completenessFilter = $("activitiesJournalCompleteness").value || "ALL";
     const targetFilter = state.activitiesJournalTargetFilter;
     const journalPreset = state.activitiesJournalPreset || "ALL";
-    const activitiesPresetTypes = ["FESTIVAL","ACTIVITY","RITUAL","TRADITION","CELEBRATION"];
+    const category = state.activitiesJournalCategory || "ALL";
+    const activitiesPresetTypes = ["FESTIVAL","ACTIVITY","RITUAL","TRADITION","CELEBRATION","CUSTOM"];
     const allEntries = state.activitiesJournalEntries || [];
     $("activitiesJournalHeroTitle").textContent = journalPreset === "ACTIVITIES" ? "Activities & Rituals" : "Family Knowledge Library";
     const years = Array.from(new Set(allEntries.map(function(item){return String(item.eventDate || "").slice(0,4);}).filter(Boolean))).sort(function(a,b){return Number(b)-Number(a);});
     const yearSelect = $("activitiesJournalYear"), selectedYear = yearSelect.value;
     yearSelect.innerHTML = '<option value="">All years</option>' + years.map(function(value){return '<option value="'+h(value)+'">'+h(value)+'</option>';}).join("");
     if (years.indexOf(selectedYear) >= 0) yearSelect.value = selectedYear;
-    const items = allEntries.filter(function(item) {
+
+    let items = allEntries.filter(function(item) {
       const itemVisibility = String(item.visibility || "FAMILY").toUpperCase();
+      const itemType = String(item.entryType || "").toUpperCase();
       const searchText = [item.title,item.odiaName,item.entryType,item.eventDate,item.meaning,item.instructions,item.rituals,item.food,item.responsibilities,item.memories,memberName(item.ownerId || item.createdBy)].join(" ");
+      const completeness = activitiesJournalCompleteness(item);
+      const categoryMatch =
+        category === "ALL" ||
+        (category === "FESTIVALS" && itemType === "FESTIVAL") ||
+        (category === "ACTIVITIES" && ["ACTIVITY","RITUAL"].indexOf(itemType) >= 0) ||
+        (category === "TRADITIONS" && ["TRADITION","CUSTOM"].indexOf(itemType) >= 0) ||
+        (category === "CELEBRATIONS" && itemType === "CELEBRATION") ||
+        (category === "RECIPES" && !!String(item.food || "").trim());
+      const completenessMatch = completenessFilter === "ALL" ||
+        (completenessFilter === "NEEDS_DETAILS" && completeness.complete < 4) ||
+        (completenessFilter === "WELL_DOCUMENTED" && completeness.complete >= 4);
       return (!year || String(item.eventDate || "").slice(0,4) === year)
-        && (!type || String(item.entryType || "").toUpperCase() === type)
+        && (!type || itemType === type)
         && (visibility === "ALL" || itemVisibility === visibility)
-        && (journalPreset !== "ACTIVITIES" || activitiesPresetTypes.indexOf(String(item.entryType || "").toUpperCase()) >= 0)
+        && (journalPreset !== "ACTIVITIES" || activitiesPresetTypes.indexOf(itemType) >= 0)
+        && categoryMatch
+        && completenessMatch
         && (!targetFilter || activitiesJournalLinksFor(item.id).some(function(link){return activitiesJournalLinkMatchesTarget(link,targetFilter);}))
         && (!query || normalize(searchText).includes(query));
     });
-    $("activitiesJournalSummary").textContent = items.length + (items.length === 1 ? " entry" : " entries") + " shown · " + allEntries.length + " saved in your accessible family knowledge" + (journalPreset === "ACTIVITIES" ? " · Festivals, activities, rituals, traditions and celebrations" : " · All categories");
+    items.sort(function(a,b) {
+      if (sort === "TITLE") return String(a.title || "").localeCompare(String(b.title || ""), "en", {sensitivity:"base"});
+      if (sort === "EVENT") return String(b.eventDate || "").localeCompare(String(a.eventDate || ""));
+      return activitiesJournalSortTimestamp(b) - activitiesJournalSortTimestamp(a);
+    });
+    $("activitiesJournalCategories").querySelectorAll("[data-journal-category]").forEach(function(button) {
+      const active = button.dataset.journalCategory === category;
+      button.classList.toggle("active",active);
+      button.setAttribute("aria-pressed",active ? "true" : "false");
+    });
+    $("activitiesJournalSummary").textContent = items.length + (items.length === 1 ? " entry" : " entries") + " shown · " + allEntries.length + " accessible entries" + (journalPreset === "ACTIVITIES" ? " · Activities & rituals view" : " · Family Knowledge Library");
     $("activitiesJournalLinkedFilterBanner").classList.toggle("hidden", !targetFilter);
     $("activitiesJournalLinkedFilterText").textContent = targetFilter ? "Showing family knowledge linked to " + targetFilter.label : "";
     grid.innerHTML = items.map(function(item) {
@@ -3169,25 +3220,32 @@ async function renderActivitiesJournal() {
       const summary = item.meaning || item.memories || item.instructions || item.rituals || item.food || "Open this memory to read the family story.";
       const creator = memberName(item.ownerId || item.createdBy);
       const linkedNames = activitiesJournalLinksFor(item.id).map(function(link){return link.label;});
+      const completeness = activitiesJournalCompleteness(item);
+      const qualityLabel = completeness.complete >= 4 ? "Well documented" : completeness.complete >= 2 ? "In progress" : "Needs more detail";
+      const qualityClass = completeness.complete >= 4 ? "good" : completeness.complete >= 2 ? "progress" : "needs-work";
+      const percent = Math.round(completeness.complete / completeness.total * 100);
+      const missing = completeness.missing.length ? "Missing: " + completeness.missing.join(", ") : "All six knowledge sections are filled";
       return '<article class="activities-journal-card '+(isPrivate?'private':'family')+'">'
         + '<div class="activities-journal-card-top"><span class="activities-journal-type">'+h(activitiesJournalTypeLabel(item.entryType))+'</span><span class="activities-journal-visibility '+(isPrivate?'private':'family')+'">'+(isPrivate?'🔒 Private':'♡ Family')+'</span></div>'
         + '<h3>'+h(item.title || "Untitled memory")+'</h3>'
         + (item.odiaName?'<p class="activities-journal-odia">'+h(item.odiaName)+'</p>':"")
         + '<p class="activities-journal-excerpt">'+h(summary).slice(0,230)+(summary.length>230?'…':'')+'</p>'
+        + '<div class="knowledge-completeness" title="'+h(missing)+'"><div class="knowledge-completeness-label"><span>Documentation</span><strong>'+completeness.complete+'/'+completeness.total+'</strong></div><div class="knowledge-completeness-track"><i class="'+qualityClass+'" style="width:'+percent+'%"></i></div><small class="'+qualityClass+'">'+qualityLabel+'</small></div>'
         + (linkedNames.length ? '<div class="activities-journal-linked-label">↗ '+h(linkedNames.slice(0,3).join(" · "))+(linkedNames.length>3?' +'+(linkedNames.length-3)+' more':'')+'</div>' : "")
-        + '<div class="activities-journal-card-meta"><span>'+h(item.eventDate?formatDate(item.eventDate):"Date not recorded")+'</span><span>Added by '+h(creator)+'</span></div>'
+        + '<div class="activities-journal-card-meta"><span>Owner: '+h(creator)+'</span><span>'+h(activitiesJournalUpdatedLabel(item))+'</span></div>'
         + '<div class="activities-journal-card-actions"><button type="button" class="secondary-button" data-journal-action="open" data-id="'+h(item.id)+'">Read memory</button>'
         + (activitiesJournalIsOwner(item) ? '<button type="button" class="tiny-button" data-journal-action="edit" data-id="'+h(item.id)+'" aria-label="Edit '+h(item.title || "family knowledge entry")+'">✎ Edit entry</button>' : "")
-        + '</div>'
-        + '</article>';
+        + '</div></article>';
     }).join("");
     $("activitiesJournalEmpty").classList.toggle("hidden", items.length > 0);
     if (!items.length) grid.innerHTML = "";
+    return items;
   } catch (error) {
     grid.innerHTML = "";
     $("activitiesJournalEmpty").classList.add("hidden");
     $("activitiesJournalError").textContent = friendlyApiError(error);
     $("activitiesJournalError").classList.remove("hidden");
+    return [];
   }
 }
 async function openActivitiesJournalDialog(entryId, target) {
@@ -3481,19 +3539,87 @@ function printActivitiesJournalItems(items) {
 }
 function printActivitiesJournalList() {
   const query = normalize($("activitiesJournalSearch").value), year = $("activitiesJournalYear").value, type = $("activitiesJournalType").value, visibility = $("activitiesJournalVisibilityFilter").value;
-  const items = (state.activitiesJournalEntries || []).filter(function(item) {
+  const category = state.activitiesJournalCategory || "ALL", preset = state.activitiesJournalPreset || "ALL";
+  const completenessFilter = $("activitiesJournalCompleteness").value || "ALL";
+  let items = (state.activitiesJournalEntries || []).filter(function(item) {
     const itemVisibility = String(item.visibility || "FAMILY").toUpperCase();
+    const itemType = String(item.entryType || "").toUpperCase();
+    const quality = activitiesJournalCompleteness(item).complete;
+    const categoryMatch = category === "ALL" ||
+      (category === "FESTIVALS" && itemType === "FESTIVAL") ||
+      (category === "ACTIVITIES" && ["ACTIVITY","RITUAL"].indexOf(itemType) >= 0) ||
+      (category === "TRADITIONS" && ["TRADITION","CUSTOM"].indexOf(itemType) >= 0) ||
+      (category === "CELEBRATIONS" && itemType === "CELEBRATION") ||
+      (category === "RECIPES" && !!String(item.food || "").trim());
     return (!year || String(item.eventDate || "").slice(0,4) === year)
-      && (!type || String(item.entryType || "").toUpperCase() === type)
+      && (!type || itemType === type)
       && (visibility === "ALL" || itemVisibility === visibility)
+      && (preset !== "ACTIVITIES" || ["FESTIVAL","ACTIVITY","RITUAL","TRADITION","CELEBRATION","CUSTOM"].indexOf(itemType) >= 0)
+      && categoryMatch
+      && (completenessFilter === "ALL" || (completenessFilter === "NEEDS_DETAILS" && quality < 4) || (completenessFilter === "WELL_DOCUMENTED" && quality >= 4))
+      && (!state.activitiesJournalTargetFilter || activitiesJournalLinksFor(item.id).some(function(link){return activitiesJournalLinkMatchesTarget(link,state.activitiesJournalTargetFilter);}))
       && (!query || normalize([item.title,item.odiaName,item.meaning,item.instructions,item.rituals,item.food,item.responsibilities,item.memories,memberName(item.ownerId||item.createdBy)].join(" ")).includes(query));
   });
+  const sort = $("activitiesJournalSort").value || "UPDATED";
+  items.sort(function(a,b){return sort === "TITLE" ? String(a.title||"").localeCompare(String(b.title||"")) : sort === "EVENT" ? String(b.eventDate||"").localeCompare(String(a.eventDate||"")) : activitiesJournalSortTimestamp(b)-activitiesJournalSortTimestamp(a);});
   printActivitiesJournalItems(items);
+}
+async function printFamilyHeritageYearbook() {
+  showLoading("Preparing Family Heritage Yearbook…");
+  try {
+    await loadActivitiesJournal(true);
+  } catch (error) {
+    hideLoading();
+    return toast(friendlyApiError(error), "error");
+  }
+  hideLoading();
+  const items = (state.activitiesJournalEntries || []).filter(function(item){
+    return String(item.visibility || "FAMILY").toUpperCase() === "FAMILY";
+  }).sort(function(a,b){
+    return String(a.entryType || "").localeCompare(String(b.entryType || "")) ||
+      String(a.title || "").localeCompare(String(b.title || ""), "en", {sensitivity:"base"});
+  });
+  if (!items.length) return toast("There are no shared family knowledge entries to include in the yearbook.", "error");
+  const familyName = (state.data.settings && state.data.settings.familyName) || "Our Family";
+  const groups = {};
+  items.forEach(function(item){const label=activitiesJournalTypeLabel(item.entryType);if(!groups[label])groups[label]=[];groups[label].push(item);});
+  const contents = Object.keys(groups).sort().map(function(label){return '<li>'+h(label)+' <span>'+groups[label].length+'</span></li>';}).join("");
+  const chapters = Object.keys(groups).sort().map(function(label){
+    const entries = groups[label].map(function(item){
+      const fields = [
+        ["Significance and history",item.meaning],
+        ["Preparations and materials",item.instructions],
+        ["Rituals and activities",item.rituals],
+        ["Traditional food and recipes",item.food],
+        ["People and responsibilities",item.responsibilities],
+        ["Memories and lessons",item.memories]
+      ].filter(function(pair){return String(pair[1]||"").trim();}).map(function(pair){
+        return '<section class="book-section"><h3>'+h(pair[0])+'</h3><p>'+h(pair[1]).replace(/\\n/g,"<br>")+'</p></section>';
+      }).join("");
+      const linked = activitiesJournalLinksFor(item.id).map(function(link){return link.label;});
+      return '<article class="book-entry"><header><span>'+h(label)+'</span><h2>'+h(item.title||"Untitled family memory")+'</h2>'+(item.odiaName?'<h3>'+h(item.odiaName)+'</h3>':"")+'<small>Event date: '+h(item.eventDate?formatDate(item.eventDate):"Not recorded")+' · Preserved by '+h(memberName(item.ownerId||item.createdBy))+' · '+h(activitiesJournalUpdatedLabel(item))+'</small>'+(linked.length?'<p class="book-links">Related dates and festivals: '+h(linked.join(" · "))+'</p>':"")+'</header>'+fields+'</article>';
+    }).join("");
+    return '<section class="book-chapter"><h1>'+h(label)+'</h1>'+entries+'</section>';
+  }).join("");
+  const win=window.open("","familyHeritageYearbook","width=1000,height=900");
+  if(!win)return toast("Allow pop-ups to print the Family Heritage Yearbook.","error");
+  win.document.open();
+  win.document.write("<!doctype html><html><head><meta charset='utf-8'><title>"+h(familyName)+" · Family Heritage Yearbook</title><style>@page{size:A4;margin:17mm}*{box-sizing:border-box}body{font-family:Georgia,serif;color:#28243a;line-height:1.65;margin:0}.cover{min-height:220mm;display:flex;flex-direction:column;justify-content:center;align-items:center;text-align:center;page-break-after:always;border:5px double #7566b5;padding:25mm}.cover .eyebrow{font:800 11px Arial;letter-spacing:3px;color:#6752c7;text-transform:uppercase}.cover h1{font-size:38px;line-height:1.12;margin:18px 0}.cover p{font:14px Arial;color:#726b83}.contents{page-break-after:always}.contents h1,.book-chapter>h1{font-size:26px;color:#41366f;border-bottom:2px solid #ddd6ef;padding-bottom:10px}.contents li{padding:7px 0;border-bottom:1px solid #eee}.contents li span{float:right;color:#777}.book-chapter{page-break-before:always}.book-entry{padding:10mm 2mm;page-break-after:always;break-inside:avoid}.book-entry:last-child{page-break-after:auto}.book-entry header{border-bottom:1px solid #ded8ef;padding-bottom:12px;margin-bottom:15px}.book-entry header>span{font:800 10px Arial;letter-spacing:2px;color:#6752c7;text-transform:uppercase}.book-entry h2{font-size:25px;margin:8px 0}.book-entry header h3{font-size:18px;margin:0 0 8px}.book-entry small{font:11px Arial;color:#777}.book-links{font:11px Arial;color:#6752c7}.book-section{margin:15px 0;break-inside:avoid}.book-section h3{font:700 12px Arial;color:#6752c7;margin:0 0 5px}.book-section p{font-size:11.5pt;white-space:normal;margin:0}.empty-note{font:12px Arial;color:#777}@media screen{body{max-width:850px;margin:25px auto;padding:25px;box-shadow:0 0 20px #ddd}}</style></head><body><div class='cover'><p class='eyebrow'>A living family archive</p><h1>"+h(familyName)+"<br>Family Heritage Yearbook</h1><p>"+items.length+" shared knowledge entries</p><p>Traditions · Festivals · Rituals · Recipes · Memories</p><p>Prepared "+h(new Date().toLocaleDateString("en-IN",{day:"2-digit",month:"long",year:"numeric"}))+"</p></div><section class='contents'><h1>Contents</h1><ol>"+contents+"</ol><p class='empty-note'>Only entries marked Family are included. Private entries are excluded.</p></section>"+chapters+"</body></html>");
+  win.document.close();
+  win.focus();
+  win.print();
 }
 function bindActivitiesJournalUi() {
   $("addActivitiesJournal").addEventListener("click", function(){openActivitiesJournalDialog();});
   $("activitiesJournalEmpty").querySelector("[data-open-activities-journal]").addEventListener("click", function(){openActivitiesJournalDialog();});
   $("activitiesJournalPrint").addEventListener("click", printActivitiesJournalList);
+  $("activitiesJournalPrintYearbook").addEventListener("click", printFamilyHeritageYearbook);
+  $("activitiesJournalCategories").addEventListener("click", function(event) {
+    const button = event.target.closest("[data-journal-category]");
+    if (!button) return;
+    state.activitiesJournalCategory = button.dataset.journalCategory || "ALL";
+    renderActivitiesJournal();
+  });
   $("activitiesJournalClearLinkFilter").addEventListener("click", function(){state.activitiesJournalTargetFilter=null;renderActivitiesJournal();});
   document.addEventListener("click", function(event) {
     const button = event.target.closest("[data-action=\"open-activities-journal-target\"]");
@@ -3504,7 +3630,7 @@ function bindActivitiesJournalUi() {
     openActivitiesJournalForCalendarTarget(target, button.dataset.journalCreate === "true").catch(function(error){toast(friendlyApiError(error),"error");});
   });
   $("activitiesJournalSearch").addEventListener("input", renderActivitiesJournal);
-  ["activitiesJournalYear","activitiesJournalType","activitiesJournalVisibilityFilter"].forEach(function(id){$(id).addEventListener("change", renderActivitiesJournal);});
+  ["activitiesJournalYear","activitiesJournalType","activitiesJournalVisibilityFilter","activitiesJournalSort","activitiesJournalCompleteness"].forEach(function(id){$(id).addEventListener("change", renderActivitiesJournal);});
   $("activitiesJournalForm").addEventListener("submit", saveActivitiesJournal);
   $("activitiesJournalArchiveEntry").addEventListener("click", archiveActivitiesJournalEntry);
   $("activitiesJournalPrintEntry").addEventListener("click", function(){const entry=activitiesJournalCurrentEntry();if(entry)printActivitiesJournalItems([entry]);});

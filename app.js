@@ -2,7 +2,7 @@
 
 const CONFIG = window.FAMILY_DASHBOARD_CONFIG || {};
 const PLACEHOLDER_URL = "PASTE_YOUR_APPS_SCRIPT_WEB_APP_URL_HERE";
-const FRONTEND_VERSION = "1.0.73";
+const FRONTEND_VERSION = "1.0.74";
 const SAVED_USERNAME_KEY = "familyDashboardUsername";
 const SESSION_TOKEN_KEY = "familyDashboardToken";
 const DEFAULT_IDLE_TIMEOUT_MINUTES = 60;
@@ -2833,9 +2833,10 @@ function renderDates() {
     const panjikaOriginal=x.odiaMonth?'<span class="odia-original"><small>'+(x.odiaMonth==="AUTO"?'AUTO-DERIVED ODIA TITHI':'ODIA KOHINOOR / PANJIKA')+'</small><strong>'+h(formatOdiaPanjika(x))+'</strong></span>':'';
     const mappingButton=isAdmin()?'<button class="tiny-button odia-map-button" data-action="manage-odia-mappings" data-id="'+h(x.id)+'">Odia years</button>':'';
     const dateLinks=activitiesJournalLinkedEntriesForTarget({targetType:"IMPORTANT_DATE",targetId:x.id});
+    const knowledgePreview=activitiesJournalKnowledgePreview(dateLinks);
     const guideButton='<button class="tiny-button tradition-button" data-action="open-activities-journal-target" data-source-type="IMPORTANT_DATE" data-source-id="'+h(x.id)+'">'+(dateLinks.length?'✿ Family knowledge ('+dateLinks.length+')':'＋ Add family knowledge')+'</button>';
     const editActions=x.familyPersonId?'<span class="managed-family-date">Managed in Family Tree</span>':mayDelete(x)?'<button class="tiny-button" data-action="edit-date" data-id="'+h(x.id)+'">Edit</button><button class="danger-button" data-action="delete-date" data-id="'+h(x.id)+'">×</button>':'<span class="muted">View only</span>';
-    return '<article class="date-card basis-'+h(basis.toLowerCase())+'"><div class="date-visual">'+photo+tile+'</div><div class="date-card-copy"><h3>'+h(x.title)+'</h3>'+(x.occasionLabel?'<p class="occasion-label">'+h(x.occasionLabel)+'</p>':'')+'<p>'+h(x.eventType)+'</p><div class="original-calendar-pair two-calendars'+(x.odiaMonth?'':' english-only')+'"><span><small>ENGLISH ORIGINAL</small><strong>'+h(formatEnglishDate(x.eventDate))+'</strong></span>'+panjikaOriginal+'</div>'+(x.repeatYearly?'<div class="next-occurrence-list">'+nextRows+(reminderBasisIncludes(basis,"ODIA")&&!(x.odiaMappings||[]).some(function(mapping){return String(mapping.gregorianDate)>=todayIso();})?'<span class="odia-mapping-warning"><b>Odia date pending</b> Use Refresh Odia calendar now; an administrator can add a Kohinoor correction under Odia years.</span>':'')+'</div>':'')+'<p>Email: '+h(reminderText(x.remindDays))+'</p>'+(x.repeatYearly?'<span class="repeat-chip">↻ Remind by '+h(reminderBasisLabel(basis))+'</span>':'<span class="repeat-chip one-time">One-time reminder · saved date</span>')+'</div><div class="row-actions">'+guideButton+mappingButton+editActions+'</div></article>';
+    return '<article class="date-card basis-'+h(basis.toLowerCase())+'"><div class="date-visual">'+photo+tile+'</div><div class="date-card-copy"><h3>'+h(x.title)+'</h3>'+(x.occasionLabel?'<p class="occasion-label">'+h(x.occasionLabel)+'</p>':'')+'<p>'+h(x.eventType)+'</p><div class="original-calendar-pair two-calendars'+(x.odiaMonth?'':' english-only')+'"><span><small>ENGLISH ORIGINAL</small><strong>'+h(formatEnglishDate(x.eventDate))+'</strong></span>'+panjikaOriginal+'</div>'+knowledgePreview+(x.repeatYearly?'<div class="next-occurrence-list">'+nextRows+(reminderBasisIncludes(basis,"ODIA")&&!(x.odiaMappings||[]).some(function(mapping){return String(mapping.gregorianDate)>=todayIso();})?'<span class="odia-mapping-warning"><b>Odia date pending</b> Use Refresh Odia calendar now; an administrator can add a Kohinoor correction under Odia years.</span>':'')+'</div>':'')+'<p>Email: '+h(reminderText(x.remindDays))+'</p>'+(x.repeatYearly?'<span class="repeat-chip">↻ Remind by '+h(reminderBasisLabel(basis))+'</span>':'<span class="repeat-chip one-time">One-time reminder · saved date</span>')+'</div><div class="row-actions">'+guideButton+mappingButton+editActions+'</div></article>';
   }).join("");
   $("dateEmpty").classList.toggle("hidden",items.length>0);
   renderTraditionGuides();
@@ -3006,6 +3007,15 @@ function activitiesJournalLinkedEntriesForTarget(target, mode) {
   return (state.activitiesJournalEntries || []).filter(function(entry){
     return ids.has(String(entry.id)) && String(entry.visibility || "FAMILY").toUpperCase() === "FAMILY";
   });
+}
+function activitiesJournalKnowledgePreview(entries) {
+  entries = Array.isArray(entries) ? entries : [];
+  if (!entries.length) return "";
+  const chips = entries.slice(0,2).map(function(entry) {
+    return '<span class="family-knowledge-chip"><b>' + h(activitiesJournalTypeLabel(entry.entryType)) + '</b> · ' + h(entry.title || "Untitled memory") + '</span>';
+  }).join("");
+  const more = entries.length > 2 ? '<span class="family-knowledge-more">+' + (entries.length - 2) + ' more</span>' : "";
+  return '<div class="family-knowledge-preview" aria-label="Linked family knowledge">' + chips + more + '</div>';
 }
 function activitiesJournalPopulateLinkControls(selectedLinks) {
   selectedLinks = selectedLinks || [];
@@ -3449,9 +3459,9 @@ function renderOdiaFestivalYearbook() {
   $("odiaFestivalYearCount").textContent=items.length+" "+(items.length===1?"festival":"festivals");
   $("odiaFestivalYearList").innerHTML=Object.keys(groups).map(Number).sort(function(a,b){return a-b;}).map(function(month){
     const rows=groups[month].map(function(item){
-      const date=new Date(item.eventDate+"T00:00:00Z"),weekday=date.toLocaleDateString("en-IN",{weekday:"short",timeZone:"UTC"}),target={targetType:"ODIA_FESTIVAL",targetKey:traditionKey(item.name)},linked=activitiesJournalLinkedEntriesForTarget(target,"YEARBOOK");
+      const date=new Date(item.eventDate+"T00:00:00Z"),weekday=date.toLocaleDateString("en-IN",{weekday:"short",timeZone:"UTC"}),target={targetType:"ODIA_FESTIVAL",targetKey:traditionKey(item.name)},linked=activitiesJournalLinkedEntriesForTarget(target,"YEARBOOK"),knowledgePreview=activitiesJournalKnowledgePreview(linked);
       const guideButton='<button class="tiny-button tradition-button" data-action="open-activities-journal-target" data-source-type="ODIA_FESTIVAL" data-source-key="'+h(target.targetKey)+'">'+(linked.length?'✿ Family knowledge ('+linked.length+')':'＋ Add family knowledge')+'</button>';
-      return '<article class="odia-festival-row"><time datetime="'+h(item.eventDate)+'"><strong>'+h(String(date.getUTCDate()).padStart(2,"0"))+'</strong><span>'+h(weekday)+'</span></time><div class="odia-festival-copy"><h4>'+h(odiaKohinoorFestivalName(item))+'</h4><div class="odia-festival-date-pair"><span><small>ENGLISH</small>'+h(formatEnglishDate(item.eventDate))+'</span><span class="kohinoor-date"><small>ଓଡ଼ିଆ କୋହିନୂର / ପଞ୍ଜିକା</small>'+h(formatOdiaFestivalPanjika(item))+'</span></div></div><div class="odia-festival-guide">'+(linked.length?'<span class="guide-saved-chip">Family knowledge linked</span>':'')+guideButton+'</div></article>';
+      return '<article class="odia-festival-row"><time datetime="'+h(item.eventDate)+'"><strong>'+h(String(date.getUTCDate()).padStart(2,"0"))+'</strong><span>'+h(weekday)+'</span></time><div class="odia-festival-copy"><h4>'+h(odiaKohinoorFestivalName(item))+'</h4><div class="odia-festival-date-pair"><span><small>ENGLISH</small>'+h(formatEnglishDate(item.eventDate))+'</span><span class="kohinoor-date"><small>ଓଡ଼ିଆ କୋହିନୂର / ପଞ୍ଜିକା</small>'+h(formatOdiaFestivalPanjika(item))+'</span></div>'+knowledgePreview+'</div><div class="odia-festival-guide">'+(linked.length?'<span class="guide-saved-chip">Family knowledge linked</span>':'')+guideButton+'</div></article>';
     }).join("");
     return '<section class="odia-festival-month"><header><h4>'+odiaFestivalMonthHeading(month,year)+'</h4><span>'+groups[month].length+'</span></header><div>'+rows+'</div></section>';
   }).join("");

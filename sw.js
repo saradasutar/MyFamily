@@ -1,11 +1,11 @@
 "use strict";
 
-const CACHE_NAME = "myfamily-shell-v1076-family-knowledge-organized";
+const CACHE_NAME = "myfamily-shell-v1077-heritage-library";
 const SHELL_ASSETS = [
   "./",
-  "./styles.css?v=1.0.76",
-  "./config.js?v=1.0.76",
-  "./app.js?v=1.0.76",
+  "./styles.css?v=1.0.77",
+  "./config.js?v=1.0.77",
+  "./app.js?v=1.0.77",
   "./quick-expense.html",
   "./quick-expense.css?v=1.0.74",
   "./quick-expense.js?v=1.0.74",

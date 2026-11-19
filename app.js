@@ -2,7 +2,7 @@
 
 const CONFIG = window.FAMILY_DASHBOARD_CONFIG || {};
 const PLACEHOLDER_URL = "PASTE_YOUR_APPS_SCRIPT_WEB_APP_URL_HERE";
-const FRONTEND_VERSION = "1.0.77";
+const FRONTEND_VERSION = "1.0.78";
 const SAVED_USERNAME_KEY = "familyDashboardUsername";
 const SESSION_TOKEN_KEY = "familyDashboardToken";
 const DEFAULT_IDLE_TIMEOUT_MINUTES = 60;
@@ -736,13 +736,22 @@ function fillExpenseSubcategorySelect(select, categoryName, selected) {
   select.value = value;
 }
 
+function resetActivitiesJournalFilters(preset) {
+  if (typeof preset === "string") state.activitiesJournalPreset = preset || "ALL";
+  state.activitiesJournalTargetFilter = null;
+  state.activitiesJournalCategory = "ALL";
+  $("activitiesJournalSearch").value = "";
+  $("activitiesJournalYear").value = "";
+  $("activitiesJournalType").value = "";
+  $("activitiesJournalVisibilityFilter").value = "ALL";
+  $("activitiesJournalSort").value = "UPDATED";
+  $("activitiesJournalCompleteness").value = "ALL";
+}
 function bindNavigation() {
   all(".nav-button").forEach(function (button) {
     button.addEventListener("click", function () {
       if (button.dataset.view === "activities") {
-        state.activitiesJournalPreset = button.dataset.journalPreset || "ALL";
-        state.activitiesJournalTargetFilter = null;
-        state.activitiesJournalCategory = "ALL";
+        resetActivitiesJournalFilters(button.dataset.journalPreset || "ALL");
       }
       goTo(button.dataset.view);
       closeSidebar();
@@ -3238,8 +3247,20 @@ async function renderActivitiesJournal() {
         + (activitiesJournalIsOwner(item) ? '<button type="button" class="tiny-button" data-journal-action="edit" data-id="'+h(item.id)+'" aria-label="Edit '+h(item.title || "family knowledge entry")+'">✎ Edit entry</button>' : "")
         + '</div></article>';
     }).join("");
-    $("activitiesJournalEmpty").classList.toggle("hidden", items.length > 0);
-    if (!items.length) grid.innerHTML = "";
+    const emptyState = $("activitiesJournalEmpty");
+    const emptyAction = emptyState.querySelector("[data-open-activities-journal]");
+    emptyState.classList.toggle("hidden", items.length > 0);
+    if (!items.length) {
+      grid.innerHTML = "";
+      const hasAccessibleEntries = allEntries.length > 0;
+      emptyState.querySelector("h3").textContent = hasAccessibleEntries ? "No entries match these filters" : "No family knowledge entries yet";
+      emptyState.querySelector("p").textContent = hasAccessibleEntries
+        ? "Your accessible entries are still saved. Clear the filters to show the complete Family Knowledge list."
+        : "Add the first family festival, tradition, ritual, custom or celebration memory.";
+      emptyAction.textContent = hasAccessibleEntries ? "Clear filters" : "Add the first memory";
+      if (hasAccessibleEntries) emptyAction.dataset.clearJournalFilters = "true";
+      else delete emptyAction.dataset.clearJournalFilters;
+    }
     return items;
   } catch (error) {
     grid.innerHTML = "";
@@ -3612,7 +3633,16 @@ async function printFamilyHeritageYearbook() {
 }
 function bindActivitiesJournalUi() {
   $("addActivitiesJournal").addEventListener("click", function(){openActivitiesJournalDialog();});
-  $("activitiesJournalEmpty").querySelector("[data-open-activities-journal]").addEventListener("click", function(){openActivitiesJournalDialog();});
+  $("activitiesJournalEmpty").addEventListener("click", function(event) {
+    const button = event.target.closest("[data-open-activities-journal]");
+    if (!button) return;
+    if (button.dataset.clearJournalFilters === "true") {
+      resetActivitiesJournalFilters();
+      renderActivitiesJournal();
+      return;
+    }
+    openActivitiesJournalDialog();
+  });
   $("activitiesJournalPrint").addEventListener("click", printActivitiesJournalList);
   $("activitiesJournalPrintYearbook").addEventListener("click", printFamilyHeritageYearbook);
   $("activitiesJournalCategories").addEventListener("click", function(event) {

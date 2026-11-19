@@ -2,7 +2,7 @@
 
 const CONFIG = window.FAMILY_DASHBOARD_CONFIG || {};
 const PLACEHOLDER_URL = "PASTE_YOUR_APPS_SCRIPT_WEB_APP_URL_HERE";
-const FRONTEND_VERSION = "1.0.80";
+const FRONTEND_VERSION = "1.0.81";
 const SAVED_USERNAME_KEY = "familyDashboardUsername";
 const SESSION_TOKEN_KEY = "familyDashboardToken";
 const DEFAULT_IDLE_TIMEOUT_MINUTES = 60;
@@ -3116,6 +3116,16 @@ function activitiesJournalCanManage(entry) {
   if (activitiesJournalIsOwner(entry)) return true;
   return String(entry.visibility || "FAMILY").toUpperCase() === "FAMILY" && isAdmin();
 }
+function activitiesJournalPermanentDeleteBackendReady() {
+  const raw = String(state.data && state.data.backendVersion || state.backendVersion || "0.0.0");
+  const parts = raw.split(".").map(function(value){return Number(value)||0;});
+  const required = [1,0,54];
+  for (let i=0;i<3;i++) {
+    if ((parts[i]||0) > required[i]) return true;
+    if ((parts[i]||0) < required[i]) return false;
+  }
+  return true;
+}
 function activitiesJournalRevisionBackendReady(versionOverride) {
   const raw = String(versionOverride || state.data && state.data.backendVersion || state.backendVersion || "0.0.0");
   const parts = raw.split(".").map(function(value){return Number(value)||0;});
@@ -3402,6 +3412,7 @@ async function openActivitiesJournalDialog(entryId, target) {
   ["activitiesJournalTitle","activitiesJournalOdiaName","activitiesJournalEventDate","activitiesJournalEntryType","activitiesJournalVisibility","activitiesJournalMeaning","activitiesJournalInstructions","activitiesJournalRituals","activitiesJournalFood","activitiesJournalResponsibilities","activitiesJournalMemories"].forEach(function(id){$(id).disabled = !isOwner;});
   $("activitiesJournalSave").classList.toggle("hidden", !isOwner);
   $("activitiesJournalArchiveEntry").classList.toggle("hidden", !entry || !activitiesJournalIsOwner(entry));
+  $("activitiesJournalPermanentDelete").classList.toggle("hidden", !entry || !activitiesJournalIsOwner(entry) || !activitiesJournalPermanentDeleteBackendReady());
   $("activitiesJournalHistory").classList.toggle("hidden", !entry || !activitiesJournalIsOwner(entry));
   $("activitiesJournalPrintEntry").classList.toggle("hidden", !entry);
   $("activitiesJournalPhotoSection").classList.toggle("hidden", !entry);
@@ -3529,6 +3540,42 @@ async function saveActivitiesJournal(event) {
 
   // Photo listing is independent of saving; don't make a successful memory save wait for it.
   loadActivitiesJournalPhotos(result.id);
+}
+
+async function permanentlyDeleteActivitiesJournalEntry() {
+  const entry = activitiesJournalCurrentEntry();
+  const id = $("activitiesJournalEntryId").value;
+  if (!id || !entry) return;
+  if (!activitiesJournalIsOwner(entry)) {
+    toast("Only the entry owner can permanently delete this Family Knowledge entry.", "error");
+    return;
+  }
+  if (!activitiesJournalPermanentDeleteBackendReady()) {
+    toast("Permanent deletion requires MyFamily backend v1.0.54. Deploy that backend update first.", "error");
+    return;
+  }
+  const title = String(entry.title || "Untitled Family Knowledge entry");
+  if (!window.confirm('Permanently delete "'+title+'" and all its linked calendar records, revisions and photographs from MyFamily?')) return;
+  if (!window.confirm("Final confirmation: this entry and its history will be removed from MyFamily. Its Drive photographs will be moved to Google Drive Trash. This cannot be undone from the dashboard.")) return;
+
+  showLoading("Permanently deleting Family Knowledge…");
+  try {
+    const result = await api("permanentlyDeleteActivitiesJournal",{id:id});
+    if (!result || result.deleted !== true) throw new Error("The backend did not confirm permanent deletion.");
+    state.activitiesJournalEntries = (state.activitiesJournalEntries || []).filter(function(item){return String(item.id) !== String(id);});
+    state.activitiesJournalLinks = (state.activitiesJournalLinks || []).filter(function(link){return String(link.guideId) !== String(id);});
+    state.activitiesJournalPhotos = [];
+    state.activitiesJournalLoadedAt = Date.now();
+    if ($("activitiesJournalHistoryDialog").open) $("activitiesJournalHistoryDialog").close();
+    $("activitiesJournalDialog").close();
+    if (state.view === "activities") renderActivitiesJournal();
+    const files = result.result && Number(result.result.driveFilesMovedToTrash || 0);
+    toast("Family Knowledge permanently removed from MyFamily. "+files+" photo file(s) moved to Google Drive Trash.","success");
+  } catch (error) {
+    if (!handleSessionError(error)) toast(friendlyApiError(error), "error");
+  } finally {
+    hideLoading();
+  }
 }
 
 async function archiveActivitiesJournalEntry() {
@@ -3779,6 +3826,7 @@ function bindActivitiesJournalUi() {
   ["activitiesJournalYear","activitiesJournalType","activitiesJournalVisibilityFilter","activitiesJournalSort","activitiesJournalCompleteness"].forEach(function(id){$(id).addEventListener("change", renderActivitiesJournal);});
   $("activitiesJournalForm").addEventListener("submit", saveActivitiesJournal);
   $("activitiesJournalArchiveEntry").addEventListener("click", archiveActivitiesJournalEntry);
+  $("activitiesJournalPermanentDelete").addEventListener("click", permanentlyDeleteActivitiesJournalEntry);
   $("activitiesJournalHistory").addEventListener("click", openActivitiesJournalHistory);
   $("activitiesJournalHistoryList").addEventListener("click", function(event){
     const button = event.target.closest("[data-journal-revision-restore]");

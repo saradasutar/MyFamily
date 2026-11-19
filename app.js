@@ -2448,8 +2448,8 @@ function renderView(view) {
   if (view === "expenses") { renderMajorPlans(); renderExpenses(); renderRecurringExpenses(); }
   if (view === "income") renderIncome();
   if (view === "targets") renderTargets();
-  if (view === "dates") { renderDates(); loadActivitiesJournalLinks().then(renderDates).catch(function(){}); }
-  if (view === "calendar") { renderCalendar(); loadActivitiesJournalLinks().then(renderCalendar).catch(function(){}); }
+  if (view === "dates") { renderDates(); loadActivitiesJournal().then(renderDates).catch(function(){}); }
+  if (view === "calendar") { renderCalendar(); loadActivitiesJournal().then(renderCalendar).catch(function(){}); }
   if (view === "activities") renderActivitiesJournal();
   if (view === "photos") renderPhotos();
   if (view === "experiences") renderExperiences();

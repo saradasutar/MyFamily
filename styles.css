@@ -2118,3 +2118,24 @@ html { scroll-padding-top:96px; }
 
 /* v1.0.76 · keep Family Knowledge and Activities & Rituals as clear entry points */
 .activities-journal-hero h3{overflow-wrap:anywhere}
+
+
+/* v1.0.77 · Family Knowledge Library categories and documentation status */
+.activities-journal-categories{display:flex;align-items:center;gap:7px;flex-wrap:wrap;margin:4px 0 14px;padding:3px 0}
+.knowledge-category{appearance:none;border:1px solid #e2ddef;border-radius:999px;background:#fff;color:#5e5872;padding:8px 13px;font:750 .74rem/1.2 inherit;cursor:pointer;transition:background .15s,border-color .15s,box-shadow .15s}
+.knowledge-category:hover{border-color:#9c8cda;background:#faf8ff}
+.knowledge-category.active{border-color:#6250bd;background:#f0edff;color:#4937a6;box-shadow:0 3px 10px rgba(72,55,153,.1)}
+.knowledge-completeness{display:grid;gap:5px;margin:2px 0 3px;padding:9px 10px;border:1px solid #eeebf4;border-radius:11px;background:#fbfaff}
+.knowledge-completeness-label{display:flex;justify-content:space-between;gap:10px;color:#777188;font-size:.67rem;font-weight:750}
+.knowledge-completeness-label strong{color:#433b63}
+.knowledge-completeness-track{height:6px;border-radius:99px;background:#e9e5f2;overflow:hidden}
+.knowledge-completeness-track i{display:block;height:100%;border-radius:99px;background:#8b7aca}
+.knowledge-completeness-track i.good{background:#329b80}
+.knowledge-completeness-track i.needs-work{background:#d09a50}
+.knowledge-completeness small{font-size:.65rem;font-weight:800}
+.knowledge-completeness small.good{color:#23816e}
+.knowledge-completeness small.progress{color:#817044}
+.knowledge-completeness small.needs-work{color:#9a6a2e}
+.activities-journal-card-actions{gap:8px;flex-wrap:wrap}
+@media(max-width:760px){.activities-journal-categories{flex-wrap:nowrap;overflow-x:auto;padding:4px 1px 10px;scrollbar-width:thin}.knowledge-category{flex:0 0 auto}.activities-journal-card-actions{justify-content:stretch}.activities-journal-card-actions button{flex:1 1 auto}}
+@media print{.activities-journal-categories{display:none!important}}

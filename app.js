@@ -2,7 +2,7 @@
 
 const CONFIG = window.FAMILY_DASHBOARD_CONFIG || {};
 const PLACEHOLDER_URL = "PASTE_YOUR_APPS_SCRIPT_WEB_APP_URL_HERE";
-const FRONTEND_VERSION = "1.0.78";
+const FRONTEND_VERSION = "1.0.79";
 const SAVED_USERNAME_KEY = "familyDashboardUsername";
 const SESSION_TOKEN_KEY = "familyDashboardToken";
 const DEFAULT_IDLE_TIMEOUT_MINUTES = 60;
@@ -3116,6 +3116,106 @@ function activitiesJournalCanManage(entry) {
   if (activitiesJournalIsOwner(entry)) return true;
   return String(entry.visibility || "FAMILY").toUpperCase() === "FAMILY" && isAdmin();
 }
+function activitiesJournalRevisionBackendReady() {
+  const raw = String(state.data && state.data.backendVersion || state.backendVersion || "0.0.0");
+  const parts = raw.split(".").map(function(value){return Number(value)||0;});
+  const required = [1,0,53];
+  for (let i=0;i<3;i++) {
+    if ((parts[i]||0) > required[i]) return true;
+    if ((parts[i]||0) < required[i]) return false;
+  }
+  return true;
+}
+function activitiesJournalRevisionDateLabel(value) {
+  const date = new Date(value || "");
+  return Number.isNaN(date.getTime()) ? "Date unavailable" : date.toLocaleString("en-IN",{day:"2-digit",month:"short",year:"numeric",hour:"2-digit",minute:"2-digit"});
+}
+function renderActivitiesJournalRevisionHistory(revisions) {
+  const host = $("activitiesJournalHistoryList");
+  if (!Array.isArray(revisions) || !revisions.length) {
+    host.innerHTML = '<div class="activities-journal-history-empty"><strong>No previous revisions</strong><p>After the first edit is saved, the previous version will appear here.</p></div>';
+    return;
+  }
+  host.innerHTML = revisions.map(function(revision) {
+    const snapshot = revision.snapshot || {};
+    const fields = [
+      ["Significance and history",snapshot.meaning],
+      ["Preparations and materials",snapshot.instructions],
+      ["Rituals and activities",snapshot.rituals],
+      ["Food and recipes",snapshot.food],
+      ["People and responsibilities",snapshot.responsibilities],
+      ["Memories and lessons",snapshot.memories]
+    ].filter(function(field){return String(field[1]||"").trim();});
+    const preview = fields.map(function(field) {
+      return '<div class="activities-journal-history-field"><strong>'+h(field[0])+'</strong><p>'+h(field[1])+'</p></div>';
+    }).join("");
+    const meta = [activitiesJournalTypeLabel(snapshot.entryType),snapshot.eventDate ? formatDate(snapshot.eventDate) : "Date not set",String(snapshot.visibility||"FAMILY").toUpperCase()==="PRIVATE" ? "Private" : "Family"].join(" · ");
+    return '<article class="activities-journal-history-item">'
+      + '<div class="activities-journal-history-item-head"><strong>Revision '+h(revision.revisionNumber)+'</strong><time>'+h(activitiesJournalRevisionDateLabel(revision.createdAt))+'</time></div>'
+      + '<h4>'+h(snapshot.title||"Untitled memory")+'</h4><small>'+h(meta)+'</small>'
+      + '<details><summary>Preview saved version · '+(revision.snapshot && Array.isArray(revision.snapshot.links) ? revision.snapshot.links.length : 0)+' calendar links</summary>'
+      + (preview || '<p class="activities-journal-history-no-detail">No written sections were present in this version.</p>')
+      + '</details>'
+      + '<button type="button" class="secondary-button" data-journal-revision-restore="'+h(revision.id)+'" data-revision-number="'+h(revision.revisionNumber)+'">Restore this version</button>'
+      + '</article>';
+  }).join("");
+}
+async function openActivitiesJournalHistory() {
+  const entryId = $("activitiesJournalEntryId").value;
+  if (!entryId || !activitiesJournalRevisionBackendReady()) {
+    toast("Revision history requires MyFamily backend v1.0.53. Install and deploy the revision-history backend update first.", "error");
+    return;
+  }
+  showLoading("Loading version history…");
+  try {
+    const result = await api("listActivitiesJournalRevisions",{id:entryId});
+    renderActivitiesJournalRevisionHistory(result && result.revisions || []);
+    $("activitiesJournalHistoryDialog").showModal();
+  } catch (error) {
+    if (!handleSessionError(error)) toast(friendlyApiError(error),"error");
+  } finally {
+    hideLoading();
+  }
+}
+async function restoreActivitiesJournalRevision(revisionId, revisionNumber) {
+  const entryId = $("activitiesJournalEntryId").value;
+  if (!entryId || !revisionId) return;
+  if (!window.confirm("Restore revision "+revisionNumber+"? The current version will first be saved as a new safety revision. Photos will remain unchanged.")) return;
+  showLoading("Restoring family knowledge version…");
+  try {
+    await api("restoreActivitiesJournalRevision",{id:entryId,revisionId:revisionId});
+    await loadActivitiesJournal(true);
+    const restored = (state.activitiesJournalEntries||[]).find(function(item){return String(item.id)===String(entryId);});
+    if (!restored) throw new Error("The restored entry could not be reloaded. Reopen Family Knowledge to refresh it.");
+    $("activitiesJournalEntryId").value = restored.id;
+    $("activitiesJournalTitle").value = restored.title || "";
+    $("activitiesJournalOdiaName").value = restored.odiaName || "";
+    $("activitiesJournalEventDate").value = restored.eventDate || "";
+    $("activitiesJournalEntryType").value = restored.entryType || "TRADITION";
+    $("activitiesJournalVisibility").value = restored.visibility || "FAMILY";
+    $("activitiesJournalMeaning").value = restored.meaning || "";
+    $("activitiesJournalInstructions").value = restored.instructions || "";
+    $("activitiesJournalRituals").value = restored.rituals || "";
+    $("activitiesJournalFood").value = restored.food || "";
+    $("activitiesJournalResponsibilities").value = restored.responsibilities || "";
+    $("activitiesJournalMemories").value = restored.memories || "";
+    const links = activitiesJournalLinksFor(restored.id);
+    activitiesJournalPopulateLinkControls(links);
+    $("activitiesJournalShowInCalendar").checked = !links.length || links.some(function(link){return link.showInCalendar !== false;});
+    $("activitiesJournalShowInYearbook").checked = !links.length || links.some(function(link){return link.showInYearbook !== false;});
+    const isPrivate = String(restored.visibility||"FAMILY").toUpperCase()==="PRIVATE";
+    $("activitiesJournalLinksSection").classList.toggle("hidden",isPrivate);
+    $("activitiesJournalLinksPrivateNote").classList.toggle("hidden",!isPrivate);
+    $("activitiesJournalHistoryDialog").close();
+    if (state.view === "activities") renderActivitiesJournal();
+    toast("Revision restored. The version replaced by this restore is also saved in history.","success");
+  } catch (error) {
+    if (!handleSessionError(error)) toast(friendlyApiError(error),"error");
+  } finally {
+    hideLoading();
+  }
+}
+
 function activitiesJournalCurrentEntry() {
   return (state.activitiesJournalEntries || []).find(function(item){return item.id === state.activitiesJournalEntryId;}) || null;
 }
@@ -3302,6 +3402,7 @@ async function openActivitiesJournalDialog(entryId, target) {
   ["activitiesJournalTitle","activitiesJournalOdiaName","activitiesJournalEventDate","activitiesJournalEntryType","activitiesJournalVisibility","activitiesJournalMeaning","activitiesJournalInstructions","activitiesJournalRituals","activitiesJournalFood","activitiesJournalResponsibilities","activitiesJournalMemories"].forEach(function(id){$(id).disabled = !isOwner;});
   $("activitiesJournalSave").classList.toggle("hidden", !isOwner);
   $("activitiesJournalArchiveEntry").classList.toggle("hidden", !entry || !activitiesJournalIsOwner(entry));
+  $("activitiesJournalHistory").classList.toggle("hidden", !entry || !activitiesJournalIsOwner(entry));
   $("activitiesJournalPrintEntry").classList.toggle("hidden", !entry);
   $("activitiesJournalPhotoSection").classList.toggle("hidden", !entry);
   ["activitiesJournalFestivalLinks","activitiesJournalImportantDateLinks","activitiesJournalShowInCalendar","activitiesJournalShowInYearbook"].forEach(function(id){$(id).disabled = !isOwner;});
@@ -3349,6 +3450,20 @@ async function saveActivitiesJournal(event) {
   if (guidance) guidance.classList.remove("is-error");
 
   showLoading(existingId ? "Saving family memory…" : "Preserving your family memory…");
+  if (existingId) {
+    if (!activitiesJournalRevisionBackendReady()) {
+      hideLoading();
+      toast("This edit is paused until the revision-history backend v1.0.53 is deployed. No changes were made.", "error");
+      return;
+    }
+    try {
+      await api("saveActivitiesJournalRevisionSnapshot",{id:existingId});
+    } catch (snapshotError) {
+      hideLoading();
+      if (!handleSessionError(snapshotError)) toast("The previous version could not be archived, so this edit was not saved: "+friendlyApiError(snapshotError), "error");
+      return;
+    }
+  }
   let result;
   try {
     result = await api("saveActivitiesJournal", payload);
@@ -3664,6 +3779,11 @@ function bindActivitiesJournalUi() {
   ["activitiesJournalYear","activitiesJournalType","activitiesJournalVisibilityFilter","activitiesJournalSort","activitiesJournalCompleteness"].forEach(function(id){$(id).addEventListener("change", renderActivitiesJournal);});
   $("activitiesJournalForm").addEventListener("submit", saveActivitiesJournal);
   $("activitiesJournalArchiveEntry").addEventListener("click", archiveActivitiesJournalEntry);
+  $("activitiesJournalHistory").addEventListener("click", openActivitiesJournalHistory);
+  $("activitiesJournalHistoryList").addEventListener("click", function(event){
+    const button = event.target.closest("[data-journal-revision-restore]");
+    if (button) restoreActivitiesJournalRevision(button.dataset.journalRevisionRestore,button.dataset.revisionNumber);
+  });
   $("activitiesJournalPrintEntry").addEventListener("click", function(){const entry=activitiesJournalCurrentEntry();if(entry)printActivitiesJournalItems([entry]);});
   $("activitiesJournalPhotoFile").addEventListener("change", previewActivitiesJournalPhoto);
   $("activitiesJournalUploadPhoto").addEventListener("click", uploadActivitiesJournalPhoto);

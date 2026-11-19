@@ -2114,3 +2114,7 @@ html { scroll-padding-top:96px; }
 .activities-journal-save-guidance{margin:0 20px 10px;padding:9px 12px;border:1px solid #e5e0f2;border-radius:10px;background:#f8f6ff;color:#625a7d;font-size:.76rem;line-height:1.45}
 .activities-journal-save-guidance.is-error{border-color:#d98a96;background:#fff5f6;color:#9b3142}
 @media(max-width:760px){.activities-journal-card-actions{justify-content:stretch}.activities-journal-card-actions button{flex:1 1 auto}.activities-journal-save-guidance{margin:0 12px 9px}}
+
+
+/* v1.0.76 · keep Family Knowledge and Activities & Rituals as clear entry points */
+.activities-journal-hero h3{overflow-wrap:anywhere}

@@ -3116,8 +3116,8 @@ function activitiesJournalCanManage(entry) {
   if (activitiesJournalIsOwner(entry)) return true;
   return String(entry.visibility || "FAMILY").toUpperCase() === "FAMILY" && isAdmin();
 }
-function activitiesJournalRevisionBackendReady() {
-  const raw = String(state.data && state.data.backendVersion || state.backendVersion || "0.0.0");
+function activitiesJournalRevisionBackendReady(versionOverride) {
+  const raw = String(versionOverride || state.data && state.data.backendVersion || state.backendVersion || "0.0.0");
   const parts = raw.split(".").map(function(value){return Number(value)||0;});
   const required = [1,0,53];
   for (let i=0;i<3;i++) {
@@ -4009,7 +4009,7 @@ function renderAdmin() {
 
 function renderAdminHealth() {
   if (!isAdmin() || !state.data) return;
-  const backend=String(state.data.backendVersion||state.backendVersion||""),versionsMatch=backend==="1.0.50";
+  const backend=String(state.data.backendVersion||state.backendVersion||""),versionsMatch=activitiesJournalRevisionBackendReady(backend);
   const members=state.data.adminMembers||[],activeMembers=members.filter(function(item){return item.active!==false;}),verifiedEmails=activeMembers.filter(function(item){return !!item.emailVerifiedAt;}).length;
   const links=state.data.quickExpenseLinks||[],now=Date.now(),activeLinks=links.filter(function(item){const start=item.validFrom?new Date(item.validFrom).getTime():0,end=item.validUntil?new Date(item.validUntil).getTime():Infinity;return item.active!==false&&start<=now&&end>=now;}).length;
   const backup=state.data.backupStatus||{},storage=state.data.driveStorage||{},settings=state.data.settings||{},calendarReady=!!(settings.odiaFestivalLastRefreshAt||(state.data.odiaFestivals||[]).length);
@@ -4042,7 +4042,7 @@ async function testSystemConnections() {
     const result=await api("version",{}),liveVersion=String(result&&result.version||"");
     state.backendVersion=liveVersion||state.backendVersion;
     const storage=state.data.driveStorage||{},backup=state.data.backupStatus||{},settings=state.data.settings||{};
-    const calendarReady=!!(settings.odiaFestivalLastRefreshAt||(state.data.odiaFestivals||[]).length),backendReady=liveVersion==="1.0.50",elapsed=Math.max(1,Math.round(performance.now()-started));
+    const calendarReady=!!(settings.odiaFestivalLastRefreshAt||(state.data.odiaFestivals||[]).length),backendReady=activitiesJournalRevisionBackendReady(liveVersion),elapsed=Math.max(1,Math.round(performance.now()-started));
     const checks=[backendReady?"Backend connected":"Backend version needs review",storage.configured?"Drive ready":"Drive setup needed",calendarReady?"Odia calendar ready":"Odia calendar refresh needed",backup.automatic?"Automatic backup ready":"Automatic backup needs setup"];
     details.textContent=checks.join(" · ")+" · Response "+elapsed+" ms";
     details.className="health-test-details "+(backendReady&&storage.configured&&calendarReady?"success":"attention");

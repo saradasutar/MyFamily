@@ -2,7 +2,7 @@
 
 const CONFIG = window.FAMILY_DASHBOARD_CONFIG || {};
 const PLACEHOLDER_URL = "PASTE_YOUR_APPS_SCRIPT_WEB_APP_URL_HERE";
-const FRONTEND_VERSION = "1.0.74";
+const FRONTEND_VERSION = "1.0.75";
 const SAVED_USERNAME_KEY = "familyDashboardUsername";
 const SESSION_TOKEN_KEY = "familyDashboardToken";
 const DEFAULT_IDLE_TIMEOUT_MINUTES = 60;
@@ -56,6 +56,7 @@ const state = {
   activitiesJournalEntryId: "",
   pendingActivitiesJournalPhoto: null,
   activitiesJournalLoadPromise: null,
+  activitiesJournalLoadedAt: 0,
   smartPasteResult: null,
   lastToastText: "",
   lastToastAt: 0
@@ -64,7 +65,7 @@ const pendingRequests = new Map();
 let refreshPromise = null;
 const viewTitles = {
   home: "Family overview", expenses: "Expenditure", income: "Income", targets: "Family targets",
-  dates: "Reminders", calendar: "Family calendar", activities: "Activities & Rituals", diary: "Family diary", photos: "Family memories",
+  dates: "Reminders", calendar: "Family calendar", activities: "Family Knowledge", diary: "Family diary", photos: "Family memories",
   experiences: "Family experiences", family: "Family tree", admin: "Administration"
 };
 const viewModules = { expenses: "EXPENSES", income: "INCOME", targets: "TARGETS", dates: "DATES", calendar: "CALENDAR", activities: "CALENDAR", diary: "DIARY", photos: "PHOTOS", experiences: "EXPERIENCES" };
@@ -3073,16 +3074,24 @@ function activitiesJournalCanManage(entry) {
 function activitiesJournalCurrentEntry() {
   return (state.activitiesJournalEntries || []).find(function(item){return item.id === state.activitiesJournalEntryId;}) || null;
 }
-async function loadActivitiesJournal() {
+async function loadActivitiesJournal(forceRefresh) {
   if (!state.data || !hasModuleAccess("CALENDAR")) return [];
+  const now = Date.now();
+  if (!forceRefresh && state.activitiesJournalLoadedAt && now - state.activitiesJournalLoadedAt < 20000) {
+    return state.activitiesJournalEntries || [];
+  }
   if (state.activitiesJournalLoadPromise) return state.activitiesJournalLoadPromise;
   state.activitiesJournalLoadPromise = (async function() {
-    const response = await api("listActivitiesJournal", {visibility:"ALL"});
-    // Calendar-linked legacy Guides are now normal journal entries; keep every accessible row.
+    // Fetch the entries and their calendar catalogue together; neither request depends on the other.
+    const results = await Promise.all([
+      api("listActivitiesJournal", {visibility:"ALL"}),
+      api("getActivitiesJournalLinks", {})
+    ]);
+    const response = results[0], linkResponse = results[1];
     state.activitiesJournalEntries = response && Array.isArray(response.entries) ? response.entries : [];
-    const linkResponse = await api("getActivitiesJournalLinks", {});
     state.activitiesJournalLinks = Array.isArray(linkResponse && linkResponse.links) ? linkResponse.links : [];
     state.activitiesJournalCatalog = linkResponse && linkResponse.catalog ? linkResponse.catalog : {importantDates:[],festivals:[]};
+    state.activitiesJournalLoadedAt = Date.now();
     return state.activitiesJournalEntries;
   })();
   try { return await state.activitiesJournalLoadPromise; }
@@ -3129,7 +3138,9 @@ async function renderActivitiesJournal() {
         + '<p class="activities-journal-excerpt">'+h(summary).slice(0,230)+(summary.length>230?'…':'')+'</p>'
         + (linkedNames.length ? '<div class="activities-journal-linked-label">↗ '+h(linkedNames.slice(0,3).join(" · "))+(linkedNames.length>3?' +'+(linkedNames.length-3)+' more':'')+'</div>' : "")
         + '<div class="activities-journal-card-meta"><span>'+h(item.eventDate?formatDate(item.eventDate):"Date not recorded")+'</span><span>Added by '+h(creator)+'</span></div>'
-        + '<div class="activities-journal-card-actions"><button type="button" class="secondary-button" data-journal-action="open" data-id="'+h(item.id)+'">Read memory</button></div>'
+        + '<div class="activities-journal-card-actions"><button type="button" class="secondary-button" data-journal-action="open" data-id="'+h(item.id)+'">Read memory</button>'
+        + (activitiesJournalIsOwner(item) ? '<button type="button" class="tiny-button" data-journal-action="edit" data-id="'+h(item.id)+'" aria-label="Edit '+h(item.title || "family knowledge entry")+'">✎ Edit entry</button>' : "")
+        + '</div>'
         + '</article>';
     }).join("");
     $("activitiesJournalEmpty").classList.toggle("hidden", items.length > 0);
@@ -3190,7 +3201,7 @@ async function openActivitiesJournalDialog(entryId, target) {
   state.activitiesJournalPhotos = [];
   renderActivitiesJournalPhotos();
   openDialog("activitiesJournalDialog");
-  if (entry) await loadActivitiesJournalPhotos(entry.id);
+  if (entry) loadActivitiesJournalPhotos(entry.id);
 }
 async function saveActivitiesJournal(event) {
   event.preventDefault();
@@ -3209,38 +3220,95 @@ async function saveActivitiesJournal(event) {
     responsibilities: $("activitiesJournalResponsibilities").value.trim(),
     memories: $("activitiesJournalMemories").value.trim()
   };
+  const guidance = $("activitiesJournalSaveGuidance");
+  const hasKnowledgeDetail = [payload.meaning,payload.instructions,payload.rituals,payload.food,payload.responsibilities,payload.memories].some(function(value){return !!value;});
+  if (!hasKnowledgeDetail) {
+    if (guidance) guidance.classList.add("is-error");
+    toast("Please add at least one detail in significance, preparations, rituals, food, responsibilities or memories before saving.", "error");
+    $("activitiesJournalMeaning").focus();
+    return;
+  }
+  if (guidance) guidance.classList.remove("is-error");
+
   showLoading(existingId ? "Saving family memory…" : "Preserving your family memory…");
+  let result;
   try {
-    const result = await api("saveActivitiesJournal", payload);
-    state.activitiesJournalEntryId = result.id;
-    $("activitiesJournalEntryId").value = result.id;
-    await loadActivitiesJournal();
-    const saved = (state.activitiesJournalEntries || []).find(function(item){return item.id === result.id;});
-    if (saved) {
-      // Always replace the relation set. Private entries send an empty list,
-      // which removes any previously shared calendar/yearbook links.
-      var linksToSave = String(saved.visibility || "FAMILY").toUpperCase() === "FAMILY" ? activitiesJournalSelectedLinks() : [];
-      await api("saveActivitiesJournalLinks", {guideId: result.id, links: linksToSave});
-      await loadActivitiesJournalLinks();
-    }
-    $("activitiesJournalArchiveEntry").classList.toggle("hidden", !saved || !activitiesJournalIsOwner(saved));
-    $("activitiesJournalPrintEntry").classList.remove("hidden");
-    $("activitiesJournalPhotoSection").classList.remove("hidden");
-    $("activitiesJournalPhotoUploader").classList.toggle("hidden", !saved || (String(saved.visibility || "FAMILY").toUpperCase() === "PRIVATE" && !activitiesJournalIsOwner(saved)));
-    await loadActivitiesJournalPhotos(result.id);
-    toast(existingId ? "Family memory updated." : "Family memory saved. You can now add photographs.", "success");
+    result = await api("saveActivitiesJournal", payload);
   } catch (error) {
+    hideLoading();
     if (!handleSessionError(error)) toast(friendlyApiError(error), "error");
-  } finally { hideLoading(); }
+    return;
+  }
+  hideLoading();
+  if (!result || !result.id) {
+    toast("The backend did not return a saved family-memory ID. Please check the backend execution log.", "error");
+    return;
+  }
+
+  // Update the central Family Knowledge list immediately after the primary save succeeds.
+  const previous = (state.activitiesJournalEntries || []).find(function(item){return String(item.id) === String(result.id);});
+  const userId = state.data && state.data.user && state.data.user.id || "";
+  const saved = Object.assign({}, previous || {}, payload, {
+    id: result.id,
+    visibility: String(result.visibility || payload.visibility || "FAMILY").toUpperCase(),
+    ownerId: previous && (previous.ownerId || previous.createdBy) || userId,
+    createdBy: previous && previous.createdBy || userId,
+    active: true,
+    updatedAt: new Date().toISOString()
+  });
+  const existingIndex = (state.activitiesJournalEntries || []).findIndex(function(item){return String(item.id) === String(result.id);});
+  if (existingIndex >= 0) state.activitiesJournalEntries[existingIndex] = saved;
+  else state.activitiesJournalEntries.unshift(saved);
+  state.activitiesJournalLoadedAt = Date.now();
+  state.activitiesJournalEntryId = result.id;
+  $("activitiesJournalEntryId").value = result.id;
+  $("activitiesJournalArchiveEntry").classList.toggle("hidden", !activitiesJournalIsOwner(saved));
+  $("activitiesJournalPrintEntry").classList.remove("hidden");
+  $("activitiesJournalPhotoSection").classList.remove("hidden");
+  $("activitiesJournalPhotoUploader").classList.toggle("hidden", !activitiesJournalIsOwner(saved));
+  state.activitiesJournalPhotos = [];
+  renderActivitiesJournalPhotos();
+
+  // The journal entry is saved at this point. Calendar-link failure must not be reported as a failed entry save.
+  toast(existingId ? "Family knowledge updated." : "Family knowledge saved. You can now add photographs.", "success");
+  const linksToSave = saved.visibility === "FAMILY" ? activitiesJournalSelectedLinks() : [];
+  try {
+    await api("saveActivitiesJournalLinks", {guideId: result.id, links: linksToSave});
+    const oldLinks = (state.activitiesJournalLinks || []).filter(function(link){return String(link.guideId) !== String(result.id);});
+    const catalog = state.activitiesJournalCatalog || {importantDates:[],festivals:[]};
+    const newLinks = linksToSave.map(function(link) {
+      let label = "";
+      if (link.targetType === "ODIA_FESTIVAL") {
+        const item = (catalog.festivals || []).find(function(x){return String(x.targetKey) === String(link.targetKey);});
+        label = item ? item.label : link.targetKey;
+      } else {
+        const item = (catalog.importantDates || []).find(function(x){return String(x.targetId) === String(link.targetId);});
+        label = item ? item.label : "Important date";
+      }
+      return Object.assign({guideId:String(result.id),label:label},link);
+    });
+    state.activitiesJournalLinks = oldLinks.concat(newLinks);
+    if (state.view === "activities") renderActivitiesJournal();
+    if (state.view === "calendar") renderCalendar();
+  } catch (linkError) {
+    toast("The family memory was saved, but its calendar connections were not updated: " + friendlyApiError(linkError), "error");
+  }
+
+  // Photo listing is independent of saving; don't make a successful memory save wait for it.
+  loadActivitiesJournalPhotos(result.id);
 }
+
 async function archiveActivitiesJournalEntry() {
   const id = $("activitiesJournalEntryId").value;
   if (!id || !window.confirm("Archive this memory? It will be hidden from the active journal, not permanently erased.")) return;
   showLoading("Archiving family memory…");
   try {
     await api("deleteActivitiesJournal", {id:id});
+    state.activitiesJournalEntries = (state.activitiesJournalEntries || []).filter(function(item){return String(item.id) !== String(id);});
+    state.activitiesJournalLinks = (state.activitiesJournalLinks || []).filter(function(link){return String(link.guideId) !== String(id);});
+    state.activitiesJournalLoadedAt = Date.now();
     $("activitiesJournalDialog").close();
-    await loadActivitiesJournal();
+    if (state.view === "activities") renderActivitiesJournal();
     toast("Memory archived. Its content and photographs have been retained.", "success");
   } catch (error) {
     if (!handleSessionError(error)) toast(friendlyApiError(error), "error");
@@ -3406,7 +3474,7 @@ function bindActivitiesJournalUi() {
   $("activitiesJournalUploadPhoto").addEventListener("click", uploadActivitiesJournalPhoto);
   $("activitiesJournalGrid").addEventListener("click", function(event) {
     const button = event.target.closest("[data-journal-action]");
-    if (button && button.dataset.journalAction === "open") openActivitiesJournalDialog(button.dataset.id);
+    if (button && (button.dataset.journalAction === "open" || button.dataset.journalAction === "edit")) openActivitiesJournalDialog(button.dataset.id);
   });
   $("activitiesJournalPhotoGallery").addEventListener("click", function(event) {
     const button = event.target.closest("[data-journal-photo-action]");

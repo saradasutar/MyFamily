@@ -1,11 +1,11 @@
 "use strict";
 
-const CACHE_NAME = "myfamily-shell-v1074-knowledge-preview";
+const CACHE_NAME = "myfamily-shell-v1075-family-knowledge";
 const SHELL_ASSETS = [
   "./",
-  "./styles.css?v=1.0.74",
-  "./config.js?v=1.0.74",
-  "./app.js?v=1.0.74",
+  "./styles.css?v=1.0.75",
+  "./config.js?v=1.0.75",
+  "./app.js?v=1.0.75",
   "./quick-expense.html",
   "./quick-expense.css?v=1.0.74",
   "./quick-expense.js?v=1.0.74",

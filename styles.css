@@ -2122,7 +2122,7 @@ html { scroll-padding-top:96px; }
 
 /* v1.0.77 · Family Knowledge Library categories and documentation status */
 .activities-journal-categories{display:flex;align-items:center;gap:7px;flex-wrap:wrap;margin:4px 0 14px;padding:3px 0}
-.knowledge-category{appearance:none;border:1px solid #e2ddef;border-radius:999px;background:#fff;color:#5e5872;padding:8px 13px;font:750 .74rem/1.2 inherit;cursor:pointer;transition:background .15s,border-color .15s,box-shadow .15s}
+.knowledge-category{appearance:none;border:1px solid #e2ddef;border-radius:999px;background:#fff;color:#5e5872;padding:8px 13px;font-size:.74rem;font-weight:750;line-height:1.2;font-family:inherit;cursor:pointer;transition:background .15s,border-color .15s,box-shadow .15s}
 .knowledge-category:hover{border-color:#9c8cda;background:#faf8ff}
 .knowledge-category.active{border-color:#6250bd;background:#f0edff;color:#4937a6;box-shadow:0 3px 10px rgba(72,55,153,.1)}
 .knowledge-completeness{display:grid;gap:5px;margin:2px 0 3px;padding:9px 10px;border:1px solid #eeebf4;border-radius:11px;background:#fbfaff}

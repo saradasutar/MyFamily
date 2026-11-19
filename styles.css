@@ -2098,3 +2098,12 @@ html { scroll-padding-top:96px; }
  .activities-journal-link-options{display:grid;gap:8px}
  .activities-journal-linked-filter{align-items:flex-start;flex-direction:column}
 }
+
+/* v1.0.74 · show linked family customs and rituals on dates and festival yearbook rows */
+.family-knowledge-preview{display:flex;flex-wrap:wrap;align-items:center;gap:5px;margin:7px 0 1px;min-width:0}
+.family-knowledge-chip{display:inline-block;max-width:100%;padding:4px 7px;border:1px solid #dfe8e3;border-radius:8px;color:#486459;background:#f2faf5;font-size:.61rem;font-weight:650;line-height:1.35;overflow-wrap:anywhere}
+.family-knowledge-chip b{color:#267565;font-weight:850}
+.family-knowledge-more{color:#6d7481;font-size:.6rem;font-weight:800;white-space:nowrap}
+.odia-festival-copy .family-knowledge-preview{margin-top:7px}
+.date-card-copy .family-knowledge-preview{margin:7px 0}
+@media(max-width:540px){.family-knowledge-chip{font-size:.59rem}.date-card .family-knowledge-preview{gap:4px}}

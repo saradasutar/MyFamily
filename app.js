@@ -742,6 +742,7 @@ function bindNavigation() {
       if (button.dataset.view === "activities") {
         state.activitiesJournalPreset = button.dataset.journalPreset || "ALL";
         state.activitiesJournalTargetFilter = null;
+        state.activitiesJournalCategory = "ALL";
       }
       goTo(button.dataset.view);
       closeSidebar();
@@ -3146,7 +3147,7 @@ function activitiesJournalCompleteness(entry) {
 }
 function activitiesJournalUpdatedLabel(entry) {
   const raw = String(entry && (entry.updatedAt || entry.createdAt) || "").slice(0,10);
-  if (!/^\\d{4}-\\d{2}-\\d{2}$/.test(raw)) return "Update date unavailable";
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(raw)) return "Update date unavailable";
   return "Updated " + formatDate(raw);
 }
 function activitiesJournalSortTimestamp(entry) {
@@ -3594,7 +3595,7 @@ async function printFamilyHeritageYearbook() {
         ["People and responsibilities",item.responsibilities],
         ["Memories and lessons",item.memories]
       ].filter(function(pair){return String(pair[1]||"").trim();}).map(function(pair){
-        return '<section class="book-section"><h3>'+h(pair[0])+'</h3><p>'+h(pair[1]).replace(/\\n/g,"<br>")+'</p></section>';
+        return '<section class="book-section"><h3>'+h(pair[0])+'</h3><p>'+h(pair[1]).replace(/\n/g,"<br>")+'</p></section>';
       }).join("");
       const linked = activitiesJournalLinksFor(item.id).map(function(link){return link.label;});
       return '<article class="book-entry"><header><span>'+h(label)+'</span><h2>'+h(item.title||"Untitled family memory")+'</h2>'+(item.odiaName?'<h3>'+h(item.odiaName)+'</h3>':"")+'<small>Event date: '+h(item.eventDate?formatDate(item.eventDate):"Not recorded")+' · Preserved by '+h(memberName(item.ownerId||item.createdBy))+' · '+h(activitiesJournalUpdatedLabel(item))+'</small>'+(linked.length?'<p class="book-links">Related dates and festivals: '+h(linked.join(" · "))+'</p>':"")+'</header>'+fields+'</article>';

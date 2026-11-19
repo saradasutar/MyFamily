@@ -3838,7 +3838,7 @@ async function printFamilyHeritageYearbook() {
           ["People and responsibilities",item.responsibilities],
           ["Memories and lessons",item.memories]
         ].filter(function(pair){return String(pair[1]||"").trim();}).map(function(pair){
-          return '<section class="book-section"><h3>'+h(pair[0])+'</h3><p>'+h(pair[1]).replace(/\\n/g,"<br>")+'</p></section>';
+          return '<section class="book-section"><h3>'+h(pair[0])+'</h3><p>'+h(pair[1]).replace(/\n/g,"<br>")+'</p></section>';
         }).join("");
         const linked = activitiesJournalLinksFor(item.id).map(function(link){return link.label;});
         const photos=(photosByEntry[String(item.id)]||[]).map(function(photo,index){

@@ -2,7 +2,7 @@
 
 const CONFIG = window.FAMILY_DASHBOARD_CONFIG || {};
 const PLACEHOLDER_URL = "PASTE_YOUR_APPS_SCRIPT_WEB_APP_URL_HERE";
-const FRONTEND_VERSION = "1.0.75";
+const FRONTEND_VERSION = "1.0.76";
 const SAVED_USERNAME_KEY = "familyDashboardUsername";
 const SESSION_TOKEN_KEY = "familyDashboardToken";
 const DEFAULT_IDLE_TIMEOUT_MINUTES = 60;
@@ -53,6 +53,7 @@ const state = {
   activitiesJournalLinks: [],
   activitiesJournalCatalog: {importantDates:[],festivals:[]},
   activitiesJournalTargetFilter: null,
+  activitiesJournalPreset: "ALL",
   activitiesJournalEntryId: "",
   pendingActivitiesJournalPhoto: null,
   activitiesJournalLoadPromise: null,
@@ -736,7 +737,14 @@ function fillExpenseSubcategorySelect(select, categoryName, selected) {
 
 function bindNavigation() {
   all(".nav-button").forEach(function (button) {
-    button.addEventListener("click", function () { goTo(button.dataset.view); closeSidebar(); });
+    button.addEventListener("click", function () {
+      if (button.dataset.view === "activities") {
+        state.activitiesJournalPreset = button.dataset.journalPreset || "ALL";
+        state.activitiesJournalTargetFilter = null;
+      }
+      goTo(button.dataset.view);
+      closeSidebar();
+    });
   });
   all("[data-go]").forEach(function (button) { button.addEventListener("click", function () { goTo(button.dataset.go); }); });
   $("menuButton").addEventListener("click", function () { $("sidebar").classList.toggle("open"); $("sidebarShade").classList.toggle("show"); });
@@ -755,10 +763,17 @@ function goTo(view) {
   if (viewModules[view] && !hasModuleAccess(viewModules[view])) return toast("Your administrator has not enabled this section for your account.", "error");
   state.view = view;
   all(".view").forEach(function (el) { const active = el.id === "view-" + view; el.classList.toggle("active", active); el.setAttribute("aria-hidden", active ? "false" : "true"); });
-  all(".nav-button").forEach(function (el) { const active = el.dataset.view === view; el.classList.toggle("active", active); if (active) el.setAttribute("aria-current", "page"); else el.removeAttribute("aria-current"); });
+  all(".nav-button").forEach(function (el) {
+    const sameView = el.dataset.view === view;
+    const sameJournalPreset = view !== "activities" || (el.dataset.journalPreset || "ALL") === (state.activitiesJournalPreset || "ALL");
+    const active = sameView && sameJournalPreset;
+    el.classList.toggle("active", active);
+    if (active) el.setAttribute("aria-current", "page"); else el.removeAttribute("aria-current");
+  });
   const activeGroupedNav = document.querySelector('.grouped-main-nav .nav-button[data-view="'+CSS.escape(view)+'"]');
   if (activeGroupedNav && activeGroupedNav.closest("details")) activeGroupedNav.closest("details").open = true;
-  $("viewTitle").textContent = viewTitles[view] || "Family Dashboard";
+  $("viewTitle").textContent = view === "activities" && state.activitiesJournalPreset === "ACTIVITIES"
+    ? "Activities & Rituals" : (viewTitles[view] || "Family Dashboard");
   renderView(view);
   window.scrollTo({ top: 0, behavior: prefersReducedMotion() ? "auto" : "smooth" });
 }
@@ -3043,7 +3058,26 @@ function activitiesJournalSelectedLinks() {
   });
   return out;
 }
-async function openActivitiesJournalForCalendarTarget(target) {
+async function openActivitiesJournalForCalendarTarget(target, createNewImmediately) {
+  state.activitiesJournalPreset = "ALL";
+  if (createNewImmediately) {
+    // This yearbook button is displayed only when no linked memory exists.
+    // Open the editor first; load the long festival/date catalogue in the background.
+    state.activitiesJournalTargetFilter = null;
+    openActivitiesJournalDialog("", null);
+    loadActivitiesJournal(true).then(function() {
+      const festivalSelect = $("activitiesJournalFestivalLinks");
+      const dateSelect = $("activitiesJournalImportantDateLinks");
+      activitiesJournalPopulateLinkControls([]);
+      Array.from(festivalSelect.options).forEach(function(option) {
+        option.selected = target.targetType === "ODIA_FESTIVAL" && option.value === target.targetKey;
+      });
+      Array.from(dateSelect.options).forEach(function(option) {
+        option.selected = target.targetType === "IMPORTANT_DATE" && option.value === target.targetId;
+      });
+    }).catch(function(error){toast("The editor is open, but event choices could not be refreshed: " + friendlyApiError(error), "error");});
+    return;
+  }
   await loadActivitiesJournal();
   const matched = activitiesJournalLinkedEntriesForTarget(target);
   if (matched.length === 1) {
@@ -3109,7 +3143,10 @@ async function renderActivitiesJournal() {
     const type = $("activitiesJournalType").value;
     const visibility = $("activitiesJournalVisibilityFilter").value;
     const targetFilter = state.activitiesJournalTargetFilter;
+    const journalPreset = state.activitiesJournalPreset || "ALL";
+    const activitiesPresetTypes = ["FESTIVAL","ACTIVITY","RITUAL","TRADITION","CELEBRATION"];
     const allEntries = state.activitiesJournalEntries || [];
+    $("activitiesJournalHeroTitle").textContent = journalPreset === "ACTIVITIES" ? "Activities & Rituals" : "Family Knowledge Library";
     const years = Array.from(new Set(allEntries.map(function(item){return String(item.eventDate || "").slice(0,4);}).filter(Boolean))).sort(function(a,b){return Number(b)-Number(a);});
     const yearSelect = $("activitiesJournalYear"), selectedYear = yearSelect.value;
     yearSelect.innerHTML = '<option value="">All years</option>' + years.map(function(value){return '<option value="'+h(value)+'">'+h(value)+'</option>';}).join("");
@@ -3120,10 +3157,11 @@ async function renderActivitiesJournal() {
       return (!year || String(item.eventDate || "").slice(0,4) === year)
         && (!type || String(item.entryType || "").toUpperCase() === type)
         && (visibility === "ALL" || itemVisibility === visibility)
+        && (journalPreset !== "ACTIVITIES" || activitiesPresetTypes.indexOf(String(item.entryType || "").toUpperCase()) >= 0)
         && (!targetFilter || activitiesJournalLinksFor(item.id).some(function(link){return activitiesJournalLinkMatchesTarget(link,targetFilter);}))
         && (!query || normalize(searchText).includes(query));
     });
-    $("activitiesJournalSummary").textContent = items.length + (items.length === 1 ? " memory" : " memories") + " · " + allEntries.length + " saved in your accessible journal";
+    $("activitiesJournalSummary").textContent = items.length + (items.length === 1 ? " entry" : " entries") + " shown · " + allEntries.length + " saved in your accessible family knowledge" + (journalPreset === "ACTIVITIES" ? " · Festivals, activities, rituals, traditions and celebrations" : " · All categories");
     $("activitiesJournalLinkedFilterBanner").classList.toggle("hidden", !targetFilter);
     $("activitiesJournalLinkedFilterText").textContent = targetFilter ? "Showing family knowledge linked to " + targetFilter.label : "";
     grid.innerHTML = items.map(function(item) {
@@ -3463,7 +3501,7 @@ function bindActivitiesJournalUi() {
     event.preventDefault();
     const type = String(button.dataset.sourceType || "").toUpperCase();
     const target = {targetType:type,targetId:button.dataset.sourceId || "",targetKey:button.dataset.sourceKey || "",label:String(button.textContent || "calendar event").replace(/[✿＋]/g,"").trim()};
-    openActivitiesJournalForCalendarTarget(target).catch(function(error){toast(friendlyApiError(error),"error");});
+    openActivitiesJournalForCalendarTarget(target, button.dataset.journalCreate === "true").catch(function(error){toast(friendlyApiError(error),"error");});
   });
   $("activitiesJournalSearch").addEventListener("input", renderActivitiesJournal);
   ["activitiesJournalYear","activitiesJournalType","activitiesJournalVisibilityFilter"].forEach(function(id){$(id).addEventListener("change", renderActivitiesJournal);});
@@ -3528,7 +3566,7 @@ function renderOdiaFestivalYearbook() {
   $("odiaFestivalYearList").innerHTML=Object.keys(groups).map(Number).sort(function(a,b){return a-b;}).map(function(month){
     const rows=groups[month].map(function(item){
       const date=new Date(item.eventDate+"T00:00:00Z"),weekday=date.toLocaleDateString("en-IN",{weekday:"short",timeZone:"UTC"}),target={targetType:"ODIA_FESTIVAL",targetKey:traditionKey(item.name)},linked=activitiesJournalLinkedEntriesForTarget(target,"YEARBOOK"),knowledgePreview=activitiesJournalKnowledgePreview(linked);
-      const guideButton='<button class="tiny-button tradition-button" data-action="open-activities-journal-target" data-source-type="ODIA_FESTIVAL" data-source-key="'+h(target.targetKey)+'">'+(linked.length?'✿ Family knowledge ('+linked.length+')':'＋ Add family knowledge')+'</button>';
+      const guideButton='<button class="tiny-button tradition-button" data-action="open-activities-journal-target" data-journal-create="'+(!linked.length)+'" data-source-type="ODIA_FESTIVAL" data-source-key="'+h(target.targetKey)+'">'+(linked.length?'✿ Family knowledge ('+linked.length+')':'＋ Add family knowledge')+'</button>';
       return '<article class="odia-festival-row"><time datetime="'+h(item.eventDate)+'"><strong>'+h(String(date.getUTCDate()).padStart(2,"0"))+'</strong><span>'+h(weekday)+'</span></time><div class="odia-festival-copy"><h4>'+h(odiaKohinoorFestivalName(item))+'</h4><div class="odia-festival-date-pair"><span><small>ENGLISH</small>'+h(formatEnglishDate(item.eventDate))+'</span><span class="kohinoor-date"><small>ଓଡ଼ିଆ କୋହିନୂର / ପଞ୍ଜିକା</small>'+h(formatOdiaFestivalPanjika(item))+'</span></div>'+knowledgePreview+'</div><div class="odia-festival-guide">'+(linked.length?'<span class="guide-saved-chip">Family knowledge linked</span>':'')+guideButton+'</div></article>';
     }).join("");
     return '<section class="odia-festival-month"><header><h4>'+odiaFestivalMonthHeading(month,year)+'</h4><span>'+groups[month].length+'</span></header><div>'+rows+'</div></section>';

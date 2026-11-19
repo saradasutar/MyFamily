@@ -2,7 +2,7 @@
 
 const CONFIG = window.FAMILY_DASHBOARD_CONFIG || {};
 const PLACEHOLDER_URL = "PASTE_YOUR_APPS_SCRIPT_WEB_APP_URL_HERE";
-const FRONTEND_VERSION = "1.0.81";
+const FRONTEND_VERSION = "1.0.82";
 const SAVED_USERNAME_KEY = "familyDashboardUsername";
 const SESSION_TOKEN_KEY = "familyDashboardToken";
 const DEFAULT_IDLE_TIMEOUT_MINUTES = 60;
@@ -3748,51 +3748,130 @@ function printActivitiesJournalList() {
   items.sort(function(a,b){return sort === "TITLE" ? String(a.title||"").localeCompare(String(b.title||"")) : sort === "EVENT" ? String(b.eventDate||"").localeCompare(String(a.eventDate||"")) : activitiesJournalSortTimestamp(b)-activitiesJournalSortTimestamp(a);});
   printActivitiesJournalItems(items);
 }
-async function printFamilyHeritageYearbook() {
-  showLoading("Preparing Family Heritage Yearbook…");
-  try {
-    await loadActivitiesJournal(true);
-  } catch (error) {
-    hideLoading();
-    return toast(friendlyApiError(error), "error");
-  }
-  hideLoading();
-  const items = (state.activitiesJournalEntries || []).filter(function(item){
-    return String(item.visibility || "FAMILY").toUpperCase() === "FAMILY";
-  }).sort(function(a,b){
-    return String(a.entryType || "").localeCompare(String(b.entryType || "")) ||
-      String(a.title || "").localeCompare(String(b.title || ""), "en", {sensitivity:"base"});
+async function loadFamilyHeritageYearbookPhotos(items) {
+  const byEntry = {};
+  let unavailable = 0;
+  // Only the Family-visible entries passed by the Yearbook caller are queried.
+  const metadata = await Promise.all(items.map(async function(item) {
+    try {
+      const photos = await api("getTraditionGuidePhotos",{guideId:item.id});
+      return {entryId:item.id,photos:Array.isArray(photos)?photos:[]};
+    } catch (error) {
+      unavailable += 1;
+      console.warn("Yearbook photo list unavailable for entry "+item.id+": "+friendlyApiError(error));
+      return {entryId:item.id,photos:[]};
+    }
+  }));
+  const photoTasks = [];
+  metadata.forEach(function(group) {
+    byEntry[String(group.entryId)] = [];
+    group.photos.forEach(function(photo) {
+      photoTasks.push({entryId:String(group.entryId),photo:photo});
+    });
   });
-  if (!items.length) return toast("There are no shared family knowledge entries to include in the yearbook.", "error");
-  const familyName = (state.data.settings && state.data.settings.familyName) || "Our Family";
-  const groups = {};
-  items.forEach(function(item){const label=activitiesJournalTypeLabel(item.entryType);if(!groups[label])groups[label]=[];groups[label].push(item);});
-  const contents = Object.keys(groups).sort().map(function(label){return '<li>'+h(label)+' <span>'+groups[label].length+'</span></li>';}).join("");
-  const chapters = Object.keys(groups).sort().map(function(label){
-    const entries = groups[label].map(function(item){
-      const fields = [
-        ["Significance and history",item.meaning],
-        ["Preparations and materials",item.instructions],
-        ["Rituals and activities",item.rituals],
-        ["Traditional food and recipes",item.food],
-        ["People and responsibilities",item.responsibilities],
-        ["Memories and lessons",item.memories]
-      ].filter(function(pair){return String(pair[1]||"").trim();}).map(function(pair){
-        return '<section class="book-section"><h3>'+h(pair[0])+'</h3><p>'+h(pair[1]).replace(/\n/g,"<br>")+'</p></section>';
-      }).join("");
-      const linked = activitiesJournalLinksFor(item.id).map(function(link){return link.label;});
-      return '<article class="book-entry"><header><span>'+h(label)+'</span><h2>'+h(item.title||"Untitled family memory")+'</h2>'+(item.odiaName?'<h3>'+h(item.odiaName)+'</h3>':"")+'<small>Event date: '+h(item.eventDate?formatDate(item.eventDate):"Not recorded")+' · Preserved by '+h(memberName(item.ownerId||item.createdBy))+' · '+h(activitiesJournalUpdatedLabel(item))+'</small>'+(linked.length?'<p class="book-links">Related dates and festivals: '+h(linked.join(" · "))+'</p>':"")+'</header>'+fields+'</article>';
-    }).join("");
-    return '<section class="book-chapter"><h1>'+h(label)+'</h1>'+entries+'</section>';
-  }).join("");
+  // Keep a small number of full-size photo requests in flight at once.
+  for (let start=0;start<photoTasks.length;start+=3) {
+    const batch=photoTasks.slice(start,start+3);
+    const loaded=await Promise.all(batch.map(async function(task) {
+      let dataUrl="";
+      try {
+        const result=await api("getOptimizedPhoto",{kind:"TRADITION_GUIDE",id:task.photo.id});
+        dataUrl=String(result&&result.dataUrl||"");
+      } catch (error) {
+        console.warn("Yearbook photo could not be loaded: "+task.photo.id+" · "+friendlyApiError(error));
+        dataUrl=String(task.photo.thumbData||"");
+        if (!dataUrl) unavailable+=1;
+      }
+      return dataUrl ? {
+        dataUrl:dataUrl,
+        caption:String(task.photo.caption||task.photo.originalName||"Family photograph"),
+        photoDate:String(task.photo.photoDate||""),
+        sourceNote:String(task.photo.sourceNote||""),
+        featured:task.photo.featured===true || String(task.photo.featured).toLowerCase()==="true"
+      } : null;
+    }));
+    loaded.forEach(function(photo,index) {
+      if (photo) byEntry[batch[index].entryId].push(photo);
+    });
+  }
+  return {byEntry:byEntry,unavailable:unavailable};
+}
+
+async function printFamilyHeritageYearbook() {
+  // Open the print window immediately from the click gesture so popup blockers do not
+  // close it while the journal and its private-Drive photos are being fetched.
   const win=window.open("","familyHeritageYearbook","width=1000,height=900");
   if(!win)return toast("Allow pop-ups to print the Family Heritage Yearbook.","error");
   win.document.open();
-  win.document.write("<!doctype html><html><head><meta charset='utf-8'><title>"+h(familyName)+" · Family Heritage Yearbook</title><style>@page{size:A4;margin:17mm}*{box-sizing:border-box}body{font-family:Georgia,serif;color:#28243a;line-height:1.65;margin:0}.cover{min-height:220mm;display:flex;flex-direction:column;justify-content:center;align-items:center;text-align:center;page-break-after:always;border:5px double #7566b5;padding:25mm}.cover .eyebrow{font:800 11px Arial;letter-spacing:3px;color:#6752c7;text-transform:uppercase}.cover h1{font-size:38px;line-height:1.12;margin:18px 0}.cover p{font:14px Arial;color:#726b83}.contents{page-break-after:always}.contents h1,.book-chapter>h1{font-size:26px;color:#41366f;border-bottom:2px solid #ddd6ef;padding-bottom:10px}.contents li{padding:7px 0;border-bottom:1px solid #eee}.contents li span{float:right;color:#777}.book-chapter{page-break-before:always}.book-entry{padding:10mm 2mm;page-break-after:always;break-inside:avoid}.book-entry:last-child{page-break-after:auto}.book-entry header{border-bottom:1px solid #ded8ef;padding-bottom:12px;margin-bottom:15px}.book-entry header>span{font:800 10px Arial;letter-spacing:2px;color:#6752c7;text-transform:uppercase}.book-entry h2{font-size:25px;margin:8px 0}.book-entry header h3{font-size:18px;margin:0 0 8px}.book-entry small{font:11px Arial;color:#777}.book-links{font:11px Arial;color:#6752c7}.book-section{margin:15px 0;break-inside:avoid}.book-section h3{font:700 12px Arial;color:#6752c7;margin:0 0 5px}.book-section p{font-size:11.5pt;white-space:normal;margin:0}.empty-note{font:12px Arial;color:#777}@media screen{body{max-width:850px;margin:25px auto;padding:25px;box-shadow:0 0 20px #ddd}}</style></head><body><div class='cover'><p class='eyebrow'>A living family archive</p><h1>"+h(familyName)+"<br>Family Heritage Yearbook</h1><p>"+items.length+" shared knowledge entries</p><p>Traditions · Festivals · Rituals · Recipes · Memories</p><p>Prepared "+h(new Date().toLocaleDateString("en-IN",{day:"2-digit",month:"long",year:"numeric"}))+"</p></div><section class='contents'><h1>Contents</h1><ol>"+contents+"</ol><p class='empty-note'>Only entries marked Family are included. Private entries are excluded.</p></section>"+chapters+"</body></html>");
+  win.document.write("<!doctype html><html><head><meta charset='utf-8'><title>Preparing Family Heritage Yearbook</title></head><body style='font:16px Arial;padding:40px;color:#554a78'>Preparing the Family Heritage Yearbook and loading shared family photographs…</body></html>");
   win.document.close();
-  win.focus();
-  win.print();
+  showLoading("Preparing Family Heritage Yearbook and photographs…");
+  try {
+    await loadActivitiesJournal(true);
+    const items = (state.activitiesJournalEntries || []).filter(function(item){
+      return String(item.visibility || "FAMILY").toUpperCase() === "FAMILY";
+    }).sort(function(a,b){
+      return String(a.entryType || "").localeCompare(String(b.entryType || "")) ||
+        String(a.title || "").localeCompare(String(b.title || ""), "en", {sensitivity:"base"});
+    });
+    if (!items.length) {
+      win.close();
+      return toast("There are no shared family knowledge entries to include in the yearbook.", "error");
+    }
+    const photoResult=await loadFamilyHeritageYearbookPhotos(items);
+    const photosByEntry=photoResult.byEntry;
+    const photoCount=Object.keys(photosByEntry).reduce(function(total,id){return total+photosByEntry[id].length;},0);
+    const familyName = (state.data.settings && state.data.settings.familyName) || "Our Family";
+    const groups = {};
+    items.forEach(function(item){const label=activitiesJournalTypeLabel(item.entryType);if(!groups[label])groups[label]=[];groups[label].push(item);});
+    const contents = Object.keys(groups).sort().map(function(label){
+      const count=groups[label].reduce(function(total,item){return total+(photosByEntry[String(item.id)]||[]).length;},0);
+      return '<li>'+h(label)+' <span>'+groups[label].length+' entries · '+count+' photos</span></li>';
+    }).join("");
+    const chapters = Object.keys(groups).sort().map(function(label){
+      const entries = groups[label].map(function(item){
+        const fields = [
+          ["Significance and history",item.meaning],
+          ["Preparations and materials",item.instructions],
+          ["Rituals and activities",item.rituals],
+          ["Traditional food and recipes",item.food],
+          ["People and responsibilities",item.responsibilities],
+          ["Memories and lessons",item.memories]
+        ].filter(function(pair){return String(pair[1]||"").trim();}).map(function(pair){
+          return '<section class="book-section"><h3>'+h(pair[0])+'</h3><p>'+h(pair[1]).replace(/\\n/g,"<br>")+'</p></section>';
+        }).join("");
+        const linked = activitiesJournalLinksFor(item.id).map(function(link){return link.label;});
+        const photos=(photosByEntry[String(item.id)]||[]).map(function(photo,index){
+          return '<figure class="book-photo'+(photo.featured?' featured':'')+'"><img src="'+h(photo.dataUrl)+'" alt="'+h(photo.caption)+'"><figcaption><strong>'+h(photo.caption)+'</strong>'
+            +(photo.photoDate?'<span>'+h(formatDate(photo.photoDate))+'</span>':"")
+            +(photo.sourceNote?'<span>'+h(photo.sourceNote)+'</span>':"")
+            +'</figcaption></figure>';
+        }).join("");
+        const photoSection=photos?'<section class="book-photo-section"><h3>Family photographs</h3><div class="book-photo-grid">'+photos+'</div></section>':"";
+        return '<article class="book-entry"><header><span>'+h(label)+'</span><h2>'+h(item.title||"Untitled family memory")+'</h2>'+(item.odiaName?'<h3>'+h(item.odiaName)+'</h3>':"")+'<small>Event date: '+h(item.eventDate?formatDate(item.eventDate):"Not recorded")+' · Preserved by '+h(memberName(item.ownerId||item.createdBy))+' · '+h(activitiesJournalUpdatedLabel(item))+'</small>'+(linked.length?'<p class="book-links">Related dates and festivals: '+h(linked.join(" · "))+'</p>':"")+'</header>'+fields+photoSection+'</article>';
+      }).join("");
+      return '<section class="book-chapter"><h1>'+h(label)+'</h1>'+entries+'</section>';
+    }).join("");
+    const photoNote=photoResult.unavailable?'<p class="empty-note">'+photoResult.unavailable+' photo list or image item(s) could not be loaded and were omitted.</p>':"";
+    win.document.open();
+    win.document.write("<!doctype html><html><head><meta charset='utf-8'><title>"+h(familyName)+" · Family Heritage Yearbook</title><style>@page{size:A4;margin:17mm}*{box-sizing:border-box}body{font-family:Georgia,serif;color:#28243a;line-height:1.65;margin:0}.cover{min-height:220mm;display:flex;flex-direction:column;justify-content:center;align-items:center;text-align:center;page-break-after:always;border:5px double #7566b5;padding:25mm}.cover .eyebrow{font:800 11px Arial;letter-spacing:3px;color:#6752c7;text-transform:uppercase}.cover h1{font-size:38px;line-height:1.12;margin:18px 0}.cover p{font:14px Arial;color:#726b83}.contents{page-break-after:always}.contents h1,.book-chapter>h1{font-size:26px;color:#41366f;border-bottom:2px solid #ddd6ef;padding-bottom:10px}.contents li{padding:7px 0;border-bottom:1px solid #eee}.contents li span{float:right;color:#777;font:11px Arial}.book-chapter{page-break-before:always}.book-entry{padding:10mm 2mm;page-break-after:always;break-inside:auto}.book-entry:last-child{page-break-after:auto}.book-entry header{border-bottom:1px solid #ded8ef;padding-bottom:12px;margin-bottom:15px}.book-entry header>span{font:800 10px Arial;letter-spacing:2px;color:#6752c7;text-transform:uppercase}.book-entry h2{font-size:25px;margin:8px 0}.book-entry header h3{font-size:18px;margin:0 0 8px}.book-entry small{font:11px Arial;color:#777}.book-links{font:11px Arial;color:#6752c7}.book-section{margin:15px 0;break-inside:avoid}.book-section h3,.book-photo-section>h3{font:700 12px Arial;color:#6752c7;margin:0 0 7px}.book-section p{font-size:11.5pt;white-space:normal;margin:0}.book-photo-section{margin:18px 0;break-inside:auto}.book-photo-grid{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:12px}.book-photo{margin:0;border:1px solid #e4dfed;border-radius:7px;padding:7px;break-inside:avoid;page-break-inside:avoid}.book-photo img{display:block;width:100%;height:auto;max-height:120mm;object-fit:contain;background:#faf9fc}.book-photo figcaption{display:grid;gap:2px;padding:6px 2px 1px;font:10px Arial;color:#625b74}.book-photo figcaption strong{font-size:11px;color:#302a46}.book-photo figcaption span{color:#777}.empty-note{font:12px Arial;color:#777}@media screen{body{max-width:850px;margin:25px auto;padding:25px;box-shadow:0 0 20px #ddd}}@media print{.book-photo-grid{gap:8mm}}</style></head><body><div class='cover'><p class='eyebrow'>A living family archive</p><h1>"+h(familyName)+"<br>Family Heritage Yearbook</h1><p>"+items.length+" shared knowledge entries · "+photoCount+" family photographs</p><p>Traditions · Festivals · Rituals · Recipes · Memories</p><p>Prepared "+h(new Date().toLocaleDateString("en-IN",{day:"2-digit",month:"long",year:"numeric"}))+"</p></div><section class='contents'><h1>Contents</h1><ol>"+contents+"</ol><p class='empty-note'>Only entries marked Family are included. Private entries are excluded.</p>"+photoNote+"</section>"+chapters+"</body></html>");
+    win.document.close();
+    win.focus();
+    // Wait briefly for embedded images to resolve before opening print preview.
+    const images=Array.from(win.document.images);
+    await Promise.all(images.map(function(image){
+      if (image.complete) return Promise.resolve();
+      return new Promise(function(resolve){image.addEventListener("load",resolve,{once:true});image.addEventListener("error",resolve,{once:true});setTimeout(resolve,5000);});
+    }));
+    win.print();
+  } catch (error) {
+    try { win.close(); } catch (closeError) {}
+    toast(friendlyApiError(error),"error");
+  } finally {
+    hideLoading();
+  }
 }
+
 function bindActivitiesJournalUi() {
   $("addActivitiesJournal").addEventListener("click", function(){openActivitiesJournalDialog();});
   $("activitiesJournalEmpty").addEventListener("click", function(event) {

@@ -3206,8 +3206,11 @@ async function saveActivitiesJournal(event) {
     $("activitiesJournalEntryId").value = result.id;
     await loadActivitiesJournal();
     const saved = (state.activitiesJournalEntries || []).find(function(item){return item.id === result.id;});
-    if (saved && String(saved.visibility || "FAMILY").toUpperCase() === "FAMILY") {
-      await api("saveActivitiesJournalLinks", {guideId: result.id, links: activitiesJournalSelectedLinks()});
+    if (saved) {
+      // Always replace the relation set. Private entries send an empty list,
+      // which removes any previously shared calendar/yearbook links.
+      var linksToSave = String(saved.visibility || "FAMILY").toUpperCase() === "FAMILY" ? activitiesJournalSelectedLinks() : [];
+      await api("saveActivitiesJournalLinks", {guideId: result.id, links: linksToSave});
       await loadActivitiesJournalLinks();
     }
     $("activitiesJournalArchiveEntry").classList.toggle("hidden", !saved || !activitiesJournalIsOwner(saved));

@@ -2998,9 +2998,14 @@ function activitiesJournalLinkMatchesTarget(link, target) {
   if (target.targetType === "IMPORTANT_DATE") return String(link.targetId) === String(target.targetId);
   return String(link.targetKey || "").trim().toLowerCase().replace(/\s+/g," ") === String(target.targetKey || "").trim().toLowerCase().replace(/\s+/g," ");
 }
-function activitiesJournalLinkedEntriesForTarget(target) {
-  const ids = new Set((state.activitiesJournalLinks || []).filter(function(link){return activitiesJournalLinkMatchesTarget(link,target);}).map(function(link){return String(link.guideId);}));
-  return (state.activitiesJournalEntries || []).filter(function(entry){return ids.has(String(entry.id)) && String(entry.visibility || "FAMILY").toUpperCase() === "FAMILY";});
+function activitiesJournalLinkedEntriesForTarget(target, mode) {
+  const field = mode === "YEARBOOK" ? "showInYearbook" : "showInCalendar";
+  const ids = new Set((state.activitiesJournalLinks || []).filter(function(link){
+    return activitiesJournalLinkMatchesTarget(link,target) && link[field] !== false;
+  }).map(function(link){return String(link.guideId);}));
+  return (state.activitiesJournalEntries || []).filter(function(entry){
+    return ids.has(String(entry.id)) && String(entry.visibility || "FAMILY").toUpperCase() === "FAMILY";
+  });
 }
 function activitiesJournalPopulateLinkControls(selectedLinks) {
   selectedLinks = selectedLinks || [];
@@ -3441,7 +3446,7 @@ function renderOdiaFestivalYearbook() {
   $("odiaFestivalYearCount").textContent=items.length+" "+(items.length===1?"festival":"festivals");
   $("odiaFestivalYearList").innerHTML=Object.keys(groups).map(Number).sort(function(a,b){return a-b;}).map(function(month){
     const rows=groups[month].map(function(item){
-      const date=new Date(item.eventDate+"T00:00:00Z"),weekday=date.toLocaleDateString("en-IN",{weekday:"short",timeZone:"UTC"}),target={targetType:"ODIA_FESTIVAL",targetKey:traditionKey(item.name)},linked=activitiesJournalLinkedEntriesForTarget(target);
+      const date=new Date(item.eventDate+"T00:00:00Z"),weekday=date.toLocaleDateString("en-IN",{weekday:"short",timeZone:"UTC"}),target={targetType:"ODIA_FESTIVAL",targetKey:traditionKey(item.name)},linked=activitiesJournalLinkedEntriesForTarget(target,"YEARBOOK");
       const guideButton='<button class="tiny-button tradition-button" data-action="open-activities-journal-target" data-source-type="ODIA_FESTIVAL" data-source-key="'+h(target.targetKey)+'">'+(linked.length?'✿ Family knowledge ('+linked.length+')':'＋ Add family knowledge')+'</button>';
       return '<article class="odia-festival-row"><time datetime="'+h(item.eventDate)+'"><strong>'+h(String(date.getUTCDate()).padStart(2,"0"))+'</strong><span>'+h(weekday)+'</span></time><div class="odia-festival-copy"><h4>'+h(odiaKohinoorFestivalName(item))+'</h4><div class="odia-festival-date-pair"><span><small>ENGLISH</small>'+h(formatEnglishDate(item.eventDate))+'</span><span class="kohinoor-date"><small>ଓଡ଼ିଆ କୋହିନୂର / ପଞ୍ଜିକା</small>'+h(formatOdiaFestivalPanjika(item))+'</span></div></div><div class="odia-festival-guide">'+(linked.length?'<span class="guide-saved-chip">Family knowledge linked</span>':'')+guideButton+'</div></article>';
     }).join("");
